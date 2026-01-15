@@ -86,7 +86,7 @@ export function SignupScreen() {
     setError('');
 
     try {
-      // 验证 OTP（注意：使用 'email' 类型，因为我们使用的是 signInWithOtp）
+      // 验证 OTP（signInWithOtp 对应的类型为 'email'）
       const { error: verifyError } = await verifyOTP(formData.email, otp, 'email');
       
       if (verifyError) {
@@ -425,4 +425,3 @@ export function SignupScreen() {
     </div>
   );
 }
-
