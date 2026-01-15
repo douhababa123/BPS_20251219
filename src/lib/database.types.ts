@@ -57,6 +57,12 @@ export interface Database {
           email: string | null
           position: string | null
           is_active: boolean
+          // 新增认证字段
+          auth_user_id: string | null  // Supabase Auth 用户 ID
+          phone: string | null
+          role: string  // 'BPS_ENGINEER' | 'SITE_PS' | 'ADMIN'
+          last_login_at: string | null
+          login_count: number
           created_at: string
           updated_at: string
         }
@@ -68,6 +74,12 @@ export interface Database {
           email?: string | null
           position?: string | null
           is_active?: boolean
+          // 新增认证字段
+          auth_user_id?: string | null
+          phone?: string | null
+          role?: string
+          last_login_at?: string | null
+          login_count?: number
           created_at?: string
           updated_at?: string
         }
@@ -79,6 +91,12 @@ export interface Database {
           email?: string | null
           position?: string | null
           is_active?: boolean
+          // 新增认证字段
+          auth_user_id?: string | null
+          phone?: string | null
+          role?: string
+          last_login_at?: string | null
+          login_count?: number
           created_at?: string
           updated_at?: string
         }
@@ -663,3 +681,28 @@ export interface ImportStats {
   importedAt: string;
   fileName: string;
 }
+
+// ========================================
+// 新增类型：日程管理增强 (enhance-schedule-and-competency)
+// ========================================
+
+// 时间槽类型
+export type TimeSlot = 'AM' | 'PM' | 'FULL_DAY';
+
+// 员工角色类型
+export type EmployeeRole = 'BPS_ENGINEER' | 'SITE_PS' | 'ADMIN';
+
+// 日程变更通知
+export interface ScheduleChangeNotification {
+  id: string;
+  employee_id: string;
+  modifier_id: string;
+  task_id: string | null;
+  change_type: 'CREATE' | 'UPDATE' | 'DELETE';
+  change_details: Record<string, any> | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export type ScheduleChangeNotificationInsert = Omit<ScheduleChangeNotification, 'id' | 'created_at'>;
+export type ScheduleChangeNotificationUpdate = Partial<ScheduleChangeNotificationInsert>;

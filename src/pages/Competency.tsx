@@ -686,6 +686,76 @@ function PersonalView({
               </div>
             </div>
 
+            {/* 模块 GAP 汇总表（需求3：个人视图模块 GAP 总分） */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+              <div className="mb-4">
+                <h3 className="text-lg font-bold text-gray-900">
+                  模块能力汇总 Module Summary
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  显示每个模块的总 GAP 分数
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">模块</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">总 GAP</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">平均 GAP</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">技能数量</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {radarData.map((module: any) => {
+                      const totalGap = module.Gap * module.skillCount; // 计算总GAP
+                      const avgGap = module.Gap;
+                      return (
+                        <tr key={module.name} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">{module.icon}</span>
+                              <span className="text-sm font-medium text-gray-900">{module.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={cn(
+                              'text-sm font-bold',
+                              totalGap > 10 ? 'text-red-600' : totalGap > 5 ? 'text-orange-600' : 'text-green-600'
+                            )}>
+                              {formatNumber(totalGap)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">
+                            {formatNumber(avgGap)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-700">
+                            {module.skillCount}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {totalGap === 0 ? (
+                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                                ✓ 已达标
+                              </span>
+                            ) : totalGap < 5 ? (
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
+                                ⚠ 轻微差距
+                              </span>
+                            ) : (
+                              <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
+                                ⚡ 需提升
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {/* 提升建议 */}
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 className="text-lg font-bold text-gray-900 mb-4">

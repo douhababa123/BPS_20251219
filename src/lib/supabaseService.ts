@@ -53,7 +53,7 @@ export const supabaseService = {
    * 获取所有员工
    */
   async getAllEmployees(): Promise<Employee[]> {
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from('employees')
       .select('*')
       .eq('is_active', true)
@@ -61,6 +61,38 @@ export const supabaseService = {
 
     if (error) throw new Error(`获取员工失败: ${error.message}`);
     return data || [];
+  },
+
+  /**
+   * 创建新员工
+   */
+  async createEmployee(employeeData: {
+    employee_id: string;
+    name: string;
+    email: string;
+    auth_user_id: string;
+    position?: string | null;
+    department_id?: number | null;
+    is_active?: boolean;
+  }): Promise<{ error: Error | null }> {
+    try {
+      const { error } = await supabase
+        .from('employees')
+        .insert({
+          ...employeeData,
+          is_active: employeeData.is_active ?? true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        return { error: new Error(error.message) };
+      }
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: new Error(err.message || '创建员工失败') };
+    }
   },
 
   /**
@@ -625,51 +657,142 @@ export const supabaseService = {
     employee_id?: string;
     status?: string;
   }) {
+    console.log('🔍 supabaseService.getAllTasks 调用参数:', filters);
+    
+    // 先测试简单查询（不带关联）
+    try {
+      const { data: simpleData, error: simpleError } = await supabase
+        .from('tasks')
+        .select('*')
+        .limit(5);
+      
+      console.log('🧪 简单查询测试:', {
+        成功: !simpleError,
+        错误: simpleError,
+        数据量: simpleData?.length || 0,
+        示例: simpleData?.[0]
+      });
+    } catch (e) {
+      console.error('🧪 简单查询失败:', e);
+    }
+    
+    // 先尝试不带嵌套 departments 的查询
     let query = supabase
       .from('tasks')
       .select(`
         *,
-        employees!inner (
+        employees:assigned_employee_id (
           id,
           employee_id,
           name,
-          departments (
-            id,
-            name,
-            code
-          )
+          department_id
         )
       `)
       .order('start_date', { ascending: false });
+    
+    console.log('📝 使用简化的关联查询（不包含 departments 嵌套）');
 
     if (filters?.start_date) {
+      console.log('  ✓ 添加过滤: end_date >=', filters.start_date);
       query = query.gte('end_date', filters.start_date);
     }
     if (filters?.end_date) {
+      console.log('  ✓ 添加过滤: start_date <=', filters.end_date);
       query = query.lte('start_date', filters.end_date);
     }
     if (filters?.employee_id) {
+      console.log('  ✓ 添加过滤: assigned_employee_id =', filters.employee_id);
       query = query.eq('assigned_employee_id', filters.employee_id);
     }
     if (filters?.status) {
       const statusValues = filters.status === 'active'
         ? ['active', null]
         : [filters.status];
+      console.log('  ✓ 添加过滤: status in', statusValues);
       query = query.in('status', statusValues);
     }
 
+    console.log('⏳ 正在执行 Supabase 查询...');
     const { data, error } = await query;
+    console.log('⏹️ Supabase 查询完成', { 有数据: !!data, 数据量: data?.length, 有错误: !!error });
 
-    if (error) throw new Error(`获取任务失败: ${error.message}`);
+    if (error) {
+      console.error('❌ Supabase 查询错误:', error);
+      console.error('   错误详情:', JSON.stringify(error, null, 2));
+      console.log('🔄 由于错误，将使用回退查询...');
+      // 不要抛出错误，而是继续执行回退逻辑
+    }
+    
+    console.log('✅ Supabase 返回原始数据:', data?.length, '条记录');
+    if (data && data.length > 0) {
+      console.log('   第一条原始记录:', data[0]);
+    } else {
+      console.warn('⚠️ 查询返回 0 条记录或有错误');
+    }
+    
+    // 如果关联查询失败或有错误，回退到简单查询并手动关联
+    if (error || !data || data.length === 0) {
+      console.log('🔄 尝试回退查询（无关联）...');
+      let simpleQuery = supabase
+        .from('tasks')
+        .select('*')
+        .order('start_date', { ascending: false });
+      
+      // 应用相同的过滤条件
+      if (filters?.start_date) {
+        simpleQuery = simpleQuery.gte('end_date', filters.start_date);
+      }
+      if (filters?.end_date) {
+        simpleQuery = simpleQuery.lte('start_date', filters.end_date);
+      }
+      if (filters?.employee_id) {
+        simpleQuery = simpleQuery.eq('assigned_employee_id', filters.employee_id);
+      }
+      if (filters?.status) {
+        const statusValues = filters.status === 'active' ? ['active', null] : [filters.status];
+        simpleQuery = simpleQuery.in('status', statusValues);
+      }
+      
+      const { data: simpleTasks, error: simpleError } = await simpleQuery;
+      
+      if (simpleError) {
+        throw new Error(`简单查询也失败: ${simpleError.message}`);
+      }
+      
+      console.log('✅ 回退查询成功:', simpleTasks?.length, '条');
+      
+      // 手动查询员工信息
+      const employeeIds = [...new Set(simpleTasks?.map(t => t.assigned_employee_id).filter(Boolean))];
+      const { data: employeesData } = await supabase
+        .from('employees')
+        .select('id, employee_id, name, department_id')
+        .in('id', employeeIds);
+      
+      const employeesMap = new Map(employeesData?.map(e => [e.id, e]));
+      
+      return (simpleTasks || []).map((task: any) => {
+        const employee = employeesMap.get(task.assigned_employee_id);
+        return {
+          ...task,
+          employees: employee,
+          employee_code: employee?.employee_id,
+          employee_name: employee?.name,
+        };
+      });
+    }
     
     // 转换数据格式
-    return (data || []).map((task: any) => ({
+    const result = (data || []).map((task: any) => ({
       ...task,
       employee_code: task.employees?.employee_id,
       employee_name: task.employees?.name,
       department_name: task.employees?.departments?.name,
       department_code: task.employees?.departments?.code,
     }));
+    
+    console.log('📦 转换后数据:', result.length, '条记录');
+    
+    return result;
   },
 
   /**
@@ -1094,5 +1217,106 @@ export const supabaseService = {
       .eq('import_batch_id', batchId);
 
     if (error) throw new Error(`删除导入批次失败: ${error.message}`);
+  },
+
+  // ==================== 通知管理 ====================
+
+  /**
+   * 创建日程修改通知
+   */
+  async createScheduleNotification(notification: {
+    task_id: string;
+    affected_employee_id: string;
+    modified_by_employee_id: string;
+    notification_type: 'CREATED' | 'UPDATED' | 'DELETED';
+    change_description?: string;
+  }) {
+    const { data, error } = await supabase
+      .from('schedule_change_notifications')
+      .insert(notification)
+      .select()
+      .single();
+
+    if (error) throw new Error(`创建通知失败: ${error.message}`);
+    return data;
+  },
+
+  /**
+   * 获取用户的未读通知
+   */
+  async getUnreadNotifications(employeeId: string) {
+    const { data, error } = await supabase
+      .from('schedule_change_notifications')
+      .select(`
+        *,
+        task:tasks(*),
+        affected_employee:employees!affected_employee_id(*),
+        modified_by:employees!modified_by_employee_id(*)
+      `)
+      .eq('affected_employee_id', employeeId)
+      .eq('is_read', false)
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error(`获取通知失败: ${error.message}`);
+    return data || [];
+  },
+
+  /**
+   * 获取所有通知（包括已读）
+   */
+  async getAllNotifications(employeeId: string, limit: number = 50) {
+    const { data, error } = await supabase
+      .from('schedule_change_notifications')
+      .select(`
+        *,
+        task:tasks(*),
+        affected_employee:employees!affected_employee_id(*),
+        modified_by:employees!modified_by_employee_id(*)
+      `)
+      .eq('affected_employee_id', employeeId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw new Error(`获取通知失败: ${error.message}`);
+    return data || [];
+  },
+
+  /**
+   * 标记通知为已读
+   */
+  async markNotificationAsRead(notificationId: string) {
+    const { error } = await supabase
+      .from('schedule_change_notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId);
+
+    if (error) throw new Error(`标记通知失败: ${error.message}`);
+  },
+
+  /**
+   * 批量标记通知为已读
+   */
+  async markAllNotificationsAsRead(employeeId: string) {
+    const { error } = await supabase
+      .from('schedule_change_notifications')
+      .update({ is_read: true })
+      .eq('affected_employee_id', employeeId)
+      .eq('is_read', false);
+
+    if (error) throw new Error(`批量标记通知失败: ${error.message}`);
+  },
+
+  /**
+   * 获取未读通知数量
+   */
+  async getUnreadNotificationCount(employeeId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from('schedule_change_notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('affected_employee_id', employeeId)
+      .eq('is_read', false);
+
+    if (error) throw new Error(`获取未读通知数量失败: ${error.message}`);
+    return count || 0;
   },
 };

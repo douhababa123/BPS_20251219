@@ -1,8 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabaseService } from '../lib/supabaseService';
-import { Plus, Download, Calendar as CalendarIcon, Users, TrendingUp, X, RefreshCw } from 'lucide-react';
+import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
+import { TimeSlotSelector } from '../components/TimeSlotSelector';
+import { TaskCard, TaskCardCompact } from '../components/TaskCard';
+import { TaskDetailModal } from '../components/TaskDetailModal';
 import {
   ResponsiveContainer,
   BarChart,
@@ -33,6 +37,8 @@ export function Schedule() {
   });
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
+  const [prefilledTaskData, setPrefilledTaskData] = useState<{ employeeId: string; date: string } | null>(null);
 
   const formatMonthValue = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
@@ -69,11 +75,53 @@ export function Schedule() {
 
   const { data: tasks = [], isLoading, refetch } = useQuery({
     queryKey: ['tasks', startDate, endDate],
-    queryFn: () => supabaseService.getAllTasks({ 
-      start_date: startDate, 
-      end_date: endDate,
-      status: 'active'
-    }),
+    queryFn: async () => {
+      console.log('🔍 Schedule 查询参数:', { startDate, endDate });
+      try {
+        // 先查询所有任务（不过滤 status）
+        const allTasks = await supabaseService.getAllTasks({ 
+          start_date: startDate, 
+          end_date: endDate
+        });
+        console.log('📊 查询到的任务总数:', allTasks.length);
+        console.log('📋 任务详情:', allTasks);
+        
+        if (allTasks.length > 0) {
+          console.log('✅ 第一个任务示例:', {
+            id: allTasks[0].id,
+            task_name: allTasks[0].task_name,
+            assigned_employee_id: allTasks[0].assigned_employee_id,
+            start_date: allTasks[0].start_date,
+            end_date: allTasks[0].end_date,
+            status: allTasks[0].status,
+            time_slot: allTasks[0].time_slot,
+            total_hours: allTasks[0].total_hours
+          });
+        }
+        
+        return allTasks;
+      } catch (error) {
+        console.error('❌ 查询任务失败:', error);
+        throw error;
+      }
+    },
+  });
+
+  // 删除任务 mutation
+  const deleteTaskMutation = useMutation({
+    mutationFn: (taskId: string) => supabaseService.deleteTask(taskId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+
+  // 更新任务 mutation
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: any }) => 
+      supabaseService.updateTask(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
   });
 
   // 筛选任务
@@ -97,11 +145,6 @@ export function Schedule() {
       taskCount: filteredTasks.length,
     };
   }, [filteredTasks, selectedEmployeeIds.length]);
-
-  // 饱和度颜色
-  const saturationColor = statistics.saturation < 70 ? 'bg-green-500' 
-    : statistics.saturation <= 90 ? 'bg-amber-500' 
-    : 'bg-red-500';
 
   // 任务类型统计
   const typeStats = useMemo(() => {
@@ -352,6 +395,17 @@ export function Schedule() {
             locationStats={locationStats}
             periodType={periodType}
             setPeriodType={setPeriodType}
+            onEditTask={setEditingTask}
+            onDeleteTask={(taskId: string) => {
+              if (confirm('确定要删除这个任务吗？')) {
+                deleteTaskMutation.mutate(taskId);
+              }
+            }}
+            onQuickAdd={(data: { employeeId: string; date: string }) => {
+              // 打开新增任务对话框，预填充员工和日期
+              setPrefilledTaskData(data);
+              setShowTaskForm(true);
+            }}
           />
         ) : (
           <PersonalView
@@ -363,16 +417,40 @@ export function Schedule() {
         )}
       </div>
 
-      {/* 任务表单弹窗 */}
+      {/* 任务表单弹窗 - 新建 */}
       {showTaskForm && (
         <TaskFormModal
           employees={employees}
           taskTypes={taskTypes}
           factories={factories}
-          onClose={() => setShowTaskForm(false)}
+          prefilledData={prefilledTaskData}
+          onClose={() => {
+            setShowTaskForm(false);
+            setPrefilledTaskData(null);
+          }}
           onSuccess={() => {
             setShowTaskForm(false);
+            setPrefilledTaskData(null);
             refetch();
+          }}
+        />
+      )}
+
+      {/* 任务表单弹窗 - 编辑 */}
+      {editingTask && (
+        <TaskFormModal
+          employees={employees}
+          taskTypes={taskTypes}
+          factories={factories}
+          editingTask={editingTask}
+          onClose={() => setEditingTask(null)}
+          onSuccess={() => {
+            setEditingTask(null);
+            refetch();
+          }}
+          onUpdate={(id: string, updates: any) => {
+            updateTaskMutation.mutate({ id, updates });
+            setEditingTask(null);
           }}
         />
       )}
@@ -391,35 +469,73 @@ function TeamView({
   locationStats,
   periodType,
   setPeriodType,
+  onEditTask,
+  onDeleteTask,
+  onQuickAdd,
 }: any) {
-  const { days, daysInMonth } = calendarData;
+  const { days } = calendarData;
+  const [selectedTask, setSelectedTask] = useState<any>(null);
+
+  // 判断是否为周末
+  const isWeekend = (day: any) => {
+    const [year, month] = selectedDate.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    const dayOfWeek = date.getDay();
+    return dayOfWeek === 0 || dayOfWeek === 6; // 0=周日, 6=周六
+  };
+
+  // 获取星期几的中文
+  const getWeekdayLabel = (day: any) => {
+    const [year, month] = selectedDate.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    return weekdays[date.getDay()];
+  };
 
   return (
     <div className="space-y-4">
       {/* 日历视图 */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <h3 className="text-lg font-bold text-gray-900 mb-4">{selectedDate} 日历 Calendar</h3>
-        <div className="overflow-x-auto">
-          <div className="min-w-max">
-            <div className="grid gap-px bg-gray-200 border border-gray-200" style={{
-              gridTemplateColumns: `150px repeat(${daysInMonth}, 80px)`
-            }}>
-              {/* 表头 */}
-              <div className="bg-white p-2 font-medium text-sm text-gray-700">工程师</div>
-              {days.map(day => (
-                <div key={day} className="bg-white p-2 text-center font-medium text-sm text-gray-700">
-                  {day}日
-                </div>
-              ))}
-
+        <div className="overflow-auto max-h-[600px] relative border-2 border-gray-300 rounded-lg">
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 z-20 bg-white shadow-sm">
+              <tr>
+                <th className="sticky left-0 z-30 bg-gray-50 p-2 font-medium text-sm text-gray-700 border-b-2 border-r-2 border-gray-300 min-w-[150px]">
+                  工程师
+                </th>
+                {days.map((day: any) => {
+                  const weekend = isWeekend(day);
+                  const weekdayLabel = getWeekdayLabel(day);
+                  return (
+                    <th 
+                      key={day} 
+                      className={cn(
+                        "p-2 text-center font-medium text-sm border-b-2 border-r border-gray-300 min-w-[80px]",
+                        weekend ? "bg-gray-100 text-gray-600" : "bg-gray-50 text-gray-700"
+                      )}
+                    >
+                      <div className="flex flex-col items-center">
+                        <span>{day}日</span>
+                        <span className="text-xs font-normal">{weekdayLabel}</span>
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
               {/* 每个工程师的行 */}
               {employees
                 .filter((emp: any) => selectedEmployeeIds.length === 0 || selectedEmployeeIds.includes(emp.id))
                 .map((emp: any) => (
-                  <>
-                    <div className="bg-white p-2 text-sm font-medium text-gray-900">{emp.name}</div>
-                    {days.map(day => {
+                  <tr key={emp.id} className="hover:bg-blue-50/30 transition-colors">
+                    <td className="sticky left-0 z-10 bg-white p-2 text-sm font-medium text-gray-900 border-r-2 border-b border-gray-300">
+                      {emp.name}
+                    </td>
+                    {days.map((day: any) => {
                       const dateStr = `${selectedDate}-${String(day).padStart(2, '0')}`;
+                      const weekend = isWeekend(day);
                       const dayTasks = tasks.filter((task: any) => {
                         return task.assigned_employee_id === emp.id &&
                           task.start_date <= dateStr &&
@@ -427,29 +543,52 @@ function TeamView({
                       });
 
                       return (
-                        <div
+                        <td
                           key={`${emp.id}-${day}`}
-                          className="bg-white p-1 min-h-[60px] text-xs"
+                          className={cn(
+                            "p-1 min-h-[60px] text-xs border-b border-r border-gray-200 align-top relative",
+                            weekend ? "bg-gray-50/50" : "bg-white"
+                          )}
+                          onDoubleClick={(e) => {
+                            // 如果双击的是任务卡片，不触发新增
+                            if ((e.target as HTMLElement).closest('.task-card-compact')) return;
+                            // 触发新增任务，预填充员工和日期
+                            onQuickAdd({ employeeId: emp.id, date: dateStr });
+                          }}
                         >
-                          {dayTasks.map((task: any, idx: number) => (
-                            <div
-                              key={task.id}
-                              className="mb-1 p-1 rounded text-white truncate"
-                              style={{ backgroundColor: COLORS[idx % COLORS.length] }}
-                              title={`${task.task_name} (${task.task_type})`}
-                            >
-                              {task.task_name.substring(0, 8)}
+                          {dayTasks.map((task: any) => (
+                            <div key={task.id} className="task-card-compact">
+                              <TaskCardCompact
+                                task={task}
+                                onClick={() => setSelectedTask(task)}
+                              />
                             </div>
                           ))}
-                        </div>
+                        </td>
                       );
                     })}
-                  </>
+                  </tr>
                 ))}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
       </div>
+
+      {/* 任务详情弹窗 */}
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onEdit={() => {
+            onEditTask(selectedTask);
+            setSelectedTask(null);
+          }}
+          onDelete={() => {
+            onDeleteTask(selectedTask.id);
+            setSelectedTask(null);
+          }}
+        />
+      )}
 
       {/* 分析图表 */}
       <div className="grid grid-cols-2 gap-4">
@@ -650,6 +789,30 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* 个人任务列表 */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">任务列表 ({empTasks.length}个)</h3>
+            {empTasks.length > 0 ? (
+              <div className="space-y-2">
+                {empTasks.map((task: any) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onClick={() => {
+                      // TODO: 打开任务详情/编辑弹窗
+                      console.log('点击任务:', task);
+                    }}
+                    className="hover:border-blue-300"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                暂无任务
+              </div>
+            )}
+          </div>
         </>
       ) : (
         <div className="bg-white rounded-2xl p-12 text-center">
@@ -662,24 +825,47 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
 }
 
 // 任务表单弹窗
-function TaskFormModal({ employees, taskTypes, factories, onClose, onSuccess }: any) {
+function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilledData, onClose, onSuccess, onUpdate }: any) {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
+  const isEditMode = !!editingTask;
+  
   const [formData, setFormData] = useState({
-    task_name: '',
-    task_type: '',
+    task_name: editingTask?.task_name || '',
+    task_type: editingTask?.task_type || '',
     custom_task_type: '',
-    task_location: '',
-    assigned_employee_id: '',
-    start_date: '',
-    end_date: '',
-    notes: '',
+    task_location: editingTask?.task_location || '',
+    assigned_employee_id: editingTask?.assigned_employee_id || prefilledData?.employeeId || '',
+    start_date: editingTask?.start_date || prefilledData?.date || '',
+    end_date: editingTask?.end_date || prefilledData?.date || '',
+    time_slot: (editingTask?.time_slot || 'FULL_DAY') as 'AM' | 'PM' | 'FULL_DAY',
+    notes: editingTask?.notes || '',
   });
   const [showCustomType, setShowCustomType] = useState(false);
 
   const createTaskMutation = useMutation({
-    mutationFn: (data: any) => supabaseService.createTask(data),
+    mutationFn: async (data: any) => {
+      const task: any = await supabaseService.createTask(data);
+      
+      // 如果是 Site PS 为其他员工创建任务，发送通知
+      if (currentUser && task.assigned_employee_id && task.assigned_employee_id !== currentUser.id) {
+        const assignedEmployee = employees.find((emp: any) => emp.id === task.assigned_employee_id);
+        if (assignedEmployee) {
+          await supabaseService.createScheduleNotification({
+            task_id: task.id,
+            affected_employee_id: assignedEmployee.id,
+            modified_by_employee_id: currentUser.id,
+            notification_type: 'CREATED',
+            change_description: `创建任务：${task.task_name}（${task.start_date} - ${task.end_date}）`,
+          });
+        }
+      }
+      
+      return task;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['notification-count'] });
       onSuccess();
     },
   });
@@ -688,25 +874,35 @@ function TaskFormModal({ employees, taskTypes, factories, onClose, onSuccess }: 
     e.preventDefault();
     
     const taskType = showCustomType ? formData.custom_task_type : formData.task_type;
-    
-    createTaskMutation.mutate({
+    const taskData = {
       task_name: formData.task_name,
       task_type: taskType,
       task_location: formData.task_location,
       assigned_employee_id: formData.assigned_employee_id || null,
       start_date: formData.start_date,
       end_date: formData.end_date,
+      time_slot: formData.time_slot,
       notes: formData.notes,
       source: 'manual',
       status: 'active',
-    });
+    };
+    
+    if (isEditMode && onUpdate) {
+      // 编辑模式：更新任务
+      onUpdate(editingTask.id, taskData);
+    } else {
+      // 新建模式：创建任务
+      createTaskMutation.mutate(taskData);
+    }
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-900">新增任务 New Task</h2>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {isEditMode ? '编辑任务 Edit Task' : '新增任务 New Task'}
+          </h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -845,6 +1041,19 @@ function TaskFormModal({ employees, taskTypes, factories, onClose, onSuccess }: 
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              时间槽 <span className="text-red-500">*</span>
+            </label>
+            <TimeSlotSelector
+              value={formData.time_slot}
+              onChange={(value) => setFormData({ ...formData, time_slot: value })}
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              💡 提示：选择时间槽后系统会自动计算工时（上午3.5h，下午4.5h，全天8h）
+            </p>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
             <textarea
               value={formData.notes}
@@ -861,7 +1070,7 @@ function TaskFormModal({ employees, taskTypes, factories, onClose, onSuccess }: 
               disabled={createTaskMutation.isPending}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              {createTaskMutation.isPending ? '保存中...' : '保存'}
+              {createTaskMutation.isPending ? '保存中...' : (isEditMode ? '更新' : '保存')}
             </button>
             <button
               type="button"

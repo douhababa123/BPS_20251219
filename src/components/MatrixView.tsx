@@ -77,7 +77,7 @@ const getSkillIcon = (skillName: string): string => {
 };
 
 export default function MatrixView({ rows, columns, stats, isLoading = false, onFilterChange }: MatrixViewProps) {
-  const [filters, setFilters] = useState<MatrixFilters>({
+  const [filters] = useState<MatrixFilters>({
     year: new Date().getFullYear(),
   });
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);

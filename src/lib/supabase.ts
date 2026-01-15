@@ -17,7 +17,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // 创建Supabase客户端实例
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false, // 关闭会话持久化（不需要用户认证）
+    persistSession: true, // 启用会话持久化（支持"记住我"功能）
+    autoRefreshToken: true, // 自动刷新 Token
+    detectSessionInUrl: false, // 不从 URL 检测会话（使用 OTP）
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined, // 使用 localStorage 存储会话
   },
 });
 

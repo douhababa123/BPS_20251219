@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手势交互绘画系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            overflow: hidden;
+            background: #1a1a2e;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+        
+        #drawingCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        #uiPanel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(30, 30, 60, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            display: none;
+            z-index: 3;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(100, 150, 255, 0.5);
+        }
+        
+        #uiPanel.active {
+            display: block;
+            animation: panelFadeIn 0.3s ease;
+        }
+        
+        @keyframes panelFadeIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+        
+        .panel-title {
+            color: #fff;
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-align: center;
+            text-shadow: 0 2px 10px rgba(100, 150, 255, 0.5);
+        }
+        
+        .tool-section {
+            margin-bottom: 25px;
+        }
+        
+        .tool-label {
+            color: #aaa;
+            font-size: 14px;
+            margin-bottom: 10px;
+            display: block;
+        }
+        
+        .tool-options {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .tool-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            border: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            background: rgba(50, 50, 80, 0.8);
+        }
+        
+        .tool-btn:hover {
+            transform: scale(1.1);
+            border-color: rgba(100, 150, 255, 0.8);
+        }
+        
+        .tool-btn.selected {
+            border-color: #4CAF50;
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.6);
+            transform: scale(1.15);
+        }
+        
+        .color-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+        }
+        
+        .size-btn {
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        #status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            font-size: 16px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px 20px;
+            border-radius: 10px;
+            z-index: 4;
+            max-width: 300px;
+            line-height: 1.6;
+        }
+        
+        .status-item {
+            margin: 5px 0;
+        }
+        
+        .status-label {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        
+        #cursor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #4CAF50;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 5;
+            display: none;
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.8);
+        }
+        
+        #cursor.active {
+            display: block;
+        }
+        
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            z-index: 0;
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            animation: snowfall linear forwards;
+        }
+        
+        @keyframes snowfall {
+            0% {
+                opacity: 1;
+                transform: translateY(0) rotate(0deg);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(100vh) rotate(360deg);
+            }
+        }
+        
+        #startBtn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            font-size: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            z-index: 10;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+        }
+        
+        #startBtn:hover {
+            transform: translate(-50%, -50%) scale(1.05);
+            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="drawingCanvas"></canvas>
+        <canvas id="canvas"></canvas>
+        
+        <div id="cursor"></div>
+        
+        <div id="uiPanel">
+            <div class="panel-title">🎨 工具面板</div>
+            
+            <div class="tool-section">
+                <span class="tool-label">工具选择</span>
+                <div class="tool-options">
+                    <div class="tool-btn selected" data-tool="pen">✏️</div>
+                    <div class="tool-btn" data-tool="eraser">🧹</div>
+                </div>
+            </div>
+            
+            <div class="tool-section">
+                <span class="tool-label">颜色选择</span>
+                <div class="tool-options">
+                    <div class="tool-btn color-btn selected" data-color="#FF6B6B" style="background: #FF6B6B;"></div>
+                    <div class="tool-btn color-btn" data-color="#4ECDC4" style="background: #4ECDC4;"></div>
+                    <div class="tool-btn color-btn" data-color="#FFE66D" style="background: #FFE66D;"></div>
+                    <div class="tool-btn color-btn" data-color="#95E1D3" style="background: #95E1D3;"></div>
+                    <div class="tool-btn color-btn" data-color="#F38181" style="background: #F38181;"></div>
+                    <div class="tool-btn color-btn" data-color="#AA96DA" style="background: #AA96DA;"></div>
+                </div>
+            </div>
+            
+            <div class="tool-section">
+                <span class="tool-label">笔刷大小</span>
+                <div class="tool-options">
+                    <div class="tool-btn size-btn" data-size="3">S</div>
+                    <div class="tool-btn size-btn selected" data-size="8">M</div>
+                    <div class="tool-btn size-btn" data-size="15">L</div>
+                    <div class="tool-btn size-btn" data-size="25">XL</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="status">
+            <div class="status-item"><span class="status-label">状态:</span> <span id="gestureStatus">等待中...</span></div>
+            <div class="status-item"><span class="status-label">工具:</span> <span id="toolStatus">画笔</span></div>
+            <div class="status-item"><span class="status-label">颜色:</span> <span id="colorStatus">🔴</span></div>
+        </div>
+        
+        <button id="startBtn">启动摄像头</button>
+    </div>
+
+    <script>
+        // 全局变量
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const drawingCanvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        const drawCtx = drawingCanvas.getContext('2d');
+        const uiPanel = document.getElementById('uiPanel');
+        const cursor = document.getElementById('cursor');
+        const startBtn = document.getElementById('startBtn');
+        
+        let hands;
+        let camera;
+        let isDrawing = false;
+        let lastPoint = null;
+        let currentTool = 'pen';
+        let currentColor = '#FF6B6B';
+        let currentSize = 8;
+        let panelOpen = false;
+        let lastPalmTime = 0;
+        let lastTwoFingerTime = 0;
+        let scaleStartDistance = null;
+        let initialScale = 1;
+        let currentScale = 1;
+        let strokes = []; // 存储所有笔画
+        
+        // 设置画布大小
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            drawingCanvas.width = window.innerWidth;
+            drawingCanvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // 启动按钮
+        startBtn.addEventListener('click', async () => {
+            startBtn.style.display = 'none';
+            await initCamera();
+            initMediaPipe();
+        });
+        
+        // 初始化摄像头
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720 }
+                });
+                video.srcObject = stream;
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        resolve(video);
+                    };
+                });
+            } catch (err) {
+                console.error('摄像头启动失败:', err);
+                alert('无法访问摄像头，请检查权限设置');
+            }
+        }
+        
+        // 初始化 MediaPipe
+        function initMediaPipe() {
+            hands = new Hands({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                }
+            });
+            
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.7,
+                minTrackingConfidence: 0.7
+            });
+            
+            hands.onResults(onResults);
+            
+            camera = new Camera(video, {
+                onFrame: async () => {
+                    await hands.send({ image: video });
+                },
+                width: 1280,
+                height: 720
+            });
+            
+            camera.start();
+        }
+        
+        // 手势识别结果处理
+        function onResults(results) {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // 绘制手部骨架
+                for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+                    drawConnectors(ctx, results.multiHandLandmarks[i], HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                    drawLandmarks(ctx, results.multiHandLandmarks[i], {color: '#FF0000', lineWidth: 1, radius: 3});
+                }
+                
+                // 手势识别
+                processGestures(results.multiHandLandmarks, results.multiHandedness);
+            } else {
+                updateStatus('未检测到手部');
+                isDrawing = false;
+                lastPoint = null;
+            }
+            
+            ctx.restore();
+        }
+        
+        // 处理手势
+        function processGestures(landmarks, handedness) {
+            const now = Date.now();
+            
+            // 双手检测 - 打开面板
+            if (landmarks.length === 2) {
+                const bothPalmsOpen = isPalmOpen(landmarks[0]) && isPalmOpen(landmarks[1]);
+                
+                if (bothPalmsOpen && !panelOpen && now - lastPalmTime > 1000) {
+                    openPanel();
+                    lastPalmTime = now;
+                    return;
+                }
+                
+                // 双手食指缩放
+                if (!panelOpen) {
+                    const leftIndex = landmarks[0][8];
+                    const rightIndex = landmarks[1][8];
+                    const distance = Math.hypot(
+                        (leftIndex.x - rightIndex.x) * canvas.width,
+                        (leftIndex.y - rightIndex.y) * canvas.height
+                    );
+                    
+                    if (scaleStartDistance === null) {
+                        scaleStartDistance = distance;
+                        initialScale = currentScale;
+                    } else {
+                        const scaleFactor = distance / scaleStartDistance;
+                        currentScale = initialScale * scaleFactor;
+                        currentScale = Math.max(0.5, Math.min(3, currentScale));
+                        redrawWithScale();
+                        updateStatus(`缩放: ${(currentScale * 100).toFixed(0)}%`);
+                    }
+                    return;
+                }
+            } else {
+                scaleStartDistance = null;
+            }
+            
+            // 单手操作
+            if (landmarks.length >= 1) {
+                const hand = landmarks[0];
+                const handLabel = handedness[0].label;
+                
+                // 检测手掌打开 - 关闭面板
+                if (panelOpen && isPalmOpen(hand) && now - lastPalmTime > 1000) {
+                    closePanel();
+                    lastPalmTime = now;
+                    return;
+                }
+                
+                // 面板打开时 - 食指选择
+                if (panelOpen) {
+                    const indexTip = hand[8];
+                    const x = (1 - indexTip.x) * canvas.width;
+                    const y = indexTip.y * canvas.height;
+                    
+                    cursor.style.left = x + 'px';
+                    cursor.style.top = y + 'px';
+                    cursor.classList.add('active');
+                    
+                    selectToolAtPosition(x, y);
+                    updateStatus('使用食指选择工具');
+                    return;
+                } else {
+                    cursor.classList.remove('active');
+                }
+                
+                // 食指+中指打开 - 消散文字
+                if (isTwoFingersOpen(hand) && now - lastTwoFingerTime > 500) {
+                    disperseDrawing();
+                    lastTwoFingerTime = now;
+                    updateStatus('文字消散中...');
+                    return;
+                }
+                
+                // 食指+拇指捏合 - 绘画
+                if (isPinching(hand)) {
+                    const indexTip = hand[8];
+                    const x = (1 - indexTip.x) * canvas.width;
+                    const y = indexTip.y * canvas.height;
+                    
+                    if (currentTool === 'pen') {
+                        drawLine(x, y);
+                        updateStatus('正在绘画...');
+                    } else if (currentTool === 'eraser') {
+                        erase(x, y);
+                        updateStatus('正在擦除...');
+                    }
+                    
+                    isDrawing = true;
+                } else {
+                    if (isDrawing) {
+                        lastPoint = null;
+                        isDrawing = false;
+                    }
+                    updateStatus('准备就绪');
+                }
+            }
+        }
+        
+        // 判断手掌是否打开
+        function isPalmOpen(hand) {
+            const fingerTips = [4, 8, 12, 16, 20];
+            const fingerBases = [2, 5, 9, 13, 17];
+            let openCount = 0;
+            
+            for (let i = 0; i < fingerTips.length; i++) {
+                const tip = hand[fingerTips[i]];
+                const base = hand[fingerBases[i]];
+                
+                if (i === 0) { // 拇指特殊处理
+                    if (Math.abs(tip.x - base.x) > 0.05) openCount++;
+                } else {
+                    if (tip.y < base.y - 0.05) openCount++;
+                }
+            }
+            
+            return openCount >= 4;
+        }
+        
+        // 判断食指和拇指是否捏合
+        function isPinching(hand) {
+            const thumb = hand[4];
+            const index = hand[8];
+            const distance = Math.hypot(
+                (thumb.x - index.x) * canvas.width,
+                (thumb.y - index.y) * canvas.height
+            );
+            return distance < 40;
+        }
+        
+        // 判断食指和中指是否同时打开
+        function isTwoFingersOpen(hand) {
+            const indexTip = hand[8];
+            const indexBase = hand[5];
+            const middleTip = hand[12];
+            const middleBase = hand[9];
+            const ringTip = hand[16];
+            const ringBase = hand[13];
+            
+            const indexOpen = indexTip.y < indexBase.y - 0.05;
+            const middleOpen = middleTip.y < middleBase.y - 0.05;
+            const ringClosed = ringTip.y > ringBase.y;
+            
+            return indexOpen && middleOpen && ringClosed;
+        }
+        
+        // 绘制线条
+        function drawLine(x, y) {
+            if (lastPoint) {
+                drawCtx.strokeStyle = currentColor;
+                drawCtx.lineWidth = currentSize * currentScale;
+                drawCtx.lineCap = 'round';
+                drawCtx.lineJoin = 'round';
+                
+                drawCtx.beginPath();
+                drawCtx.moveTo(lastPoint.x, lastPoint.y);
+                drawCtx.lineTo(x, y);
+                drawCtx.stroke();
+                
+                // 保存笔画
+                strokes.push({
+                    type: 'line',
+                    from: { ...lastPoint },
+                    to: { x, y },
+                    color: currentColor,
+                    size: currentSize * currentScale
+                });
+            }
+            lastPoint = { x, y };
+        }
+        
+        // 橡皮擦
+        function erase(x, y) {
+            drawCtx.save();
+            drawCtx.globalCompositeOperation = 'destination-out';
+            drawCtx.beginPath();
+            drawCtx.arc(x, y, currentSize * 3 * currentScale, 0, Math.PI * 2);
+            drawCtx.fill();
+            drawCtx.restore();
+            
+            lastPoint = { x, y };
+        }
+        
+        // 重绘（用于缩放）
+        function redrawWithScale() {
+            drawCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            
+            for (const stroke of strokes) {
+                if (stroke.type === 'line') {
+                    drawCtx.strokeStyle = stroke.color;
+                    drawCtx.lineWidth = stroke.size;
+                    drawCtx.lineCap = 'round';
+                    drawCtx.lineJoin = 'round';
+                    
+                    drawCtx.beginPath();
+                    drawCtx.moveTo(stroke.from.x, stroke.from.y);
+                    drawCtx.lineTo(stroke.to.x, stroke.to.y);
+                    drawCtx.stroke();
+                }
+            }
+        }
+        
+        // 消散绘画
+        function disperseDrawing() {
+            const imageData = drawCtx.getImageData(0, 0, drawingCanvas.width, drawingCanvas.height);
+            const data = imageData.data;
+            
+            drawCtx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+            strokes = [];
+            
+            // 创建粒子效果
+            for (let y = 0; y < drawingCanvas.height; y += 5) {
+                for (let x = 0; x < drawingCanvas.width; x += 5) {
+                    const index = (y * drawingCanvas.width + x) * 4;
+                    const alpha = data[index + 3];
+                    
+                    if (alpha > 50) {
+                        const r = data[index];
+                        const g = data[index + 1];
+                        const b = data[index + 2];
+                        createParticle(x, y, `rgb(${r},${g},${b})`);
+                    }
+                }
+            }
+        }
+        
+        // 创建粒子
+        function createParticle(x, y, color) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.textContent = ['❄', '✨', '⭐', '💫', '🌟'][Math.floor(Math.random() * 5)];
+            particle.style.left = x + 'px';
+            particle.style.top = y + 'px';
+            particle.style.color = color;
+            particle.style.animationDuration = (3 + Math.random() * 2) + 's';
+            particle.style.animationDelay = (Math.random() * 0.5) + 's';
+            
+            document.getElementById('container').appendChild(particle);
+            
+            setTimeout(() => {
+                particle.remove();
+            }, 5000);
+        }
+        
+        // 打开面板
+        function openPanel() {
+            panelOpen = true;
+            uiPanel.classList.add('active');
+            updateStatus('面板已打开');
+        }
+        
+        // 关闭面板
+        function closePanel() {
+            panelOpen = false;
+            uiPanel.classList.remove('active');
+            updateStatus('面板已关闭');
+        }
+        
+        // 在指定位置选择工具
+        function selectToolAtPosition(x, y) {
+            const panelRect = uiPanel.getBoundingClientRect();
+            
+            if (x < panelRect.left || x > panelRect.right || 
+                y < panelRect.top || y > panelRect.bottom) {
+                return;
+            }
+            
+            // 检查所有工具按钮
+            const buttons = uiPanel.querySelectorAll('.tool-btn');
+            buttons.forEach(btn => {
+                const rect = btn.getBoundingClientRect();
+                if (x >= rect.left && x <= rect.right && 
+                    y >= rect.top && y <= rect.bottom) {
+                    
+                    // 工具选择
+                    if (btn.dataset.tool) {
+                        document.querySelectorAll('[data-tool]').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                        currentTool = btn.dataset.tool;
+                        document.getElementById('toolStatus').textContent = 
+                            currentTool === 'pen' ? '画笔' : '橡皮擦';
+                    }
+                    
+                    // 颜色选择
+                    if (btn.dataset.color) {
+                        document.querySelectorAll('[data-color]').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                        currentColor = btn.dataset.color;
+                        document.getElementById('colorStatus').textContent = '⬤';
+                        document.getElementById('colorStatus').style.color = currentColor;
+                    }
+                    
+                    // 大小选择
+                    if (btn.dataset.size) {
+                        document.querySelectorAll('[data-size]').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                        currentSize = parseInt(btn.dataset.size);
+                    }
+                }
+            });
+        }
+        
+        // 更新状态显示
+        function updateStatus(gesture) {
+            document.getElementById('gestureStatus').textContent = gesture;
+        }
+    </script>
+</body>
+</html>
