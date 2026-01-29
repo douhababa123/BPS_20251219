@@ -41,31 +41,50 @@ const pages = {
 
 function AppContent() {
   const [currentPage, setCurrentPage] = useState<keyof typeof pages>('assessment');
-  const { currentUser, authUser, isLoading, isAuthenticated } = useAuth();
+  
+  // 临时跳过用户认证，直接进入主界面（开发测试用）
+  // TODO: 生产环境需要恢复正常的认证流程
+  const currentUser = {
+    id: 'test-user-id',
+    employee_id: 'TEST_001',
+    name: '测试用户',
+    email: 'test@bosch.com',
+    role: 'BPS_ENGINEER',
+    is_active: true,
+  };
+  
+  const authUser = {
+    id: 'test-auth-user-id',
+    email: 'test@bosch.com',
+  };
+  
+  // const { currentUser, authUser, isLoading, isAuthenticated } = useAuth();
+  
+  // const [currentPage, setCurrentPage] = useState<keyof typeof pages>('assessment');
 
   const PageComponent = pages[currentPage].component;
 
-  // 登录检查
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">加载中...</p>
-        </div>
-      </div>
-    );
-  }
+  // 登录检查 - 已临时禁用
+  // if (isLoading) {
+  //   return (
+  //     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+  //       <div className="text-center">
+  //         <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+  //         <p className="text-gray-600">加载中...</p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
-  // 未登录：显示登录页面
-  if (!isAuthenticated || !authUser) {
-    return <LoginScreen />;
-  }
+  // 未登录：显示登录页面 - 已临时禁用
+  // if (!isAuthenticated || !authUser) {
+  //   return <LoginScreen />;
+  // }
 
-  // 已登录但没有员工资料：显示资料完善页面
-  if (!currentUser) {
-    return <ProfileSetupScreen />;
-  }
+  // 已登录但没有员工资料：显示资料完善页面 - 已临时禁用
+  // if (!currentUser) {
+  //   return <ProfileSetupScreen />;
+  // }
 
   return (
     <PersonaProvider>
