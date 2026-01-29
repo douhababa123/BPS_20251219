@@ -331,6 +331,9 @@ export function getRankIcon(rank: number): string {
 /**
  * 格式化数字
  */
-export function formatNumber(num: number, decimals: number = 1): string {
+export function formatNumber(num: number | undefined | null, decimals: number = 1): string {
+  if (num === undefined || num === null || isNaN(num)) {
+    return '0';
+  }
   return num.toFixed(decimals);
 }

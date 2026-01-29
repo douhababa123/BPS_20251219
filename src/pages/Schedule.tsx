@@ -53,19 +53,31 @@ export function Schedule() {
   };
 
   // 获取数据
-  const { data: employees = [] } = useQuery({
+  const { data: employees = [], error: employeesError, isLoading: isEmployeesLoading } = useQuery({
     queryKey: ['employees'],
     queryFn: () => supabaseService.getAllEmployees(),
+    retry: 1, // 减少重试次数
+  });
+  
+  // 如果员工查询失败，使用空数组继续
+  const employeeList = employees || [];
+  
+  console.log('👥 员工数据状态:', {
+    isLoading: isEmployeesLoading,
+    count: employeeList.length,
+    error: employeesError
   });
 
   const { data: taskTypes = [] } = useQuery({
     queryKey: ['task-types'],
     queryFn: () => supabaseService.getAllTaskTypes(),
+    retry: 1,
   });
 
   const { data: factories = [] } = useQuery({
     queryKey: ['factories'],
     queryFn: () => supabaseService.getAllFactories(),
+    retry: 1,
   });
 
   const [year, month] = selectedDate.split('-').map(Number);
@@ -73,7 +85,7 @@ export function Schedule() {
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDate = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-  const { data: tasks = [], isLoading, refetch } = useQuery({
+  const { data: tasks = [], isLoading: isTasksLoading, refetch } = useQuery({
     queryKey: ['tasks', startDate, endDate],
     queryFn: async () => {
       console.log('🔍 Schedule 查询参数:', { startDate, endDate });
@@ -84,27 +96,34 @@ export function Schedule() {
           end_date: endDate
         });
         console.log('📊 查询到的任务总数:', allTasks.length);
-        console.log('📋 任务详情:', allTasks);
         
-        if (allTasks.length > 0) {
-          console.log('✅ 第一个任务示例:', {
+        // 只在有任务时才打印详情
+        if (allTasks.length > 0 && allTasks[0]) {
+          console.log('📋 第一个任务示例:', {
             id: allTasks[0].id,
             task_name: allTasks[0].task_name,
             assigned_employee_id: allTasks[0].assigned_employee_id,
             start_date: allTasks[0].start_date,
             end_date: allTasks[0].end_date,
             status: allTasks[0].status,
-            time_slot: allTasks[0].time_slot,
-            total_hours: allTasks[0].total_hours
           });
         }
         
-        return allTasks;
+        return allTasks || [];
       } catch (error) {
         console.error('❌ 查询任务失败:', error);
-        throw error;
+        return []; // 返回空数组，避免阻塞
       }
     },
+    retry: 1, // 减少重试次数
+    enabled: !!startDate && !!endDate, // 只有日期存在时才查询
+  });
+  
+  console.log('📅 日程管理数据状态:', {
+    employeesCount: employeeList.length,
+    tasksCount: tasks.length,
+    isEmployeesLoading,
+    isTasksLoading
   });
 
   // 删除任务 mutation
@@ -379,7 +398,7 @@ export function Schedule() {
         </div>
 
         {/* 内容区域 */}
-        {isLoading ? (
+        {isTasksLoading ? (
           <div className="bg-white rounded-2xl p-12 text-center">
             <RefreshCw className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
             <p className="text-gray-600">正在加载数据...</p>
