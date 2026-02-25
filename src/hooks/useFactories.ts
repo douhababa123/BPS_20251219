@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { factoriesService } from '@/services';
-import type { Factory, FactoryCreate, FactoryUpdate } from '@/types/api';
+import type { FactoryCreate, FactoryUpdate } from '@/types/api';
 
 const FACTORIES_KEY = 'factories';
 

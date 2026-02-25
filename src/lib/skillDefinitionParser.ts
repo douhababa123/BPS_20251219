@@ -126,17 +126,13 @@ export async function parseSkillDefinition(file: File): Promise<SkillParseResult
     const headers = rawData[headerRow];
     
     // 查找列索引
-    let numberCol = -1;
     let moduleCol = -1;
     let typeCol = -1;
-    let engineerCol = -1;
 
     headers.forEach((header: any, index: number) => {
       const h = String(header || '').toLowerCase().trim();
-      if (h.includes('编号') || h === 'number' || h === 'no') numberCol = index;
       if (h.includes('模块') || h === 'module') moduleCol = index;
       if (h.includes('类型') || h === 'type' || h.includes('能力')) typeCol = index;
-      if (h.includes('工程师') || h === 'engineer' || h.includes('owner')) engineerCol = index;
     });
 
     if (moduleCol === -1 || typeCol === -1) {

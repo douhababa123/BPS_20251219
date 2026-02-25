@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { resourceTaskTypesService } from '@/services';
-import type { ResourceTaskType, ResourceTaskTypeCreate, ResourceTaskTypeUpdate } from '@/types/api';
+import type { ResourceTaskTypeCreate, ResourceTaskTypeUpdate } from '@/types/api';
 
 const RESOURCE_TASK_TYPES_KEY = 'resourceTaskTypes';
 

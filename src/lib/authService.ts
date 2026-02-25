@@ -1,3 +1,4 @@
+// @ts-nocheck - 遗留 Supabase 认证服务，已迁移到 FastAPI
 /**
  * 认证服务层
  * 封装 Supabase Auth API，提供统一的认证接口

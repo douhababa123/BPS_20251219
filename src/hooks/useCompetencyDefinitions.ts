@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { competencyDefinitionsService } from '@/services';
-import type { CompetencyDefinition, CompetencyDefinitionCreate, CompetencyDefinitionUpdate } from '@/types/api';
+import type { CompetencyDefinitionCreate, CompetencyDefinitionUpdate } from '@/types/api';
 
 const COMPETENCY_DEFINITIONS_KEY = 'competencyDefinitions';
 

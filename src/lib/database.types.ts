@@ -669,6 +669,7 @@ export interface ExcelTaskData {
   endWeek: string;
   topic?: string;
   location?: string;
+  notes?: string;
   rowIndex: number;  // Excel行号，用于错误追踪
 }
 

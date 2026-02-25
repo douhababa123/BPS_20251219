@@ -25,7 +25,7 @@ import { supabaseService } from './supabaseService';
  */
 export async function parseResourcePlanningExcel(
   file: File,
-  year: number = new Date().getFullYear()
+  _year: number = new Date().getFullYear()
 ): Promise<ExcelParseResult> {
   const batchId = crypto.randomUUID();
   const errors: string[] = [];

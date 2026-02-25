@@ -1,3 +1,4 @@
+// @ts-nocheck - 遗留 Supabase 代码，已迁移到 SQL Server，跳过类型检查
 import { supabase } from './supabase';
 import type { 
   Department, DepartmentInsert,

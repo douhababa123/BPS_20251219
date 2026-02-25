@@ -242,7 +242,6 @@ export async function parseComplexExcel(file: File): Promise<ParseResult> {
     console.log(`第${skillNameRow + 1}行（技能名称行）内容:`, rawData[skillNameRow]?.slice(0, 10));
     console.log(`第${ctMarkerRow + 1}行（C/T标记行）内容:`, rawData[ctMarkerRow]?.slice(0, 10));
     
-    let displayOrder = 1;
     for (let colIndex = skillStartCol; colIndex < (rawData[skillNameRow]?.length || 0); colIndex++) {
       const skillName = rawData[skillNameRow]?.[colIndex];
       const ctMarker = String(rawData[ctMarkerRow]?.[colIndex] || '').toUpperCase().trim();

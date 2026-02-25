@@ -26,5 +26,13 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/**/*.old.tsx",
+    "src/**/*.old.ts",
+    "src/**/*.old2.ts",
+    "src/lib/authService.ts",
+    "src/lib/excelParser.ts",
+    "src/contexts/AuthContext.tsx"
+  ]
 }

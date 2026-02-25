@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { departmentsService } from '@/services';
-import type { Department, DepartmentCreate, DepartmentUpdate } from '@/types/api';
+import type { DepartmentCreate, DepartmentUpdate } from '@/types/api';
 
 const DEPARTMENTS_KEY = 'departments';
 

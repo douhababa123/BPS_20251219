@@ -35,7 +35,7 @@ export function Matching() {
   const [explainDrawerOpen, setExplainDrawerOpen] = useState(false);
   const [currentTaskInfo, setCurrentTaskInfo] = useState<any>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null); // 内联确认中的候选人 userId
-  const [lastSubmittedStatus, setLastSubmittedStatus] = useState<'pending_approval' | 'planned' | null>(null);
+  const [_lastSubmittedStatus, setLastSubmittedStatus] = useState<'pending_approval' | 'planned' | null>(null);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(matchingSchema),
@@ -119,7 +119,7 @@ export function Matching() {
     mutationFn: (data: { candidate: MatchingCandidate; taskInfo: any }) => {
       return taskWorkflowService.assign({
         taskName: data.taskInfo.name,
-        employeeId: data.candidate.userId,
+        employeeId: String(data.candidate.userId),
         taskType: data.taskInfo.type,
         location: data.taskInfo.location,
         startDate: data.taskInfo.startDate,
@@ -142,7 +142,7 @@ export function Matching() {
     mutationFn: (data: { candidate: MatchingCandidate; taskInfo: any }) => {
       return taskWorkflowService.forceAssign({
         taskName: data.taskInfo.name,
-        employeeId: data.candidate.userId,
+        employeeId: String(data.candidate.userId),
         taskType: data.taskInfo.type,
         location: data.taskInfo.location,
         startDate: data.taskInfo.startDate,
@@ -458,7 +458,7 @@ export function Matching() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">无 None</option>
-                  {users?.map(user => (
+                  {users?.map((user: { id: number; name: string }) => (
                     <option key={user.id} value={user.id}>{user.name}</option>
                   ))}
                 </select>

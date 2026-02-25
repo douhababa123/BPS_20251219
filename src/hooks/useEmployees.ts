@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { employeesService } from '@/services';
-import type { Employee, EmployeeCreate, EmployeeUpdate } from '@/types/api';
+import type { EmployeeCreate, EmployeeUpdate } from '@/types/api';
 
 const EMPLOYEES_KEY = 'employees';
 

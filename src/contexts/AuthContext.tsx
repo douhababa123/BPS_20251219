@@ -1,3 +1,4 @@
+// @ts-nocheck - 遗留 Supabase 认证上下文，已迁移到 NewAuthContext
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import type { Employee } from '../lib/database.types';

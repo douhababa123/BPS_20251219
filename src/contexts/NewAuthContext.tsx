@@ -43,12 +43,12 @@ export const NewAuthProvider: React.FC<NewAuthProviderProps> = ({ children }) =>
           try {
             const payload = JSON.parse(atob(token.split('.')[1]));
             userRole = payload.role || 'user';
-            localStorage.setItem('user_role', userRole); // 补存，下次直接读
+            localStorage.setItem('user_role', userRole ?? 'user'); // 补存，下次直接读
           } catch {
             userRole = 'user';
           }
         }
-        setUser({ id: userId, email: userEmail, role: userRole });
+        setUser({ id: userId, email: userEmail, role: userRole ?? undefined });
         setIsLoading(false);
         return;
       }

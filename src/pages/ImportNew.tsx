@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, CheckCircle, AlertCircle, Loader2, FileSpreadsheet, Database, ListTree, Calendar, RefreshCw, Trash2, Download } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, Loader2, FileSpreadsheet, Database, ListTree, Calendar, Trash2, Download } from 'lucide-react';
 import { parseComplexExcel, type ParseResult as AssessmentParseResult } from '../lib/complexExcelParser';
 import { parseSkillDefinition, type SkillParseResult } from '../lib/skillDefinitionParser';
 import { supabaseService } from '../lib/supabaseService';
