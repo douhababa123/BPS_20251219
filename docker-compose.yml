@@ -15,6 +15,7 @@ services:
       - DB_DATABASE=${DB_DATABASE:-DCCT_BPS_Debug}
       - DB_USERNAME=${DB_USERNAME:-TEST}
       - DB_PASSWORD=${DB_PASSWORD:-123456}
+      - DB_DRIVER=ODBC Driver 18 for SQL Server
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-in-production}
       - DEBUG=${DEBUG:-false}
       - SMTP_HOST=${SMTP_HOST:-smtp.bosch.com}

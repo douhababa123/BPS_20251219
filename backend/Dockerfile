@@ -3,17 +3,19 @@
 # 使用 bullseye 固定 Debian 11，确保 apt-key 可用且与 MS Debian 11 包兼容
 FROM python:3.9-slim-bullseye
 
-# 安装 ODBC Driver 17 for SQL Server（pyodbc 依赖）
+# 安装 ODBC Driver 18 for SQL Server（pyodbc 依赖，msodbcsql18 是 arm64 上唯一可用版本）
 RUN apt-get update && apt-get install -y \
     curl \
     gnupg2 \
     apt-transport-https \
     unixodbc-dev \
-    && curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
-    && curl https://packages.microsoft.com/config/debian/11/prod.list \
-        -o /etc/apt/sources.list.d/mssql-release.list \
+    && curl https://packages.microsoft.com/keys/microsoft.asc \
+        -o /usr/share/keyrings/microsoft.asc \
+    && echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/microsoft.asc] \
+https://packages.microsoft.com/debian/11/prod bullseye main" \
+        > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y msodbcsql17 \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
