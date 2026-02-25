@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Filter, Download, Loader2, Database } from 'lucide-react';
 import type { MatrixRow, MatrixColumn, MatrixFilters, AssessmentStats } from '../lib/database.types';
+import { apiClient } from '../lib/api-client';
 
 interface MatrixViewProps {
   rows: MatrixRow[];
   columns: MatrixColumn[];
   stats: AssessmentStats;
   isLoading?: boolean;
-  onFilterChange?: (filters: MatrixFilters) => void;
 }
 
 // 根据技能名称返回对应的图标（41个不同的图标）
@@ -76,12 +76,35 @@ const getSkillIcon = (skillName: string): string => {
   return iconMap[skillName] || '📌';
 };
 
-export default function MatrixView({ rows, columns, stats, isLoading = false, onFilterChange }: MatrixViewProps) {
+export default function MatrixView({ rows, columns, stats, isLoading = false }: MatrixViewProps) {
   const [filters] = useState<MatrixFilters>({
     year: new Date().getFullYear(),
   });
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [selectedModules, setSelectedModules] = useState<number[]>([]);
+  const [allModules, setAllModules] = useState<Array<{ module_id: number; module_name: string }>>([]);
+
+  // 获取所有模块（包括没有评估数据的模块）
+  useEffect(() => {
+    const fetchAllModules = async () => {
+      try {
+        const response = await apiClient.get<Array<{ module_id: number; module_name: string }>>('/skills/modules');
+        setAllModules(response.data);
+        console.log('✅ 获取所有模块:', response.data.length);
+      } catch (err) {
+        console.error('❌ 获取模块列表失败:', err);
+        // 如果API调用失败，回退到从columns提取
+        const mods = new Map<number, string>();
+        columns.forEach(col => {
+          if (!mods.has(col.moduleId)) {
+            mods.set(col.moduleId, col.moduleName);
+          }
+        });
+        setAllModules(Array.from(mods.entries()).map(([module_id, module_name]) => ({ module_id, module_name })));
+      }
+    };
+    fetchAllModules();
+  }, [columns]);
 
   // 提取唯一的部门和模块列表
   const departments = useMemo(() => {
@@ -90,6 +113,10 @@ export default function MatrixView({ rows, columns, stats, isLoading = false, on
   }, [rows]);
 
   const modules = useMemo(() => {
+    // 使用从API获取的所有模块，如果未获取到则从columns提取
+    if (allModules.length > 0) {
+      return allModules.map(m => [m.module_id, m.module_name] as [number, string]).sort((a, b) => a[0] - b[0]);
+    }
     const mods = new Map<number, string>();
     columns.forEach(col => {
       if (!mods.has(col.moduleId)) {
@@ -97,7 +124,7 @@ export default function MatrixView({ rows, columns, stats, isLoading = false, on
       }
     });
     return Array.from(mods.entries()).sort((a, b) => a[0] - b[0]);
-  }, [columns]);
+  }, [allModules, columns]);
 
   // 应用筛选
   const filteredRows = useMemo(() => {
@@ -143,26 +170,6 @@ export default function MatrixView({ rows, columns, stats, isLoading = false, on
     link.download = `能力矩阵_${filters.year}_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
-
-  // 更新筛选器（只在用户主动更改时触发，不在初始渲染时触发）
-  const [isInitialMount, setIsInitialMount] = useState(true);
-
-  useEffect(() => {
-    // 跳过初始渲染
-    if (isInitialMount) {
-      setIsInitialMount(false);
-      return;
-    }
-
-    const newFilters: MatrixFilters = {
-      year: filters.year,
-      departments: selectedDepartments.length > 0 ? selectedDepartments : undefined,
-      moduleIds: selectedModules.length > 0 ? selectedModules : undefined,
-    };
-    
-    console.log('🔄 MatrixView 筛选器变化，通知父组件重新加载:', newFilters);
-    onFilterChange?.(newFilters);
-  }, [filters.year, selectedDepartments, selectedModules, onFilterChange]);
 
   if (isLoading) {
     return (

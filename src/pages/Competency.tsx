@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabaseService } from '../lib/supabaseService';
+import { getAllAssessments } from '../lib/competencyApi';
 import {
   RadarChart,
   Radar,
@@ -26,11 +26,10 @@ import {
   getRankIcon,
   formatNumber,
   type ModuleStats,
-  type SkillStats,
 } from '../lib/competencyAggregation';
 
 type ViewMode = 'team' | 'personal';
-type SubViewMode = 'analysis' | 'ranking';
+type SubViewMode = 'analysis' | 'ranking' | 'total-score';
 type ChartType = 'module' | 'skill';
 
 export function Competency() {
@@ -40,23 +39,59 @@ export function Competency() {
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [chartType, setChartType] = useState<ChartType>('module');
 
-  // 获取数据
-  const { data: employees = [], isLoading: loadingEmployees } = useQuery({
-    queryKey: ['employees'],
-    queryFn: () => supabaseService.getAllEmployees(),
+  // 获取数据（SQL Server via FastAPI）
+  const { data: allAssessments = [], isLoading, refetch } = useQuery({
+    queryKey: ['competency-assessments'],
+    queryFn: () => getAllAssessments(),
   });
 
-  const { data: skills = [], isLoading: loadingSkills } = useQuery({
-    queryKey: ['skills'],
-    queryFn: () => supabaseService.getAllSkills(),
-  });
+  // 按年份过滤
+  const assessments = useMemo(
+    () => allAssessments.filter(a => a.assessment_year === selectedYear),
+    [allAssessments, selectedYear]
+  );
 
-  const { data: assessments = [], isLoading: loadingAssessments, refetch } = useQuery({
-    queryKey: ['assessments', selectedYear],
-    queryFn: () => supabaseService.getAllAssessments(selectedYear),
-  });
+  // 从 assessments 派生技能列表（避免额外请求）
+  const skills = useMemo(() => {
+    const skillMap = new Map<number, {
+      id: number; module_id: number; module_name: string;
+      skill_name: string; skill_code: string | null;
+      description: string | null; display_order: number;
+      is_active: boolean; created_at: string; updated_at: string;
+    }>();
+    allAssessments.forEach(a => {
+      if (!skillMap.has(a.skill_id)) {
+        skillMap.set(a.skill_id, {
+          id: a.skill_id,
+          module_id: a.module_id,
+          module_name: a.module_name,
+          skill_name: a.skill_name,
+          skill_code: null,
+          description: null,
+          display_order: a.display_order,
+          is_active: true,
+          created_at: '',
+          updated_at: '',
+        });
+      }
+    });
+    return Array.from(skillMap.values());
+  }, [allAssessments]);
 
-  const isLoading = loadingEmployees || loadingSkills || loadingAssessments;
+  // 从 assessments 派生员工列表（用于下拉选择框）
+  const employees = useMemo(() => {
+    const empMap = new Map<string, { id: string; name: string; departments: { name: string | null } | null }>();
+    allAssessments.forEach(a => {
+      if (!empMap.has(a.employee_id)) {
+        empMap.set(a.employee_id, {
+          id: a.employee_id,
+          name: a.employee_name,
+          departments: a.department_name ? { name: a.department_name } : null,
+        });
+      }
+    });
+    return Array.from(empMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [allAssessments]);
 
   // 计算团队统计
   const teamModuleStats = useMemo(
@@ -378,6 +413,17 @@ function TeamView({
         >
           排名 Ranking
         </button>
+        <button
+          onClick={() => setSubViewMode('total-score')}
+          className={cn(
+            'px-4 py-2 rounded-lg font-medium transition-colors',
+            subViewMode === 'total-score'
+              ? 'bg-white text-blue-600 border-2 border-blue-600'
+              : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
+          )}
+        >
+          总分视图 Total Score
+        </button>
       </div>
 
       {subViewMode === 'analysis' ? (
@@ -459,7 +505,7 @@ function TeamView({
             </ResponsiveContainer>
           </div>
         </div>
-      ) : (
+      ) : subViewMode === 'ranking' ? (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">
@@ -507,6 +553,8 @@ function TeamView({
             </table>
           </div>
         </div>
+      ) : (
+        <TotalScoreView radarData={radarData} moduleRanking={moduleRanking} />
       )}
     </div>
   );
@@ -790,6 +838,201 @@ function PersonalView({
           <p className="text-gray-600">请选择工程师查看详细能力画像</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// 总分视图组件
+function TotalScoreView({
+  radarData,
+  moduleRanking,
+}: {
+  radarData: any[];
+  moduleRanking: (ModuleStats & { rank: number })[];
+}) {
+  // 准备柱状图数据：每个模块的目标总分 vs 实际总分
+  const barChartData = moduleRanking.map(module => ({
+    name: module.moduleName,
+    icon: module.icon,
+    目标总分: module.totalTarget,
+    实际总分: module.totalCurrent,
+    差距: module.totalTarget - module.totalCurrent,
+  }));
+
+  // 计算总计
+  const totalStats = {
+    totalTarget: moduleRanking.reduce((sum, m) => sum + m.totalTarget, 0),
+    totalCurrent: moduleRanking.reduce((sum, m) => sum + m.totalCurrent, 0),
+    totalGap: moduleRanking.reduce((sum, m) => sum + m.totalGap, 0),
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* 总分统计卡片 */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-blue-600 text-sm font-medium">总目标分数</div>
+              <div className="text-3xl font-bold text-blue-900 mt-2">{formatNumber(totalStats.totalTarget)}</div>
+              <div className="text-xs text-blue-600 mt-1">Target Total Score</div>
+            </div>
+            <Target className="w-10 h-10 text-blue-400" />
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-green-600 text-sm font-medium">总实际分数</div>
+              <div className="text-3xl font-bold text-green-900 mt-2">{formatNumber(totalStats.totalCurrent)}</div>
+              <div className="text-xs text-green-600 mt-1">Current Total Score</div>
+            </div>
+            <Award className="w-10 h-10 text-green-400" />
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-purple-600 text-sm font-medium">总差距</div>
+              <div className="text-3xl font-bold text-purple-900 mt-2">{formatNumber(totalStats.totalGap)}</div>
+              <div className="text-xs text-purple-600 mt-1">Total Gap</div>
+            </div>
+            <TrendingUp className="w-10 h-10 text-purple-400" />
+          </div>
+        </div>
+      </div>
+
+      {/* 雷达图 + 柱状图并排显示 */}
+      <div className="grid grid-cols-2 gap-4">
+        {/* 雷达图 */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">
+            团队9大模块雷达图 Team Module Radar
+          </h3>
+          <ResponsiveContainer width="100%" height={450}>
+            <RadarChart data={radarData}>
+              <PolarGrid stroke="#e5e7eb" />
+              <PolarAngleAxis 
+                dataKey="module" 
+                tick={{ fontSize: 10, fill: '#374151' }} 
+                tickLine={false}
+              />
+              <PolarRadiusAxis angle={90} domain={[0, 5]} tick={{ fontSize: 9 }} />
+              <Radar name="现状" dataKey="现状" stroke="#2563EB" fill="#2563EB" fillOpacity={0.3} strokeWidth={2} />
+              <Radar name="目标" dataKey="目标" stroke="#F97316" fill="#F97316" fillOpacity={0.2} strokeWidth={2} />
+              <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 柱状图：目标总分 vs 实际总分 */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">
+            模块总分对比 Module Total Score Comparison
+          </h3>
+          <ResponsiveContainer width="100%" height={450}>
+            <BarChart data={barChartData} margin={{ bottom: 80, left: 10, right: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 9, fill: '#374151' }} 
+                angle={-45} 
+                textAnchor="end" 
+                height={100}
+                interval={0}
+              />
+              <YAxis tick={{ fontSize: 10 }} />
+              <Tooltip 
+                contentStyle={{ fontSize: '12px', borderRadius: '8px' }}
+                cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }}
+              />
+              <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
+              <Bar dataKey="目标总分" fill="#F97316" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="实际总分" fill="#2563EB" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* 详细数据表格 */}
+      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">
+          模块总分详情 Module Total Score Details
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">模块名称</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">目标总分</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">实际总分</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">差距</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">完成率</th>
+                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">评估人数</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {moduleRanking.map((module) => {
+                const completionRate = module.totalTarget > 0 
+                  ? (module.totalCurrent / module.totalTarget * 100).toFixed(1) 
+                  : '0.0';
+                return (
+                  <tr key={module.moduleId} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{module.icon}</span>
+                        <span className="text-sm font-medium text-gray-900">{module.moduleName}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-orange-600">
+                      {formatNumber(module.totalTarget)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-blue-600">
+                      {formatNumber(module.totalCurrent)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-purple-600">
+                      {formatNumber(module.totalGap)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={cn(
+                        'text-sm font-bold',
+                        parseFloat(completionRate) >= 90 ? 'text-green-600' :
+                        parseFloat(completionRate) >= 70 ? 'text-yellow-600' :
+                        'text-red-600'
+                      )}>
+                        {completionRate}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-gray-700">
+                      {module.employeeCount}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="bg-gray-100">
+              <tr>
+                <td className="px-4 py-3 text-sm font-bold text-gray-900">总计</td>
+                <td className="px-4 py-3 text-right text-sm font-bold text-orange-600">
+                  {formatNumber(totalStats.totalTarget)}
+                </td>
+                <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
+                  {formatNumber(totalStats.totalCurrent)}
+                </td>
+                <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
+                  {formatNumber(totalStats.totalGap)}
+                </td>
+                <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
+                  {(totalStats.totalTarget > 0 
+                    ? (totalStats.totalCurrent / totalStats.totalTarget * 100).toFixed(1) 
+                    : '0.0')}%
+                </td>
+                <td className="px-4 py-3"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

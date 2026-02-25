@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabaseService } from '../lib/supabaseService';
+import { tasksService, employeesService, taskTypesService, factoriesService, scheduleNotificationsService } from '../services';
+import { taskWorkflowService } from '../services/task-workflow.service';
 import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useAuth } from '../contexts/AuthContext';
+import { useNewAuth } from '../contexts/NewAuthContext';
 import { TimeSlotSelector } from '../components/TimeSlotSelector';
 import { TaskCard, TaskCardCompact } from '../components/TaskCard';
 import { TaskDetailModal } from '../components/TaskDetailModal';
@@ -23,14 +24,31 @@ import {
 
 type ViewMode = 'team' | 'personal';
 type PeriodType = 'month' | 'quarter' | 'year';
+type TaskStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled' | 'pending_approval' | 'rejected' | 'confirmed' | 'employee_rejected' | 'all';
+
+// 任务状态配置
+const TASK_STATUS_CONFIG = {
+  all: { label: '全部', color: 'bg-gray-100 text-gray-700 border-gray-300' },
+  planned: { label: '计划中', color: 'bg-blue-100 text-blue-700 border-blue-300' },
+  in_progress: { label: '进行中', color: 'bg-yellow-100 text-yellow-700 border-yellow-300' },
+  completed: { label: '已完成', color: 'bg-green-100 text-green-700 border-green-300' },
+  cancelled: { label: '已取消', color: 'bg-red-100 text-red-700 border-red-300' },
+  pending_approval: { label: '待审批', color: 'bg-orange-100 text-orange-700 border-orange-300' },
+  rejected: { label: '已拒绝', color: 'bg-red-100 text-red-600 border-red-200' },
+  confirmed: { label: '已确认', color: 'bg-teal-100 text-teal-700 border-teal-300' },
+  employee_rejected: { label: '工程师拒绝', color: 'bg-purple-100 text-purple-700 border-purple-300' },
+};
 
 // 预设颜色
 const COLORS = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#6366F1', '#64748B', '#14B8A6', '#EC4899'];
 
 export function Schedule() {
   const queryClient = useQueryClient();
+  const { user } = useNewAuth();
+  const isAdmin = user?.role === 'admin';
   const [viewMode, setViewMode] = useState<ViewMode>('team');
   const [periodType, setPeriodType] = useState<PeriodType>('month');
+  const [statusFilter, setStatusFilter] = useState<TaskStatus>('all');
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -55,7 +73,7 @@ export function Schedule() {
   // 获取数据
   const { data: employees = [], error: employeesError, isLoading: isEmployeesLoading } = useQuery({
     queryKey: ['employees'],
-    queryFn: () => supabaseService.getAllEmployees(),
+    queryFn: () => employeesService.getAll(),
     retry: 1, // 减少重试次数
   });
   
@@ -70,13 +88,13 @@ export function Schedule() {
 
   const { data: taskTypes = [] } = useQuery({
     queryKey: ['task-types'],
-    queryFn: () => supabaseService.getAllTaskTypes(),
+    queryFn: () => taskTypesService.getAll(),
     retry: 1,
   });
 
   const { data: factories = [] } = useQuery({
     queryKey: ['factories'],
-    queryFn: () => supabaseService.getAllFactories(),
+    queryFn: () => factoriesService.getAll(),
     retry: 1,
   });
 
@@ -91,7 +109,7 @@ export function Schedule() {
       console.log('🔍 Schedule 查询参数:', { startDate, endDate });
       try {
         // 先查询所有任务（不过滤 status）
-        const allTasks = await supabaseService.getAllTasks({ 
+        const allTasks = await tasksService.getTasks({ 
           start_date: startDate, 
           end_date: endDate
         });
@@ -128,7 +146,7 @@ export function Schedule() {
 
   // 删除任务 mutation
   const deleteTaskMutation = useMutation({
-    mutationFn: (taskId: string) => supabaseService.deleteTask(taskId),
+    mutationFn: (taskId: string) => tasksService.delete(taskId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
@@ -137,17 +155,84 @@ export function Schedule() {
   // 更新任务 mutation
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: any }) => 
-      supabaseService.updateTask(id, updates),
+      tasksService.update(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
 
-  // 筛选任务
+  // 工程师确认 / 拒绝 mutation
+  const [empRejectModal, setEmpRejectModal] = useState<{ taskId: string; taskName: string } | null>(null);
+  const [empRejectReason, setEmpRejectReason] = useState('');
+
+  const confirmTaskMutation = useMutation({
+    mutationFn: (taskId: string) => taskWorkflowService.confirm(taskId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+    onError: (e: any) => alert(`确认失败: ${e.message}`),
+  });
+
+  const empRejectMutation = useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason: string }) =>
+      taskWorkflowService.employeeReject(taskId, reason),
+    onSuccess: () => {
+      setEmpRejectModal(null);
+      setEmpRejectReason('');
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (e: any) => alert(`拒绝失败: ${e.message}`),
+  });
+
+  // 我的待确认任务：status=planned 且 assigned_employee_id 与当前用户匹配（通过邮箱）
+  const myPlannedTasks = useMemo(() => {
+    if (!user) return [];
+    return tasks.filter((t: any) =>
+      t.status === 'planned' && t.assigned_employee_email === user.email
+    );
+  }, [tasks, user]);
+
+  // Admin 待审批任务
+  const pendingApprovalTasks = useMemo(() => {
+    if (!isAdmin) return [];
+    return tasks.filter((t: any) => t.status === 'pending_approval');
+  }, [tasks, isAdmin]);
+
+  // Admin 审批 / 拒绝 mutation
+  const [adminRejectModal, setAdminRejectModal] = useState<{ taskId: string; taskName: string } | null>(null);
+  const [adminRejectReason, setAdminRejectReason] = useState('');
+
+  const approveMutation = useMutation({
+    mutationFn: (taskId: string) => taskWorkflowService.approve(taskId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+    onError: (e: any) => alert(`审批失败: ${e.message}`),
+  });
+
+  const adminRejectMutation = useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason: string }) =>
+      taskWorkflowService.reject(taskId, reason),
+    onSuccess: () => {
+      setAdminRejectModal(null);
+      setAdminRejectReason('');
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (e: any) => alert(`拒绝失败: ${e.message}`),
+  });
+
+  // 筛选任务（增加状态筛选）
   const filteredTasks = useMemo(() => {
-    if (selectedEmployeeIds.length === 0) return tasks;
-    return tasks.filter((task: any) => selectedEmployeeIds.includes(task.assigned_employee_id));
-  }, [tasks, selectedEmployeeIds]);
+    let result = tasks;
+    
+    // 员工筛选
+    if (selectedEmployeeIds.length > 0) {
+      result = result.filter((task: any) => selectedEmployeeIds.includes(task.assigned_employee_id));
+    }
+    
+    // 状态筛选
+    if (statusFilter !== 'all') {
+      result = result.filter((task: any) => task.status === statusFilter);
+    }
+    
+    return result;
+  }, [tasks, selectedEmployeeIds, statusFilter]);
 
   // 计算统计数据
   const statistics = useMemo(() => {
@@ -369,6 +454,35 @@ export function Schedule() {
               ))}
             </div>
           </div>
+
+          {/* 任务状态筛选器 */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">任务状态筛选：</span>
+            {(Object.keys(TASK_STATUS_CONFIG) as TaskStatus[]).map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={cn(
+                  'px-3 py-1 rounded-lg text-sm font-medium transition-colors border',
+                  statusFilter === status
+                    ? TASK_STATUS_CONFIG[status].color
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                )}
+              >
+                {TASK_STATUS_CONFIG[status].label}
+                {status !== 'all' && (
+                  <span className="ml-1 text-xs">
+                    ({tasks.filter((t: any) => t.status === status).length})
+                  </span>
+                )}
+                {status === 'all' && (
+                  <span className="ml-1 text-xs">
+                    ({tasks.length})
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* 视图切换 */}
@@ -396,6 +510,111 @@ export function Schedule() {
             个人视图 Personal View
           </button>
         </div>
+
+        {/* Admin 待审批任务区 */}
+        {isAdmin && pendingApprovalTasks.length > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-2">
+            <h3 className="text-sm font-bold text-orange-800 mb-3">
+              ⏳ 有 {pendingApprovalTasks.length} 个任务申请待您审批：
+            </h3>
+            <div className="space-y-2">
+              {pendingApprovalTasks.map((task: any) => (
+                <div key={task.id} className="flex items-center justify-between gap-4 bg-white rounded-lg px-4 py-3 border border-orange-100">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 text-sm">{task.task_name}</p>
+                    <p className="text-xs text-gray-500">{task.start_date} → {task.end_date} · {task.task_location} · {task.task_type}</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => approveMutation.mutate(task.id)}
+                      disabled={approveMutation.isPending}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-500 disabled:opacity-50 transition-colors"
+                    >
+                      ✅ 审批通过
+                    </button>
+                    <button
+                      onClick={() => { setAdminRejectModal({ taskId: task.id, taskName: task.task_name }); setAdminRejectReason(''); }}
+                      disabled={adminRejectMutation.isPending}
+                      className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-500 disabled:opacity-50 transition-colors"
+                    >
+                      ❌ 拒绝
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Admin 待审批任务区 */}
+        {isAdmin && pendingApprovalTasks.length > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-2">
+            <h3 className="text-sm font-bold text-orange-800 mb-3">
+              ⏳ 有 {pendingApprovalTasks.length} 个任务申请待您审批：
+            </h3>
+            <div className="space-y-2">
+              {pendingApprovalTasks.map((task: any) => (
+                <div key={task.id} className="flex items-center justify-between gap-4 bg-white rounded-lg px-4 py-3 border border-orange-100">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 text-sm">{task.task_name}</p>
+                    <p className="text-xs text-gray-500">{task.start_date} → {task.end_date} · {task.task_location} · {task.task_type}</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => approveMutation.mutate(task.id)}
+                      disabled={approveMutation.isPending}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-500 disabled:opacity-50 transition-colors"
+                    >
+                      ✅ 审批通过
+                    </button>
+                    <button
+                      onClick={() => { setAdminRejectModal({ taskId: task.id, taskName: task.task_name }); setAdminRejectReason(''); }}
+                      disabled={adminRejectMutation.isPending}
+                      className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-500 disabled:opacity-50 transition-colors"
+                    >
+                      ❌ 拒绝
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 工程师待确认任务区 (工程师看到 planned 任务) */}
+        {!isAdmin && myPlannedTasks.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-2">
+            <h3 className="text-sm font-bold text-amber-800 mb-3">
+              ⏳ 您有 {myPlannedTasks.length} 个待确认任务，请尽快处理：
+            </h3>
+            <div className="space-y-2">
+              {myPlannedTasks.map((task: any) => (
+                <div key={task.id} className="flex items-center justify-between gap-4 bg-white rounded-lg px-4 py-3 border border-amber-100">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 text-sm">{task.task_name || task.name}</p>
+                    <p className="text-xs text-gray-500">{task.start_date} → {task.end_date} · {task.task_location}</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => confirmTaskMutation.mutate(task.id)}
+                      disabled={confirmTaskMutation.isPending}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-500 disabled:opacity-50 transition-colors"
+                    >
+                      ✅ 接受
+                    </button>
+                    <button
+                      onClick={() => { setEmpRejectModal({ taskId: task.id, taskName: task.task_name || task.name }); setEmpRejectReason(''); }}
+                      disabled={empRejectMutation.isPending}
+                      className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-500 disabled:opacity-50 transition-colors"
+                    >
+                      ❌ 拒绝
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 内容区域 */}
         {isTasksLoading ? (
@@ -472,6 +691,76 @@ export function Schedule() {
             setEditingTask(null);
           }}
         />
+      )}
+
+      {/* 工程师拒绝原因弹窗 */}
+      {empRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 shadow-xl w-full max-w-md">
+            <h4 className="font-bold text-gray-900 mb-1">拒绝任务</h4>
+            <p className="text-sm text-gray-500 mb-3">{empRejectModal.taskName}</p>
+            <textarea
+              value={empRejectReason}
+              onChange={e => setEmpRejectReason(e.target.value)}
+              rows={3}
+              placeholder="请输入拒绝原因（必填）"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none"
+            />
+            <div className="flex gap-3 mt-4 justify-end">
+              <button
+                onClick={() => setEmpRejectModal(null)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  if (!empRejectReason.trim()) { alert('请填写拒绝原因'); return; }
+                  empRejectMutation.mutate({ taskId: empRejectModal.taskId, reason: empRejectReason });
+                }}
+                disabled={empRejectMutation.isPending}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50"
+              >
+                {empRejectMutation.isPending ? '处理中...' : '确认拒绝'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin 拒绝原因弹窗 */}
+      {adminRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 shadow-xl w-full max-w-md">
+            <h4 className="font-bold text-gray-900 mb-1">拒绝任务申请</h4>
+            <p className="text-sm text-gray-500 mb-3">{adminRejectModal.taskName}</p>
+            <textarea
+              value={adminRejectReason}
+              onChange={e => setAdminRejectReason(e.target.value)}
+              rows={3}
+              placeholder="请输入拒绝原因（必填）"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none"
+            />
+            <div className="flex gap-3 mt-4 justify-end">
+              <button
+                onClick={() => setAdminRejectModal(null)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  if (!adminRejectReason.trim()) { alert('请填写拒绝原因'); return; }
+                  adminRejectMutation.mutate({ taskId: adminRejectModal.taskId, reason: adminRejectReason });
+                }}
+                disabled={adminRejectMutation.isPending}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50"
+              >
+                {adminRejectMutation.isPending ? '处理中...' : '确认拒绝'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -556,9 +845,11 @@ function TeamView({
                       const dateStr = `${selectedDate}-${String(day).padStart(2, '0')}`;
                       const weekend = isWeekend(day);
                       const dayTasks = tasks.filter((task: any) => {
+                        const sd = task.start_date ? String(task.start_date).substring(0, 10) : '';
+                        const ed = task.end_date ? String(task.end_date).substring(0, 10) : '';
                         return task.assigned_employee_id === emp.id &&
-                          task.start_date <= dateStr &&
-                          task.end_date >= dateStr;
+                          sd <= dateStr &&
+                          ed >= dateStr;
                       });
 
                       return (
@@ -716,7 +1007,7 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
               .filter((emp: any) => selectedEmployeeIds.length === 0 || selectedEmployeeIds.includes(emp.id))
               .map((emp: any) => (
                 <option key={emp.id} value={emp.id}>
-                  {emp.name} - {emp.departments?.name || '无部门'}
+                  {emp.name} - {emp.department_name || '无部门'}
                 </option>
               ))}
           </select>
@@ -846,7 +1137,7 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
 // 任务表单弹窗
 function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilledData, onClose, onSuccess, onUpdate }: any) {
   const queryClient = useQueryClient();
-  const { currentUser } = useAuth();
+  const { user } = useNewAuth();
   const isEditMode = !!editingTask;
   
   const [formData, setFormData] = useState({
@@ -858,22 +1149,23 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
     start_date: editingTask?.start_date || prefilledData?.date || '',
     end_date: editingTask?.end_date || prefilledData?.date || '',
     time_slot: (editingTask?.time_slot || 'FULL_DAY') as 'AM' | 'PM' | 'FULL_DAY',
+    status: (editingTask?.status || 'planned') as 'planned' | 'in_progress' | 'completed' | 'cancelled',
     notes: editingTask?.notes || '',
   });
   const [showCustomType, setShowCustomType] = useState(false);
 
   const createTaskMutation = useMutation({
     mutationFn: async (data: any) => {
-      const task: any = await supabaseService.createTask(data);
+      const task: any = await tasksService.create(data);
       
       // 如果是 Site PS 为其他员工创建任务，发送通知
-      if (currentUser && task.assigned_employee_id && task.assigned_employee_id !== currentUser.id) {
+      if (user && task.assigned_employee_id && task.assigned_employee_id !== user.id) {
         const assignedEmployee = employees.find((emp: any) => emp.id === task.assigned_employee_id);
         if (assignedEmployee) {
-          await supabaseService.createScheduleNotification({
+          await scheduleNotificationsService.create({
             task_id: task.id,
             affected_employee_id: assignedEmployee.id,
-            modified_by_employee_id: currentUser.id,
+            modified_by_employee_id: user.id,
             notification_type: 'CREATED',
             change_description: `创建任务：${task.task_name}（${task.start_date} - ${task.end_date}）`,
           });
@@ -901,9 +1193,9 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
       start_date: formData.start_date,
       end_date: formData.end_date,
       time_slot: formData.time_slot,
+      status: formData.status,
       notes: formData.notes,
       source: 'manual',
-      status: 'active',
     };
     
     if (isEditMode && onUpdate) {
@@ -1026,7 +1318,7 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
               <option value="">未分配</option>
               {employees.map((emp: any) => (
                 <option key={emp.id} value={emp.id}>
-                  {emp.name} - {emp.departments?.name || '无部门'}
+                  {emp.name} - {emp.department_name || '无部门'}
                 </option>
               ))}
             </select>
@@ -1070,6 +1362,29 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
             <p className="text-xs text-gray-500 mt-2">
               💡 提示：选择时间槽后系统会自动计算工时（上午3.5h，下午4.5h，全天8h）
             </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              任务状态 <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {(Object.keys(TASK_STATUS_CONFIG) as Array<'planned' | 'in_progress' | 'completed' | 'cancelled'>).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, status })}
+                  className={cn(
+                    'px-3 py-2 rounded-lg text-sm font-medium transition-colors border text-center',
+                    formData.status === status
+                      ? TASK_STATUS_CONFIG[status].color
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  )}
+                >
+                  {TASK_STATUS_CONFIG[status].label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div>

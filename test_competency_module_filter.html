@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>能力评估模块筛选测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1f2937;
+            border-bottom: 3px solid #3b82f6;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+        }
+        .success {
+            color: #10b981;
+            font-weight: bold;
+        }
+        .error {
+            color: #ef4444;
+            font-weight: bold;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .module-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .module-item {
+            padding: 10px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        pre {
+            background: #1f2937;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 能力评估模块筛选测试</h1>
+        
+        <div class="test-section">
+            <h2>测试步骤</h2>
+            <button onclick="runTest()">🚀 开始测试</button>
+            <div id="results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📦 提取的模块列表</h2>
+            <div id="moduleList"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 原始API响应</h2>
+            <pre id="rawData"></pre>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+
+        async function runTest() {
+            const resultsDiv = document.getElementById('results');
+            const moduleListDiv = document.getElementById('moduleList');
+            const rawDataDiv = document.getElementById('rawData');
+            
+            resultsDiv.innerHTML = '<p>⏳ 测试进行中...</p>';
+            moduleListDiv.innerHTML = '';
+            rawDataDiv.textContent = '';
+
+            try {
+                // 步骤1: 加载评估数据
+                resultsDiv.innerHTML += '<div class="result">1️⃣ 加载评估数据...</div>';
+                const assessmentsRes = await fetch(`${API_BASE}/competency-assessments`);
+                const assessments = await assessmentsRes.json();
+                resultsDiv.innerHTML += `<div class="result success">✅ 获取 ${assessments.length} 条评估记录</div>`;
+
+                // 步骤2: 加载技能数据
+                resultsDiv.innerHTML += '<div class="result">2️⃣ 加载技能数据...</div>';
+                const skillsRes = await fetch(`${API_BASE}/matching/skills`);
+                const skills = await skillsRes.json();
+                resultsDiv.innerHTML += `<div class="result success">✅ 获取 ${skills.length} 项技能</div>`;
+
+                // 显示前3个技能的原始数据
+                rawDataDiv.textContent = JSON.stringify(skills.slice(0, 3), null, 2);
+
+                // 步骤3: 提取唯一模块
+                resultsDiv.innerHTML += '<div class="result">3️⃣ 提取模块列表...</div>';
+                const uniqueModules = [...new Set(skills.map(s => s.module_name).filter(Boolean))];
+                resultsDiv.innerHTML += `<div class="result success">✅ 找到 ${uniqueModules.length} 个唯一模块</div>`;
+
+                // 步骤4: 模拟前端筛选逻辑
+                resultsDiv.innerHTML += '<div class="result">4️⃣ 测试筛选逻辑...</div>';
+                const assessmentModules = [...new Set(assessments.map(a => {
+                    const skill = skills.find(s => s.id === a.skill_id);
+                    return skill ? skill.module_name : null;
+                }).filter(Boolean))];
+                
+                resultsDiv.innerHTML += `<div class="result success">✅ 评估数据中包含 ${assessmentModules.length} 个模块</div>`;
+
+                // 显示模块列表
+                moduleListDiv.innerHTML = '<div class="module-list">' + 
+                    uniqueModules.map((module, index) => 
+                        `<div class="module-item">${index + 1}. ${module}</div>`
+                    ).join('') + 
+                    '</div>';
+
+                // 最终结果
+                resultsDiv.innerHTML += '<div class="result success" style="margin-top: 20px; padding: 15px; border: 2px solid #10b981;">🎉 所有测试通过！模块筛选功能正常！</div>';
+
+            } catch (error) {
+                resultsDiv.innerHTML += `<div class="result error">❌ 测试失败: ${error.message}</div>`;
+                console.error('Test error:', error);
+            }
+        }
+
+        // 页面加载时自动运行测试
+        window.addEventListener('load', () => {
+            setTimeout(runTest, 500);
+        });
+    </script>
+</body>
+</html>

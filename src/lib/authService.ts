@@ -292,6 +292,80 @@ export async function logout(): Promise<{ error: AuthError | null }> {
 }
 
 // ============================================================================
+// 简化登录（使用 FastAPI 后端，无需 OTP）
+// ============================================================================
+
+import { apiClient } from './api-client';
+
+export interface SimpleLoginResponse {
+  access_token: string;
+  token_type: string;
+  user_id: string;
+  email: string;
+}
+
+/**
+ * 简化登录：直接使用邮箱+密码登录，无需OTP
+ * 自动注册或登录，30天免密
+ */
+export async function simpleLogin(email: string, password: string): Promise<{
+  data: SimpleLoginResponse | null;
+  error: Error | null;
+}> {
+  try {
+    // 验证邮箱域名
+    const validation = validateEmailDomain(email);
+    if (!validation.valid) {
+      return {
+        data: null,
+        error: new Error(validation.message),
+      };
+    }
+
+    // 调用 FastAPI 简化登录端点
+    const response = await apiClient.post<SimpleLoginResponse>('/auth/simple-login', {
+      email,
+      password,
+      remember_me: true,  // 默认30天免密
+    });
+
+    // 保存 token 到 localStorage
+    localStorage.setItem('access_token', response.data.access_token);
+    localStorage.setItem('user_id', response.data.user_id);
+    localStorage.setItem('user_email', response.data.email);
+
+    return {
+      data: response.data,
+      error: null,
+    };
+  } catch (error: any) {
+    console.error('❌ 简化登录失败:', error);
+    return {
+      data: null,
+      error: new Error(error.response?.data?.detail || error.message || '登录失败'),
+    };
+  }
+}
+
+/**
+ * 简化登出
+ */
+export async function simpleLogout(): Promise<{ error: Error | null }> {
+  try {
+    // 清除本地存储
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('user_email');
+
+    return { error: null };
+  } catch (error: any) {
+    return {
+      error: new Error(error.message || '登出失败'),
+    };
+  }
+}
+
+// ============================================================================
 // 用户资料管理
 // ============================================================================
 

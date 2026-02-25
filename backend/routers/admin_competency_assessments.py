@@ -1,0 +1,269 @@
+"""
+能力评估管理 API
+"""
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import date
+from uuid import UUID
+import pyodbc
+
+from database import db
+from auth import get_current_user, verify_admin
+
+router = APIRouter()
+
+
+class CompetencyAssessmentCreate(BaseModel):
+    employee_id: str
+    skill_id: int
+    current_level: int
+    target_level: int
+    assessment_year: Optional[int] = None
+    assessment_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
+class CompetencyAssessmentUpdate(BaseModel):
+    current_level: Optional[int] = None
+    target_level: Optional[int] = None
+    assessment_year: Optional[int] = None
+    assessment_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
+class CompetencyAssessmentResponse(BaseModel):
+    id: str
+    employee_id: str
+    skill_id: int
+    current_level: int
+    target_level: int
+    gap: int
+    assessment_year: Optional[int]
+    assessment_date: Optional[date]
+    notes: Optional[str]
+    created_at: Optional[str]
+    updated_at: Optional[str]
+
+
+@router.post("/competency-assessments", response_model=CompetencyAssessmentResponse, dependencies=[Depends(verify_admin)])
+def create_assessment(assessment: CompetencyAssessmentCreate, current_user: dict = Depends(get_current_user)):
+    """创建能力评估"""
+    try:
+        with db.get_cursor() as cursor:
+            # 验证 employee_id 存在
+            cursor.execute("SELECT id FROM employees WHERE id = ?", (assessment.employee_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=400, detail="Invalid employee_id")
+            
+            # 验证 skill_id 存在
+            cursor.execute("SELECT id FROM skills WHERE id = ?", (assessment.skill_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=400, detail="Invalid skill_id")
+            
+            # 插入新评估
+            cursor.execute("""
+                INSERT INTO competency_assessments 
+                (employee_id, skill_id, current_level, target_level, 
+                 assessment_year, assessment_date, notes, created_at, updated_at)
+                OUTPUT INSERTED.*
+                VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE(), GETDATE())
+            """, (
+                assessment.employee_id,
+                assessment.skill_id,
+                assessment.current_level,
+                assessment.target_level,
+                assessment.assessment_year,
+                assessment.assessment_date,
+                assessment.notes
+            ))
+            
+            row = cursor.fetchone()
+            
+            return {
+                "id": str(row.id),
+                "employee_id": str(row.employee_id),
+                "skill_id": row.skill_id,
+                "current_level": row.current_level,
+                "target_level": row.target_level,
+                "gap": row.gap,
+                "assessment_year": row.assessment_year,
+                "assessment_date": row.assessment_date.isoformat() if row.assessment_date else None,
+                "notes": row.notes,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/competency-assessments", response_model=List[CompetencyAssessmentResponse])
+def list_assessments(
+    employee_id: Optional[str] = None,
+    skill_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取能力评估列表"""
+    try:
+        with db.get_cursor() as cursor:
+            query = "SELECT * FROM competency_assessments WHERE 1=1"
+            params = []
+            
+            if employee_id:
+                query += " AND employee_id = ?"
+                params.append(employee_id)
+            
+            if skill_id:
+                query += " AND skill_id = ?"
+                params.append(skill_id)
+            
+            query += " ORDER BY created_at DESC"
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            
+            return [{
+                "id": str(row.id),
+                "employee_id": str(row.employee_id),
+                "skill_id": row.skill_id,
+                "current_level": row.current_level,
+                "target_level": row.target_level,
+                "gap": row.gap,
+                "assessment_year": row.assessment_year,
+                "assessment_date": row.assessment_date.isoformat() if row.assessment_date else None,
+                "notes": row.notes,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None
+            } for row in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/competency-assessments/{assessment_id}", response_model=CompetencyAssessmentResponse)
+def get_assessment(assessment_id: str, current_user: dict = Depends(get_current_user)):
+    """通过 ID 获取能力评估"""
+    try:
+        with db.get_cursor() as cursor:
+            cursor.execute("SELECT * FROM competency_assessments WHERE id = ?", (assessment_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                raise HTTPException(status_code=404, detail="Assessment not found")
+            
+            return {
+                "id": str(row.id),
+                "employee_id": str(row.employee_id),
+                "skill_id": row.skill_id,
+                "current_level": row.current_level,
+                "target_level": row.target_level,
+                "gap": row.gap,
+                "assessment_year": row.assessment_year,
+                "assessment_date": row.assessment_date.isoformat() if row.assessment_date else None,
+                "notes": row.notes,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/competency-assessments/{assessment_id}", response_model=CompetencyAssessmentResponse, dependencies=[Depends(verify_admin)])
+def update_assessment(
+    assessment_id: str,
+    assessment: CompetencyAssessmentUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """更新能力评估"""
+    try:
+        with db.get_cursor() as cursor:
+            # 检查评估是否存在
+            cursor.execute("SELECT id FROM competency_assessments WHERE id = ?", (assessment_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Assessment not found")
+            
+            # 构建更新 SQL
+            update_fields = []
+            params = []
+            
+            if assessment.current_level is not None:
+                update_fields.append("current_level = ?")
+                params.append(assessment.current_level)
+            
+            if assessment.target_level is not None:
+                update_fields.append("target_level = ?")
+                params.append(assessment.target_level)
+            
+            if assessment.assessment_year is not None:
+                update_fields.append("assessment_year = ?")
+                params.append(assessment.assessment_year)
+            
+            if assessment.assessment_date is not None:
+                update_fields.append("assessment_date = ?")
+                params.append(assessment.assessment_date)
+            
+            if assessment.notes is not None:
+                update_fields.append("notes = ?")
+                params.append(assessment.notes)
+            
+            if not update_fields:
+                raise HTTPException(status_code=400, detail="No fields to update")
+            
+            update_fields.append("updated_at = GETDATE()")
+            params.append(assessment_id)
+            
+            # 更新评估
+            query = f"""
+                UPDATE competency_assessments 
+                SET {', '.join(update_fields)}
+                WHERE id = ?
+            """
+            cursor.execute(query, params)
+            
+            # 返回更新后的评估
+            cursor.execute("SELECT * FROM competency_assessments WHERE id = ?", (assessment_id,))
+            row = cursor.fetchone()
+            
+            return {
+                "id": str(row.id),
+                "employee_id": str(row.employee_id),
+                "skill_id": row.skill_id,
+                "current_level": row.current_level,
+                "target_level": row.target_level,
+                "gap": row.gap,
+                "assessment_year": row.assessment_year,
+                "assessment_date": row.assessment_date.isoformat() if row.assessment_date else None,
+                "notes": row.notes,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/competency-assessments/{assessment_id}", dependencies=[Depends(verify_admin)])
+def delete_assessment(assessment_id: str, current_user: dict = Depends(get_current_user)):
+    """删除能力评估"""
+    try:
+        with db.get_cursor() as cursor:
+            # 检查评估是否存在
+            cursor.execute("SELECT id FROM competency_assessments WHERE id = ?", (assessment_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Assessment not found")
+            
+            # 删除评估
+            cursor.execute("DELETE FROM competency_assessments WHERE id = ?", (assessment_id,))
+            
+            return {"message": "Assessment deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

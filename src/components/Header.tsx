@@ -1,5 +1,5 @@
 import { ChevronDown, User, LogOut, Shield } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useNewAuth } from '../contexts/NewAuthContext';
 import { NotificationBell } from './NotificationPanel';
 import { useState, useRef, useEffect } from 'react';
 
@@ -9,7 +9,10 @@ interface HeaderProps {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
-  const { currentUser, logout, isSitePS, isAdmin } = useAuth();
+  const { user, logout } = useNewAuth();
+  // TODO: 从后端获取用户完整信息（包括权限）
+  const isSitePS = false; // 临时：需要从后端获取
+  const isAdmin = false;  // 临时：需要从后端获取
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -49,7 +52,7 @@ export function Header({ title, subtitle }: HeaderProps) {
           <User className="w-5 h-5 text-gray-600" />
           <div className="flex flex-col items-start">
             <span className="font-medium text-gray-700 text-sm">
-              {currentUser?.name || '未登录'}
+              {user?.email || '未登录'}
             </span>
             {getRoleBadge()}
           </div>
@@ -60,9 +63,8 @@ export function Header({ title, subtitle }: HeaderProps) {
           <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
             {/* 用户信息 */}
             <div className="px-4 py-3 border-b border-gray-100">
-              <p className="text-sm font-medium text-gray-900">{currentUser?.name}</p>
-              <p className="text-xs text-gray-500">{currentUser?.employee_id}</p>
-              <p className="text-xs text-gray-500">{currentUser?.email}</p>
+              <p className="text-sm font-medium text-gray-900">{user?.email}</p>
+              <p className="text-xs text-gray-500">ID: {user?.id}</p>
             </div>
 
             {/* 权限信息 */}

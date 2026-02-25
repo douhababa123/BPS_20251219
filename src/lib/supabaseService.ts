@@ -1233,7 +1233,7 @@ export const supabaseService = {
   }) {
     const { data, error } = await supabase
       .from('schedule_change_notifications')
-      .insert(notification)
+      .insert(notification as any) // 类型断言：数据库表存在但TypeScript定义不完整
       .select()
       .single();
 
@@ -1287,7 +1287,7 @@ export const supabaseService = {
   async markNotificationAsRead(notificationId: string) {
     const { error } = await supabase
       .from('schedule_change_notifications')
-      .update({ is_read: true })
+      .update({ is_read: true } as any) // 类型断言：数据库表存在但TypeScript定义不完整
       .eq('id', notificationId);
 
     if (error) throw new Error(`标记通知失败: ${error.message}`);
@@ -1299,7 +1299,7 @@ export const supabaseService = {
   async markAllNotificationsAsRead(employeeId: string) {
     const { error } = await supabase
       .from('schedule_change_notifications')
-      .update({ is_read: true })
+      .update({ is_read: true } as any) // 类型断言：数据库表存在但TypeScript定义不完整
       .eq('affected_employee_id', employeeId)
       .eq('is_read', false);
 

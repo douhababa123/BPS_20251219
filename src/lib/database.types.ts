@@ -578,6 +578,7 @@ export type ResourcePlanningTask = {
   end_date: string;
   topic: string | null;
   location: string | null;
+  status: 'planned' | 'in_progress' | 'completed' | 'cancelled';
   notes: string | null;
   imported_at: string;
   import_batch_id: string | null;

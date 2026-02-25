@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { mockApi } from '../lib/mockApi';
-import { TASK_TYPES, LOCATIONS, TOPICS, ROLES, ROLE_THRESHOLDS } from '../lib/constants';
+import { matchingApi } from '../lib/matchingApi';
+import { TASK_TYPES, LOCATIONS, ROLES, ROLE_THRESHOLDS } from '../lib/constants';
+import { taskTypesService } from '../services';
+import { taskWorkflowService } from '../services/task-workflow.service';
+import { useNewAuth } from '../contexts/NewAuthContext';
 import type { MatchingRequest, MatchingCandidate } from '../lib/types';
 import { cn } from '../lib/utils';
-import { Plus, Trash2, Search, AlertCircle, CheckCircle, X, MapPin, GitMerge, ClipboardList, CalendarCheck, ArrowRight, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Search, AlertCircle, CheckCircle, X, MapPin, GitMerge, ClipboardList, CalendarCheck, ArrowRight, Sparkles, LayoutGrid, Clock } from 'lucide-react';
 
 const matchingSchema = z.object({
   name: z.string().min(1, 'Required'),
@@ -22,10 +25,17 @@ const matchingSchema = z.object({
 });
 
 export function Matching() {
+  const queryClient = useQueryClient();
+  const { user } = useNewAuth();
+  const isAdmin = user?.role === 'admin';
+  const [activeTab, setActiveTab] = useState<'matching' | 'kanban'>('matching');
   const [requiredItems, setRequiredItems] = useState<Array<{ itemId: number; requiredLevel: number; isKey: boolean }>>([]);
   const [candidates, setCandidates] = useState<MatchingCandidate[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<MatchingCandidate | null>(null);
   const [explainDrawerOpen, setExplainDrawerOpen] = useState(false);
+  const [currentTaskInfo, setCurrentTaskInfo] = useState<any>(null);
+  const [confirmingId, setConfirmingId] = useState<number | null>(null); // 内联确认中的候选人 userId
+  const [lastSubmittedStatus, setLastSubmittedStatus] = useState<'pending_approval' | 'planned' | null>(null);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(matchingSchema),
@@ -33,27 +43,55 @@ export function Matching() {
       role: 'Lead' as const,
       type: 'P',
       location: 'FDCCh',
-      topic: 'TPM',
+      topic: '',
       moduleId: '',
     },
   });
 
+  const moduleId = watch('moduleId');
+
   const { data: modules } = useQuery({
-    queryKey: ['modules'],
-    queryFn: mockApi.getCompetencyModules,
+    queryKey: ['matching-modules'],
+    queryFn: matchingApi.getModules,
+  });
+
+  const { data: taskTypes = [] } = useQuery({
+    queryKey: ['task-types'],
+    queryFn: () => taskTypesService.getAll(),
   });
 
   const { data: items } = useQuery({
-    queryKey: ['items'],
-    queryFn: mockApi.getCompetencyItems,
+    queryKey: ['matching-skills', moduleId],
+    queryFn: () => matchingApi.getSkills(moduleId ? Number(moduleId) : undefined),
+    enabled: !!moduleId,
   });
 
   const { data: users } = useQuery({
     queryKey: ['users'],
-    queryFn: mockApi.getUsers,
+    queryFn: async () => {
+      // 获取员工列表作为用户列表
+      const response = await fetch('http://localhost:8000/api/employees');
+      const employees = await response.json();
+      return employees.map((emp: any) => ({
+        id: emp.id,
+        name: emp.employee_name || emp.name,
+        dept: emp.department_name || 'Unknown',
+        homeLocation: emp.factory_name || 'Unknown'
+      }));
+    },
   });
 
-  const moduleId = watch('moduleId');
+  // 获取匹配历史记录（任务看板）
+  const { data: matchingHistory = [] } = useQuery({
+    queryKey: ['matching-history'],
+    queryFn: () => matchingApi.getMatchingHistory(50),
+    // refetchInterval: 30000, // 每30秒刷新 - 暂时禁用以避免干扰后端
+  });
+
+  // 调试：打印匹配历史数据
+  useEffect(() => {
+    console.log('🔍 [TaskKanban] matchingHistory 数据变化:', matchingHistory);
+  }, [matchingHistory]);
 
   useEffect(() => {
     if (modules && modules.length > 0 && !moduleId) {
@@ -61,19 +99,67 @@ export function Matching() {
     }
   }, [modules, moduleId, setValue]);
 
+  // taskTypes 加载完成后自动选中第一个（防止 topic 为空导致表单静默失败）
+  const topicValue = watch('topic');
+  useEffect(() => {
+    const active = taskTypes.filter(t => t.is_active);
+    if (active.length > 0 && !topicValue) {
+      setValue('topic', active[0].code);
+    }
+  }, [taskTypes, topicValue, setValue]);
+
   const previewMutation = useMutation({
-    mutationFn: (data: MatchingRequest) => mockApi.previewMatching(data),
+    mutationFn: (data: MatchingRequest) => matchingApi.previewMatching(data),
     onSuccess: (data) => {
       setCandidates(data);
     },
   });
 
-  const assignMutation = useMutation({
-    mutationFn: () => mockApi.assignTask(),
+  const submitMutation = useMutation({
+    mutationFn: (data: { candidate: MatchingCandidate; taskInfo: any }) => {
+      return taskWorkflowService.assign({
+        taskName: data.taskInfo.name,
+        employeeId: data.candidate.userId,
+        taskType: data.taskInfo.type,
+        location: data.taskInfo.location,
+        startDate: data.taskInfo.startDate,
+        endDate: data.taskInfo.endDate,
+        notes: `通过智能匹配系统分配 (综合评分: ${(data.candidate.finalScore * 100).toFixed(0)}%)`
+      });
+    },
     onSuccess: () => {
-      alert('任务已成功指派 Task assigned successfully');
+      console.log('✅ [提交成功] 正在刷新任务看板数据...');
+      setLastSubmittedStatus('pending_approval');
+      setConfirmingId(null);
+      queryClient.invalidateQueries({ queryKey: ['matching-history'] });
+      console.log('✅ [提交成功] 缓存已失效，切换到看板标签...');
+      setActiveTab('kanban');
+      console.log('✅ [提交成功] 已切换到看板标签');
     },
   });
+
+  const forceAssignMutation = useMutation({
+    mutationFn: (data: { candidate: MatchingCandidate; taskInfo: any }) => {
+      return taskWorkflowService.forceAssign({
+        taskName: data.taskInfo.name,
+        employeeId: data.candidate.userId,
+        taskType: data.taskInfo.type,
+        location: data.taskInfo.location,
+        startDate: data.taskInfo.startDate,
+        endDate: data.taskInfo.endDate,
+        notes: `强制指派(智能匹配系统) (综合评分: ${(data.candidate.finalScore * 100).toFixed(0)}%)`
+      });
+    },
+    onSuccess: () => {
+      setLastSubmittedStatus('planned');
+      setConfirmingId(null);
+      queryClient.invalidateQueries({ queryKey: ['matching-history'] });
+      setActiveTab('kanban');
+    },
+  });
+
+  // 兼容旧引用（工作流状态计算用）
+  const assignMutation = { isPending: submitMutation.isPending || forceAssignMutation.isPending };
 
   useEffect(() => {
     if (!items) return;
@@ -108,6 +194,9 @@ export function Matching() {
       required: requiredItems,
       suggestedUserId: formData.suggestedUserId,
     };
+
+    // 保存当前任务信息，用于后续分配
+    setCurrentTaskInfo(request);
 
     previewMutation.mutate(request);
   };
@@ -167,13 +256,21 @@ export function Matching() {
 
   const workflowSteps = useMemo(() => {
     const hasPreview = candidates.length > 0;
+    // 审批步骤：强制指派直接完成；普通提交后等待审批中
+    const approveStatus = forceAssignMutation.isSuccess
+      ? 'done' as const
+      : submitMutation.isSuccess
+        ? 'processing' as const  // 待 admin 审批中
+        : assignMutation.isPending ? 'processing' as const : 'pending' as const;
+    // 日程同步：只有强制指派才算真正写入；普通提交审批通过后由 admin 操作
+    const syncStatus = forceAssignMutation.isSuccess ? 'done' as const : 'pending' as const;
     return [
       { key: 'apply', label: '任务申请', desc: '需求方提交需求', status: 'done' as const, icon: ClipboardList },
       { key: 'match', label: '智能匹配', desc: '系统打分推荐', status: previewMutation.isPending ? 'processing' as const : hasPreview ? 'done' as const : 'pending' as const, icon: GitMerge },
-      { key: 'approve', label: '任务审批', desc: 'Site PS 审批', status: assignMutation.isPending ? 'processing' as const : assignMutation.isSuccess ? 'done' as const : 'pending' as const, icon: CheckCircle },
-      { key: 'sync', label: '日程同步', desc: '自动写入日历', status: assignMutation.isSuccess ? 'done' as const : 'pending' as const, icon: CalendarCheck },
+      { key: 'approve', label: '任务审批', desc: submitMutation.isSuccess ? '等待 Site PS 审批中...' : 'Site PS 审批', status: approveStatus, icon: CheckCircle },
+      { key: 'sync', label: '日程同步', desc: submitMutation.isSuccess ? '审批通过后自动写入' : '自动写入日历', status: syncStatus, icon: CalendarCheck },
     ];
-  }, [candidates.length, previewMutation.isPending, assignMutation.isPending, assignMutation.isSuccess]);
+  }, [candidates.length, previewMutation.isPending, submitMutation.isSuccess, forceAssignMutation.isSuccess, assignMutation.isPending]);
 
   const topReport = useMemo(() => candidates.slice(0, 3).map(candidate => ({
     name: candidate.name,
@@ -185,6 +282,37 @@ export function Matching() {
 
   return (
     <div className="space-y-6">
+      {/* Tab 切换 */}
+      <div className="bg-white rounded-2xl p-2 border border-gray-100 shadow-sm flex gap-2">
+        <button
+          onClick={() => setActiveTab('matching')}
+          className={cn(
+            'flex-1 px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2',
+            activeTab === 'matching'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          )}
+        >
+          <Sparkles className="w-4 h-4" />
+          智能匹配 Smart Matching
+        </button>
+        <button
+          onClick={() => setActiveTab('kanban')}
+          className={cn(
+            'flex-1 px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2',
+            activeTab === 'kanban'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-600 hover:bg-gray-100'
+          )}
+        >
+          <LayoutGrid className="w-4 h-4" />
+          任务看板 Task Board
+        </button>
+      </div>
+
+      {/* 智能匹配视图 */}
+      {activeTab === 'matching' && (
+        <>
       <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
         <h2 className="text-lg font-bold text-gray-900 mb-4">线上流程状态 Workflow Overview</h2>
         <div className="grid grid-cols-4 gap-4">
@@ -307,11 +435,18 @@ export function Matching() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   主题 Topic
                 </label>
-                <select {...register('topic')} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                  {TOPICS.map(topic => (
-                    <option key={topic.code} value={topic.code}>{topic.name}</option>
+                <select
+                  {...register('topic')}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                    errors.topic ? 'border-red-400 focus:ring-red-400' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">请选择...</option>
+                  {taskTypes.filter(t => t.is_active).map(t => (
+                    <option key={t.code} value={t.code}>{t.name}</option>
                   ))}
                 </select>
+                {errors.topic && <p className="text-xs text-red-600 mt-1">请选择主题</p>}
               </div>
 
               <div>
@@ -346,41 +481,48 @@ export function Matching() {
 
                 <div className="space-y-2">
                   {requiredItems.map((item, index) => (
-                    <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                      <select
-                        value={item.itemId}
-                        onChange={(e) => updateRequiredItem(index, 'itemId', parseInt(e.target.value, 10))}
-                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        {availableItems.map(i => (
-                          <option key={i.id} value={i.id}>{i.name}</option>
-                        ))}
-                      </select>
-                      <select
-                        value={item.requiredLevel}
-                        onChange={(e) => updateRequiredItem(index, 'requiredLevel', parseInt(e.target.value, 10))}
-                        className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
-                      >
-                        {[1, 2, 3, 4, 5].map(level => (
-                          <option key={level} value={level}>L{level}</option>
-                        ))}
-                      </select>
-                      <label className="flex items-center gap-1 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={item.isKey}
-                          onChange={(e) => updateRequiredItem(index, 'isKey', e.target.checked)}
-                          className="rounded"
-                        />
-                        关键 Key
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => removeRequiredItem(index)}
-                        className="p-1 text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-100 space-y-2">
+                      {/* 第一行：技能名称（截断）+ 删除按钮（固定宽度，始终可见） */}
+                      <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 28px' }}>
+                        <select
+                          value={item.itemId}
+                          onChange={(e) => updateRequiredItem(index, 'itemId', parseInt(e.target.value, 10))}
+                          className="w-full min-w-0 px-2 py-1 border border-gray-300 rounded text-sm"
+                        >
+                          {availableItems.map(i => (
+                            <option key={i.id} value={i.id}>{i.name}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeRequiredItem(index)}
+                          className="flex items-center justify-center p-1 text-red-400 hover:text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {/* 第二行：要求等级 + 关键项 */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-500 flex-shrink-0">要求等级</span>
+                        <select
+                          value={item.requiredLevel}
+                          onChange={(e) => updateRequiredItem(index, 'requiredLevel', parseInt(e.target.value, 10))}
+                          className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                        >
+                          {[1, 2, 3, 4, 5].map(level => (
+                            <option key={level} value={level}>L{level}</option>
+                          ))}
+                        </select>
+                        <label className="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={item.isKey}
+                            onChange={(e) => updateRequiredItem(index, 'isKey', e.target.checked)}
+                            className="rounded"
+                          />
+                          关键项 Key
+                        </label>
+                      </div>
                     </div>
                   ))}
                   {requiredItems.length === 0 && (
@@ -411,7 +553,7 @@ export function Matching() {
                 <span>最佳候选综合得分 {matchingSummary.topScore}%</span>
               </div>
               <div className="text-xs text-gray-500 leading-relaxed">
-                系统按照「0.5×能力匹配 + 0.5×可用时间率」计算综合得分，并对关键项自动加权。
+                系统按照「0.5×能力匹配 + 0.5×可用时间率」计算综合得分，并对关键项自动加权。合格标准：能力匹配 ≥70% 且 时间可用率 ≥50%。
               </div>
               <div
                 className={cn(
@@ -423,7 +565,7 @@ export function Matching() {
               >
                 {hasQualifiedCandidate ? (
                   <div className="space-y-2">
-                    <p>系统已识别 {qualifiedCandidates.length} 位得分 ≥100% 的合适人选。</p>
+                    <p>系统已识别 {qualifiedCandidates.length} 位符合条件（能力 ≥70% 且 时间 ≥50%）的合适人选。</p>
                     <div className="flex flex-wrap gap-2 text-xs">
                       {qualifiedCandidates.slice(0, 4).map(candidate => (
                         <span key={candidate.userId} className="px-2 py-1 bg-white/70 rounded-full">
@@ -437,7 +579,7 @@ export function Matching() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p>暂未找到得分 ≥100% 的人选，以下候选作为 Top3 推荐供 Site PS 参考。</p>
+                    <p>暂未找到符合条件（能力 ≥70% 且 时间 ≥50%）的人选，以下候选作为 Top3 推荐供 Site PS 参考。</p>
                     <div className="flex flex-wrap gap-2 text-xs">
                       {fallbackRecommendations.map(candidate => (
                         <span key={candidate.userId} className="px-2 py-1 bg-white/70 rounded-full">
@@ -461,7 +603,7 @@ export function Matching() {
               </div>
               {candidates.length > 0 && (
                 <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                  {candidates.length} 人 candidates
+                  Top {candidates.length}
                 </div>
               )}
             </div>
@@ -556,17 +698,61 @@ export function Matching() {
                           >
                             查看详情
                           </button>
-                          <button
-                            onClick={() => {
-                              if (confirm(`确认指派任务给 ${candidate.name}？`)) {
-                                assignMutation.mutate();
-                              }
-                            }}
-                            disabled={assignMutation.isPending}
-                            className="flex-1 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-800 transition-colors text-sm font-medium disabled:opacity-50"
-                          >
-                            {assignMutation.isPending ? '指派中...' : '立即指派'}
-                          </button>
+
+                          {confirmingId === candidate.userId ? (
+                            // 内联确认区域
+                            <div className="flex-1 flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setConfirmingId(null);
+                                  if (!currentTaskInfo) {
+                                    alert('任务信息丢失，请重新预览匹配');
+                                    return;
+                                  }
+                                  // 提交申请始终走审批流程（pending_approval）
+                                  submitMutation.mutate({ candidate, taskInfo: currentTaskInfo });
+                                }}
+                                disabled={submitMutation.isPending || forceAssignMutation.isPending}
+                                className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors text-sm font-medium disabled:opacity-50"
+                              >
+                                {(submitMutation.isPending || forceAssignMutation.isPending) ? '处理中...' : '确认提交'}
+                              </button>
+                              <button
+                                onClick={() => setConfirmingId(null)}
+                                className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex-1 flex gap-2">
+                              {/* 提交申请按钮（所有人） */}
+                              <button
+                                onClick={() => setConfirmingId(candidate.userId)}
+                                disabled={submitMutation.isPending || forceAssignMutation.isPending}
+                                className="flex-1 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-800 transition-colors text-sm font-medium disabled:opacity-50"
+                              >
+                                提交申请
+                              </button>
+                              {/* admin 对不合格候选人额外显示强制指派 */}
+                              {isAdmin && !candidate.qualified && (
+                                <button
+                                  onClick={() => {
+                                    if (!currentTaskInfo) {
+                                      alert('请先点击预览匹配');
+                                      return;
+                                    }
+                                    forceAssignMutation.mutate({ candidate, taskInfo: currentTaskInfo });
+                                  }}
+                                  disabled={submitMutation.isPending || forceAssignMutation.isPending}
+                                  className="flex-1 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-500 transition-colors text-sm font-medium disabled:opacity-50"
+                                  title="跳过审批，直接写入日程"
+                                >
+                                  强制指派
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -720,6 +906,282 @@ export function Matching() {
           </div>
         </div>
       )}
+        </>
+      )}
+
+      {/* 任务看板视图 */}
+      {activeTab === 'kanban' && (
+        <TaskKanban tasks={matchingHistory} />
+      )}
     </div>
+  );
+}
+
+// 任务看板组件
+function TaskKanban({ tasks }: { tasks: any[] }) {
+  const queryClient = useQueryClient();
+  const { user } = useNewAuth();
+  const isAdmin = user?.role === 'admin';
+
+  // 调试：打印传入的 tasks
+  useEffect(() => {
+    console.log('📊 [TaskKanban] 收到 tasks 数据:', tasks);
+    console.log('📊 [TaskKanban] tasks 长度:', tasks?.length || 0);
+  }, [tasks]);
+
+  type KanbanTab = 'matching' | 'pending' | 'assigned' | 'rejected';
+  const [selectedTab, setSelectedTab] = useState<KanbanTab>('pending');
+  const [rejectModal, setRejectModal] = useState<{ id: string; name: string } | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // 将数据库真实 status 映射到看板分组
+  const toKanbanStatus = (dbStatus: string): KanbanTab => {
+    if (dbStatus === 'pending_approval') return 'pending';
+    if (['planned', 'confirmed', 'in_progress', 'completed'].includes(dbStatus)) return 'assigned';
+    if (['rejected', 'employee_rejected', 'cancelled'].includes(dbStatus)) return 'rejected';
+    return 'matching'; // 不存在的状态兜底
+  };
+
+  const tasksByStatus = useMemo(() => {
+    const groups: Record<KanbanTab, any[]> = {
+      matching: [],
+      pending: [],
+      assigned: [],
+      rejected: [],
+    };
+    tasks.forEach(task => {
+      const bucket = toKanbanStatus(task.status || '');
+      console.log(`🏷️ [TaskKanban] 任务 "${task.taskName}" 状态=${task.status} → 看板分组=${bucket}`);
+      groups[bucket].push(task);
+    });
+    console.log('📦 [TaskKanban] 按状态分组后:', {
+      matching: groups.matching.length,
+      pending: groups.pending.length,
+      assigned: groups.assigned.length,
+      rejected: groups.rejected.length,
+    });
+    return groups;
+  }, [tasks]);
+
+  const approveMutation = useMutation({
+    mutationFn: (taskId: string) => taskWorkflowService.approve(taskId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['matching-history'] }),
+    onError: (e: any) => alert(`审批失败: ${e.message}`),
+  });
+
+  const adminRejectMutation = useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason: string }) =>
+      taskWorkflowService.reject(taskId, reason),
+    onSuccess: () => {
+      setRejectModal(null);
+      setRejectReason('');
+      queryClient.invalidateQueries({ queryKey: ['matching-history'] });
+    },
+    onError: (e: any) => alert(`拒绝失败: ${e.message}`),
+  });
+
+  const statusConfig: Record<KanbanTab, { title: string; icon: any; headerColor: string; badgeColor: string; cardBorder: string }> = {
+    matching: {
+      title: '匹配中',
+      icon: GitMerge,
+      headerColor: 'bg-blue-50 border-blue-200',
+      badgeColor: 'bg-blue-100 text-blue-700',
+      cardBorder: 'border-blue-200',
+    },
+    pending: {
+      title: '待审批',
+      icon: Clock,
+      headerColor: 'bg-amber-50 border-amber-200',
+      badgeColor: 'bg-amber-100 text-amber-700',
+      cardBorder: 'border-amber-200',
+    },
+    assigned: {
+      title: '已分配',
+      icon: CheckCircle,
+      headerColor: 'bg-green-50 border-green-200',
+      badgeColor: 'bg-green-100 text-green-700',
+      cardBorder: 'border-green-200',
+    },
+    rejected: {
+      title: '已拒绝',
+      icon: X,
+      headerColor: 'bg-red-50 border-red-200',
+      badgeColor: 'bg-red-100 text-red-700',
+      cardBorder: 'border-red-200',
+    },
+  };
+
+  const dbStatusLabel: Record<string, string> = {
+    pending_approval: '待审批',
+    planned: '待确认',
+    confirmed: '已确认',
+    in_progress: '进行中',
+    completed: '已完成',
+    rejected: '已拒绝',
+    employee_rejected: '工程师拒绝',
+    cancelled: '已取消',
+  };
+
+  const currentTasks = tasksByStatus[selectedTab];
+
+  return (
+    <>
+      {/* 四个状态标签页 */}
+      <div className="grid grid-cols-4 gap-3">
+        {(Object.keys(statusConfig) as KanbanTab[]).map(tab => {
+          const config = statusConfig[tab];
+          const Icon = config.icon;
+          const count = tasksByStatus[tab].length;
+          const isActive = selectedTab === tab;
+          return (
+            <button
+              key={tab}
+              onClick={() => setSelectedTab(tab)}
+              className={cn(
+                'rounded-2xl p-4 border-2 flex items-center justify-between transition-all text-left',
+                isActive
+                  ? `${config.headerColor} border-current shadow-md`
+                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <Icon className={cn('w-5 h-5', isActive ? 'text-current' : 'text-gray-400')} />
+                <div>
+                  <p className={cn('font-bold text-sm', isActive ? '' : 'text-gray-700')}>{config.title}</p>
+                  <p className="text-xs text-gray-400">Task Board</p>
+                </div>
+              </div>
+              <span className={cn('text-2xl font-bold', isActive ? '' : 'text-gray-600')}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 选中分组的任务列表 */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div className={cn('px-6 py-4 rounded-t-2xl border-b flex items-center justify-between', statusConfig[selectedTab].headerColor)}>
+          <div className="flex items-center gap-2">
+            {(() => { const Icon = statusConfig[selectedTab].icon; return <Icon className="w-5 h-5" />; })()}
+            <h3 className="font-bold text-gray-900">{statusConfig[selectedTab].title}任务列表</h3>
+            <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', statusConfig[selectedTab].badgeColor)}>
+              {currentTasks.length} 个任务
+            </span>
+          </div>
+          {selectedTab === 'pending' && isAdmin && (
+            <p className="text-xs text-amber-700">点击"审批通过"或"拒绝"完成审批</p>
+          )}
+        </div>
+
+        <div className="p-4">
+          {currentTasks.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <p className="text-base font-medium">暂无任务</p>
+              <p className="text-sm mt-1">No tasks in this category</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {currentTasks.map(task => (
+                <div
+                  key={task.id}
+                  className={cn('rounded-xl border-2 p-4 bg-white hover:shadow-md transition-all', statusConfig[selectedTab].cardBorder)}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <h4 className="font-bold text-gray-900">{task.taskName}</h4>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                          {dbStatusLabel[task.status] || task.status}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-600 mt-2">
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 shrink-0" />
+                          <span>{task.location}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <CalendarCheck className="w-3.5 h-3.5 shrink-0" />
+                          <span>{task.startDate} ~ {task.endDate}</span>
+                        </div>
+                        {task.employeeName && (
+                          <div className="flex items-center gap-1">
+                            <span>👤</span>
+                            <span className="font-medium">{task.employeeName}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1 text-gray-400 text-xs">
+                          <span>提交: {task.createdAt ? new Date(task.createdAt).toLocaleDateString('zh-CN') : '-'}</span>
+                        </div>
+                      </div>
+                      {task.rejectionReason && (
+                        <p className="mt-2 text-xs text-red-600 bg-red-50 rounded px-2 py-1">
+                          拒绝原因: {task.rejectionReason}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* 操作按钮 */}
+                    {selectedTab === 'pending' && isAdmin && (
+                      <div className="flex flex-col gap-2 shrink-0">
+                        <button
+                          onClick={() => approveMutation.mutate(task.id)}
+                          disabled={approveMutation.isPending}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-500 disabled:opacity-50 transition-colors whitespace-nowrap"
+                        >
+                          ✅ 审批通过
+                        </button>
+                        <button
+                          onClick={() => { setRejectModal({ id: task.id, name: task.taskName }); setRejectReason(''); }}
+                          disabled={adminRejectMutation.isPending}
+                          className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition-colors whitespace-nowrap"
+                        >
+                          ❌ 拒绝
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 拒绝原因弹窗 */}
+      {rejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl p-6 shadow-xl w-full max-w-md">
+            <h4 className="font-bold text-gray-900 mb-1">拒绝任务申请</h4>
+            <p className="text-sm text-gray-500 mb-3">{rejectModal.name}</p>
+            <textarea
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              rows={3}
+              placeholder="请输入拒绝原因（必填）"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none"
+            />
+            <div className="flex gap-3 mt-4 justify-end">
+              <button
+                onClick={() => setRejectModal(null)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  if (!rejectReason.trim()) { alert('请填写拒绝原因'); return; }
+                  adminRejectMutation.mutate({ taskId: rejectModal.id, reason: rejectReason });
+                }}
+                disabled={adminRejectMutation.isPending}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50"
+              >
+                {adminRejectMutation.isPending ? '处理中...' : '确认拒绝'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

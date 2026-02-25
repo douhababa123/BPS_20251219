@@ -4,9 +4,9 @@ import {
   LayoutGrid, Table, Grid3x3, ChevronDown, ChevronUp,
   Download, Filter, Maximize2, Minimize2, TrendingUp,
   Target, Award, Users2, BarChart3, Wrench, TrendingDown,
-  Lightbulb, FileText, Zap, Gauge
+  Lightbulb, Zap, Gauge
 } from 'lucide-react';
-import { supabaseService } from '../lib/supabaseService';
+import { getMatrixData, getAllAssessments } from '../lib/competencyApi';
 import MatrixView from '../components/MatrixView';
 import { cn } from '../lib/utils';
 import type { MatrixRow, MatrixColumn, MatrixFilters, AssessmentStats, AssessmentFull } from '../lib/database.types';
@@ -63,15 +63,19 @@ export function CompetencyAssessment() {
     setIsLoading(true);
     setError(null);
     try {
-      // 并行加载矩阵数据和评估数据
-      const [matrix, assessmentData] = await Promise.all([
-        supabaseService.getMatrixData(filters),
-        supabaseService.getAllAssessments(),
-      ]);
+      // 只加载一次评估数据，避免重复调用
+      console.log('  🔄 加载评估数据...');
+      const assessmentData = await getAllAssessments();
+      console.log(`  ✅ 获取 ${assessmentData.length} 条评估数据`);
+      
+      // 使用加载的数据构建矩阵
+      console.log('  🔄 构建矩阵数据...');
+      const matrix = await getMatrixData(assessmentData);
+      console.log(`  ✅ 矩阵构建完成`);
       
       console.log('✅ CompetencyAssessment: 数据加载成功', {
-        employees: matrix.rows.length,
-        skills: matrix.columns.length,
+        employees: new Set(assessmentData.map(a => a.employee_id)).size,
+        skills: new Set(assessmentData.map(a => a.skill_id)).size,
         assessments: assessmentData.length,
       });
       
@@ -398,7 +402,7 @@ export function CompetencyAssessment() {
                 onChange={(e) => setSelectedPerson(e.target.value === 'all' ? null : e.target.value)}
                 className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="all">所有人员</option>
+                <option key="all" value="all">所有人员</option>
                 {summaries.map(s => (
                   <option key={s.employeeId} value={s.employeeName}>
                     {s.employeeName} - {s.departmentName}
@@ -412,7 +416,7 @@ export function CompetencyAssessment() {
                 onChange={(e) => setSelectedModule(e.target.value)}
                 className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="all">所有模块</option>
+                <option key="all-modules" value="all">所有模块</option>
                 {Array.from(new Set(assessments.map(a => a.module_name))).map(module => (
                   <option key={module} value={module}>{module}</option>
                 ))}
@@ -446,7 +450,6 @@ export function CompetencyAssessment() {
             rows={matrixData.rows}
             columns={matrixData.columns}
             stats={matrixData.stats}
-            onFilterChange={loadData}
           />
         )}
 

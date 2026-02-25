@@ -2,7 +2,8 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import type { Session, User } from '@supabase/supabase-js';
 import type { Employee } from '../lib/database.types';
 import { supabase } from '../lib/supabase';
-import * as authService from '../lib/authService';
+// import * as authService from '../lib/authService'; // 旧的 Supabase 认证
+import * as authService from '../lib/fastapi-auth'; // 新的 FastAPI 认证
 
 // ============================================================================
 // 类型定义
@@ -179,14 +180,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const signupWithEmail = async (email: string, name: string) => {
     try {
-      const { error } = await authService.signupWithEmail({ email, name });
+      // FastAPI 后端的注册和登录使用相同的 OTP 端点
+      const { success, error } = await authService.sendOTP(email);
       
-      if (error) {
-        return { error: new Error(error.message) };
+      if (error || !success) {
+        return { error: new Error(error?.message || '注册失败，请重试') };
       }
 
       return { error: null };
     } catch (error: any) {
+      console.error('❌ 注册失败:', error);
       return { error: new Error(error.message || '注册失败') };
     }
   };
@@ -196,14 +199,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const loginWithEmail = async (email: string) => {
     try {
-      const { error } = await authService.loginWithEmail({ email });
+      const { success, error } = await authService.sendOTP(email);
       
-      if (error) {
-        return { error: new Error(error.message) };
+      if (error || !success) {
+        return { error: new Error(error?.message || '发送验证码失败，请重试') };
       }
 
       return { error: null };
     } catch (error: any) {
+      console.error('❌ 登录失败:', error);
       return { error: new Error(error.message || '登录失败') };
     }
   };
@@ -213,22 +217,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const verifyOTP = async (email: string, token: string, type: 'signup' | 'email') => {
     try {
-      const { user, session: newSession, error } = await authService.verifyOTP({
-        email,
-        token,
-        type,
-      });
+      const { user, session: newSession, error } = await authService.verifyOTP(email, token);
 
       if (error) {
         return { error: new Error(error.message) };
       }
 
       if (user && newSession) {
-        setAuthUser(user);
-        setSession(newSession);
+        setAuthUser(user as any);
+        setSession(newSession as any);
         
-        // 加载员工资料
-        await loadEmployeeProfile(user.id);
+        // 暂时跳过加载员工资料（新系统中 user 就是完整的用户信息）
+        // 如果需要，可以从 employees 表加载额外信息
+        setCurrentUser({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        } as Employee);
       }
 
       return { error: null };

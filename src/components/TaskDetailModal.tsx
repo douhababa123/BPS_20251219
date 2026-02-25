@@ -1,6 +1,21 @@
-import { X, Calendar, Clock, MapPin, User, FileText, Tag } from 'lucide-react';
+import { X, Calendar, Clock, MapPin, User, FileText, Tag, CheckCircle2 } from 'lucide-react';
 import { getTimeSlotLabel, getTimeSlotColor } from './TimeSlotSelector';
 import { cn } from '../lib/utils';
+
+// 任务状态配置
+const TASK_STATUS_CONFIG = {
+  planned: { label: '计划中', icon: '📋', color: 'text-blue-600 bg-blue-50', dotColor: 'bg-blue-500' },
+  in_progress: { label: '进行中', icon: '⚡', color: 'text-yellow-600 bg-yellow-50', dotColor: 'bg-yellow-500' },
+  completed: { label: '已完成', icon: '✅', color: 'text-green-600 bg-green-50', dotColor: 'bg-green-500' },
+  cancelled: { label: '已取消', icon: '❌', color: 'text-red-600 bg-red-50', dotColor: 'bg-red-500' },
+};
+
+const getTaskStatusConfig = (status?: string) => {
+  if (!status || !(status in TASK_STATUS_CONFIG)) {
+    return TASK_STATUS_CONFIG.planned;
+  }
+  return TASK_STATUS_CONFIG[status as keyof typeof TASK_STATUS_CONFIG];
+};
 
 interface TaskDetailModalProps {
   task: any;
@@ -13,6 +28,7 @@ export function TaskDetailModal({ task, onClose, onEdit, onDelete }: TaskDetailM
   const timeSlot = task.time_slot || 'FULL_DAY';
   const timeSlotLabel = getTimeSlotLabel(timeSlot);
   const timeSlotColorClass = getTimeSlotColor(timeSlot);
+  const statusConfig = getTaskStatusConfig(task.status);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -21,9 +37,14 @@ export function TaskDetailModal({ task, onClose, onEdit, onDelete }: TaskDetailM
         <div className="flex items-start justify-between mb-6">
           <div className="flex-1">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">{task.task_name}</h2>
-            <span className={cn('inline-block px-3 py-1 rounded-full text-sm font-medium', timeSlotColorClass)}>
-              {timeSlotLabel}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={cn('inline-block px-3 py-1 rounded-full text-sm font-medium', timeSlotColorClass)}>
+                {timeSlotLabel}
+              </span>
+              <span className={cn('inline-block px-3 py-1 rounded-full text-sm font-medium', statusConfig.color)}>
+                {statusConfig.icon} {statusConfig.label}
+              </span>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -103,18 +124,15 @@ export function TaskDetailModal({ task, onClose, onEdit, onDelete }: TaskDetailM
 
           {/* 状态 */}
           <div className="flex items-start gap-3">
-            <div className="w-5 h-5 flex items-center justify-center mt-0.5">
-              <div className={cn(
-                "w-3 h-3 rounded-full",
-                task.status === 'active' ? 'bg-green-500' :
-                task.status === 'completed' ? 'bg-blue-500' :
-                task.status === 'cancelled' ? 'bg-red-500' :
-                'bg-gray-400'
-              )} />
-            </div>
+            <CheckCircle2 className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-gray-500">状态</p>
-              <p className="text-base text-gray-900 capitalize">{task.status || 'pending'}</p>
+              <p className="text-sm font-medium text-gray-500">任务状态</p>
+              <div className="flex items-center gap-2 mt-1">
+                <div className={cn("w-3 h-3 rounded-full", statusConfig.dotColor)} />
+                <span className={cn('px-3 py-1 rounded-full text-sm font-medium', statusConfig.color)}>
+                  {statusConfig.icon} {statusConfig.label}
+                </span>
+              </div>
             </div>
           </div>
         </div>

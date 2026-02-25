@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { PersonaProvider } from './contexts/PersonaContext';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useNewAuth } from './contexts/NewAuthContext';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
-import { LoginScreen } from './components/LoginScreen';
-import { ProfileSetupScreen } from './components/ProfileSetupScreen';
+import { OTPLogin } from './components/OTPLogin';
+import SimpleLoginScreen from './components/SimpleLoginScreen';
+import { RegisterPage } from './pages/auth/RegisterPage';
+import { PasswordLoginPage } from './pages/auth/PasswordLoginPage';
 import { Dashboard } from './pages/Dashboard';
 import { Calendar } from './pages/Calendar';
 import { Schedule } from './pages/Schedule';
@@ -13,18 +15,10 @@ import { Matching } from './pages/Matching';
 import { Competency } from './pages/Competency';
 import { Import } from './pages/Import';
 import { ImportNew } from './pages/ImportNew';
+import { Admin } from './pages/Admin';
 import { CompetencyAssessment } from './pages/CompetencyAssessment';
 import DatabaseCheck from './pages/DatabaseCheck';
 import DebugPage from './pages/DebugPage';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
 
 const pages = {
   dashboard: { component: Dashboard, title: '总览', subtitle: 'Dashboard' },
@@ -35,61 +29,47 @@ const pages = {
   assessment: { component: CompetencyAssessment, title: '能力评估', subtitle: 'Competency Assessment' },
   import: { component: Import, title: '数据导入', subtitle: 'Data Import Center' },
   importNew: { component: ImportNew, title: '数据导入中心', subtitle: 'Data Import Center' },
+  admin: { component: Admin, title: '管理员控制台', subtitle: 'Admin Panel' },
   dbcheck: { component: DatabaseCheck, title: '数据库诊断', subtitle: 'Database Check' },
   debug: { component: DebugPage, title: '连接诊断', subtitle: 'Connection Debug' },
 };
 
+// 受保护的路由组件
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useNewAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function AppContent() {
   const [currentPage, setCurrentPage] = useState<keyof typeof pages>('assessment');
-  
-  // 临时跳过用户认证，直接进入主界面（开发测试用）
-  // TODO: 生产环境需要恢复正常的认证流程
-  const currentUser = {
-    id: 'test-user-id',
-    employee_id: 'TEST_001',
-    name: '测试用户',
-    email: 'test@bosch.com',
-    role: 'BPS_ENGINEER',
-    is_active: true,
-  };
-  
-  const authUser = {
-    id: 'test-auth-user-id',
-    email: 'test@bosch.com',
-  };
-  
-  // const { currentUser, authUser, isLoading, isAuthenticated } = useAuth();
-  
-  // const [currentPage, setCurrentPage] = useState<keyof typeof pages>('assessment');
-
+  const { isAdmin } = useNewAuth();
   const PageComponent = pages[currentPage].component;
 
-  // 登录检查 - 已临时禁用
-  // if (isLoading) {
-  //   return (
-  //     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-  //       <div className="text-center">
-  //         <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-  //         <p className="text-gray-600">加载中...</p>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  // 未登录：显示登录页面 - 已临时禁用
-  // if (!isAuthenticated || !authUser) {
-  //   return <LoginScreen />;
-  // }
-
-  // 已登录但没有员工资料：显示资料完善页面 - 已临时禁用
-  // if (!currentUser) {
-  //   return <ProfileSetupScreen />;
-  // }
+  const handleNavigate = (page: string) => {
+    if (page === 'admin' && !isAdmin) return; // 非管理员无法导航到 admin
+    setCurrentPage(page as keyof typeof pages);
+  };
 
   return (
     <PersonaProvider>
       <div className="flex h-screen bg-gray-100">
-        <Sidebar currentPage={currentPage} onNavigate={(page) => setCurrentPage(page as keyof typeof pages)} />
+        <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header title={pages[currentPage].title} subtitle={pages[currentPage].subtitle} />
@@ -112,11 +92,23 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </QueryClientProvider>
+    <Routes>
+      {/* 认证路由 */}
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/password-login" element={<PasswordLoginPage />} />
+      <Route path="/login" element={<SimpleLoginScreen />} />
+      <Route path="/login-otp" element={<OTPLogin />} />
+      
+      {/* 主应用路由 */}
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
+            <AppContent />
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
   );
 }
 

@@ -3,11 +3,33 @@ import { getTaskTypeConfig } from '../lib/taskTypeConfig';
 import type { TimeSlot } from '../lib/database.types';
 import { cn } from '../lib/utils';
 
+// 任务状态配置
+const TASK_STATUS_CONFIG = {
+  planned: { label: '计划中', icon: '📋', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  in_progress: { label: '进行中', icon: '⚡', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+  completed: { label: '已完成', icon: '✅', color: 'bg-green-50 text-green-700 border-green-200' },
+  cancelled: { label: '已取消', icon: '❌', color: 'bg-red-50 text-red-700 border-red-200' },
+  pending_approval: { label: '待审批', icon: '⏳', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+  rejected: { label: '已拒绝', icon: '🚫', color: 'bg-red-50 text-red-600 border-red-200' },
+  confirmed: { label: '已确认', icon: '🎉', color: 'bg-teal-50 text-teal-700 border-teal-200' },
+  employee_rejected: { label: '工程师拒绝', icon: '⚠️', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+};
+
+// 获取任务状态配置
+const getTaskStatusConfig = (status?: string) => {
+  if (!status || !(status in TASK_STATUS_CONFIG)) {
+    return TASK_STATUS_CONFIG.planned;
+  }
+  return TASK_STATUS_CONFIG[status as keyof typeof TASK_STATUS_CONFIG];
+};
+
 interface TaskCardProps {
   task: {
     id: string;
     task_name: string;
     task_type: string;
+    status?: 'planned' | 'in_progress' | 'completed' | 'cancelled'
+           | 'pending_approval' | 'rejected' | 'confirmed' | 'employee_rejected';
     time_slot?: TimeSlot;
     total_hours?: number;
     employee_name?: string;
@@ -23,6 +45,7 @@ export function TaskCard({ task, onClick, className, showEmployee = false }: Tas
   const timeSlot = task.time_slot || 'FULL_DAY';
   const timeSlotLabel = getTimeSlotLabel(timeSlot);
   const timeSlotColorClass = getTimeSlotColor(timeSlot);
+  const statusConfig = getTaskStatusConfig(task.status);
 
   return (
     <div
@@ -33,16 +56,26 @@ export function TaskCard({ task, onClick, className, showEmployee = false }: Tas
         className
       )}
     >
-      {/* 时间槽标识 */}
+      {/* 时间槽和状态标识 */}
       <div className="flex items-center justify-between mb-1">
-        <span
-          className={cn(
-            'text-xs px-2 py-0.5 rounded-full font-medium border',
-            timeSlotColorClass
-          )}
-        >
-          {timeSlotLabel}
-        </span>
+        <div className="flex items-center gap-1">
+          <span
+            className={cn(
+              'text-xs px-2 py-0.5 rounded-full font-medium border',
+              timeSlotColorClass
+            )}
+          >
+            {timeSlotLabel}
+          </span>
+          <span
+            className={cn(
+              'text-xs px-2 py-0.5 rounded-full font-medium border',
+              statusConfig.color
+            )}
+          >
+            {statusConfig.icon} {statusConfig.label}
+          </span>
+        </div>
         {task.total_hours && (
           <span className="text-xs text-gray-500">
             {task.total_hours}h
@@ -75,6 +108,7 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
   const timeSlot = task.time_slot || 'FULL_DAY';
   const timeSlotLabel = getTimeSlotLabel(timeSlot);
   const taskTypeConfig = getTaskTypeConfig(task.task_type);
+  const statusConfig = getTaskStatusConfig(task.status);
 
   // 根据时间槽显示不同的标记
   const getTimeIcon = () => {
@@ -91,6 +125,7 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
   // 生成 tooltip 内容
   const tooltipContent = `${task.task_name}
 类型: ${task.task_type}
+状态: ${statusConfig.label}
 时间: ${timeSlotLabel} (${task.total_hours || 0}h)
 日期: ${task.start_date} ~ ${task.end_date}`;
 
@@ -112,6 +147,11 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
         {/* 任务名称 */}
         <span className="truncate flex-1 font-medium group-hover:font-semibold">
           {task.task_name}
+        </span>
+        
+        {/* 状态图标 */}
+        <span className="flex-shrink-0 text-[10px]" title={statusConfig.label}>
+          {statusConfig.icon}
         </span>
         
         {/* 时间槽标记（仅半天任务显示） */}

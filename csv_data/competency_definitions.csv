@@ -1,0 +1,40 @@
+id,module_id,module_name,competency_type,competency_code,description,owner_engineer,is_key_competency,created_at,updated_at
+49,1,BPS elements,BPS System approach,BPS elements-1,,Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+50,1,BPS elements,VSM/VSD,BPS elements-2,,Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+51,1,BPS elements,"SMC, Process confirmation, Visual management",BPS elements-3,,Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+52,1,BPS elements,WAS,BPS elements-4,,Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+53,1,BPS elements,Problem solving: 10KK/A3/PSS,BPS elements-5,,Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+54,1,Investment efficiency_PGL,Premises & Risk Assessment,Investment efficiency_PGL-6,,Gu Xuan,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+55,1,Investment efficiency_PGL,DFMA,Investment efficiency_PGL-7,,Gu Xuan,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+56,1,Investment efficiency_PGL,LLD,Investment efficiency_PGL-8,,Gu Xuan,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+57,1,Investment efficiency_PGL,FOL,Investment efficiency_PGL-9,,Gu Xuan,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+58,1,Investment efficiency_PGL,Scaling,Investment efficiency_PGL-10,,Gu Xuan,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+59,1,Investment efficiency_IE,Workplace design(LCA & EAWS & Karakuri),Investment efficiency_IE-11,,Xu Tongqing,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+60,1,Investment efficiency_IE,MTM-UAS & SD & MTM1,Investment efficiency_IE-12,,Xu Tongqing,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+61,1,Investment efficiency_IE,MTM-LOG,Investment efficiency_IE-13,,Xu Tongqing,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+62,1,Investment efficiency_IE,MTM-Inspection/Q,Investment efficiency_IE-14,,Xu Tongqing,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+63,1,Waste-free&stable flow_TPM,TPM program management,Waste-free&stable flow_TPM-15,,Chen Jianjun,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+64,1,Waste-free&stable flow_TPM,Change management,Waste-free&stable flow_TPM-16,,Chen Jianjun,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+65,1,Waste-free&stable flow_TPM,"Loss intelligence: Key Performance Indicators & Loss cost matrix & Loss Deployment (Levels 1, 2,3..)",Waste-free&stable flow_TPM-17,,Chen Jianjun,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+66,1,Waste-free&stable flow_TPM,"Loss eradication: 10KK, RBC, QAM… & AM team",Waste-free&stable flow_TPM-18,,Chen Jianjun,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+67,1,Waste-free&stable flow_TPM,Loss prevention: PCS(incl. DLR),Waste-free&stable flow_TPM-19,,Chen Jianjun,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+68,1,Waste-free&stable flow_LBP,Logistic index,Waste-free&stable flow_LBP-20,,Huang Lanping,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+69,1,Waste-free&stable flow_LBP,Pull & Levelling,Waste-free&stable flow_LBP-21,,Huang Lanping,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+70,1,Waste-free&stable flow_LBP,Package design(PFEP),Waste-free&stable flow_LBP-22,,Huang Lanping,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+71,1,Waste-free&stable flow_LBP,"Material supply(POUP, Milkrun AGV)",Waste-free&stable flow_LBP-23,,Huang Lanping,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+72,1,Waste-free&stable flow_LBP,Ship to line,Waste-free&stable flow_LBP-24,,Huang Lanping,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+73,1,Everybody's CIP,Top idea,Everybody's CIP-25,,Xu Qingyue,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+74,1,Everybody's CIP,Give me 5,Everybody's CIP-26,,Xu Qingyue,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+75,1,Everybody's CIP,Speed week/ Kaizen week,Everybody's CIP-27,,Xu Qingyue,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+76,6,Leadership commitment,BLI(BPS Leading improvement),Leadership commitment-28,,Tan Tyler/Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+77,6,Leadership commitment,Kyoben/Jishuken (Project),Leadership commitment-29,,Tan Tyler/Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+78,6,Leadership commitment,BMT(Moderator/coach),Leadership commitment-30,,Tan Tyler/Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+79,6,Leadership commitment,BPS Essential,Leadership commitment-31,,Tan Tyler/Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+80,6,Leadership commitment,BPS maturity assessment,Leadership commitment-32,,Tan Tyler/Wang Ning,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+81,1,CIP in indirect area_LEAN,A2_Customer interview,CIP in indirect area_LEAN-33,,Wang Pei,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+82,1,CIP in indirect area_LEAN,B1_Employee capacity & B2_VSDiA,CIP in indirect area_LEAN-34,,Wang Pei,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+83,1,CIP in indirect area_LEAN,C1_Meeting cascade & C2_WILO,CIP in indirect area_LEAN-35,,Wang Pei,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+84,1,CIP in indirect area_LEAN,D3_Skill Matrix,CIP in indirect area_LEAN-36,,Wang Pei,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+85,1,CIP in indirect area_LEAN,Lean Leadership system,CIP in indirect area_LEAN-37,,Wang Pei,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+86,1,Digital Transformation,Business Analyzer,Digital Transformation-38,,Zhang Fanmin,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00
+87,1,Digital Transformation,Data Analyst,Digital Transformation-39,,Zhang Fanmin,false,2025-11-25 01:42:06.668397+00,2025-11-25 01:42:06.668397+00

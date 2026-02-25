@@ -1,34 +1,31 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { supabaseService } from '../lib/supabaseService';
-import { useAuth } from '../contexts/AuthContext';
-import { Bell, Check, CheckCheck, X } from 'lucide-react';
+import { notificationsService } from '../services/notifications.service';
+import { useNewAuth } from '../contexts/NewAuthContext';
+import { Bell, CheckCheck, X } from 'lucide-react';
 import { cn } from '../lib/utils';
+import type { Notification } from '../types/api';
 
 export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
-  const { currentUser } = useAuth();
+  const { user } = useNewAuth();
   const queryClient = useQueryClient();
 
-  const { data: unreadCount = 0 } = useQuery({
-    queryKey: ['notification-count', currentUser?.id],
-    queryFn: () => supabaseService.getUnreadNotificationCount(currentUser!.id),
-    enabled: !!currentUser,
+  const { data: notifData } = useQuery({
+    queryKey: ['notifications-all', user?.id],
+    queryFn: () => notificationsService.getAll(),
+    enabled: !!user,
     refetchInterval: 30000, // 每30秒刷新一次
   });
 
-  const { data: notifications = [] } = useQuery({
-    queryKey: ['notifications', currentUser?.id],
-    queryFn: () => supabaseService.getAllNotifications(currentUser!.id, 20),
-    enabled: !!currentUser && isOpen,
-  });
+  const unreadCount = notifData?.unread_count ?? 0;
+  const notifications: Notification[] = notifData?.notifications ?? [];
 
   const handleMarkAllAsRead = async () => {
-    if (!currentUser) return;
+    if (!user) return;
     try {
-      await supabaseService.markAllNotificationsAsRead(currentUser.id);
-      queryClient.invalidateQueries({ queryKey: ['notification-count'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      await notificationsService.markAllRead();
+      queryClient.invalidateQueries({ queryKey: ['notifications-all'] });
     } catch (error) {
       console.error('标记全部已读失败:', error);
     }
@@ -36,9 +33,8 @@ export function NotificationBell() {
 
   const handleMarkAsRead = async (notificationId: string) => {
     try {
-      await supabaseService.markNotificationAsRead(notificationId);
-      queryClient.invalidateQueries({ queryKey: ['notification-count'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      await notificationsService.markRead(notificationId);
+      queryClient.invalidateQueries({ queryKey: ['notifications-all'] });
     } catch (error) {
       console.error('标记已读失败:', error);
     }
@@ -122,35 +118,17 @@ function NotificationItem({
   notification,
   onMarkAsRead,
 }: {
-  notification: any;
+  notification: Notification;
   onMarkAsRead: (id: string) => void;
 }) {
   const getNotificationIcon = () => {
-    switch (notification.notification_type) {
-      case 'CREATED':
-        return '✨';
-      case 'UPDATED':
-        return '✏️';
-      case 'DELETED':
-        return '🗑️';
-      default:
-        return '📝';
-    }
-  };
-
-  const getNotificationMessage = () => {
-    const modifierName = notification.modified_by?.name || '管理员';
-    const taskName = notification.task?.task_name || '任务';
-    
-    switch (notification.notification_type) {
-      case 'CREATED':
-        return `${modifierName} 为您创建了新任务：${taskName}`;
-      case 'UPDATED':
-        return `${modifierName} 修改了您的任务：${taskName}`;
-      case 'DELETED':
-        return `${modifierName} 删除了您的任务：${taskName}`;
-      default:
-        return `${modifierName} 修改了您的日程`;
+    switch (notification.type) {
+      case 'task_submitted': return '📋';
+      case 'task_approved': return '✅';
+      case 'task_rejected': return '❌';
+      case 'task_confirmed': return '🎉';
+      case 'task_employee_rejected': return '⚠️';
+      default: return '📝';
     }
   };
 
@@ -161,7 +139,6 @@ function NotificationItem({
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-
     if (minutes < 1) return '刚刚';
     if (minutes < 60) return `${minutes}分钟前`;
     if (hours < 24) return `${hours}小时前`;
@@ -180,32 +157,16 @@ function NotificationItem({
       <div className="flex items-start gap-3">
         <span className="text-2xl">{getNotificationIcon()}</span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-gray-900 font-medium">
-            {getNotificationMessage()}
-          </p>
-          {notification.change_description && (
-            <p className="text-xs text-gray-600 mt-1">
-              {notification.change_description}
-            </p>
-          )}
+          <p className="text-sm text-gray-900 font-medium">{notification.title}</p>
+          <p className="text-xs text-gray-600 mt-1">{notification.body}</p>
           <p className="text-xs text-gray-500 mt-1">
-            {formatTime(notification.created_at)}
+            {notification.created_at ? formatTime(notification.created_at) : ''}
           </p>
         </div>
         {!notification.is_read && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onMarkAsRead(notification.id);
-            }}
-            className="text-blue-600 hover:text-blue-700"
-            title="标记为已读"
-          >
-            <Check className="w-4 h-4" />
-          </button>
+          <div className="w-2 h-2 bg-blue-500 rounded-full mt-1 shrink-0" />
         )}
       </div>
     </div>
   );
 }
-

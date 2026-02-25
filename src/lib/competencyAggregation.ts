@@ -3,7 +3,7 @@
  * 用于计算团队和个人的能力统计数据
  */
 
-import type { AssessmentFull, Skill, Employee } from './database.types';
+import type { AssessmentFull, Skill } from './database.types';
 
 // 9大模块映射
 export const MODULE_MAPPING = {
@@ -34,6 +34,8 @@ export interface ModuleStats {
   color: string;
   avgCurrent: number;
   avgTarget: number;
+  totalCurrent: number; // 总现状分数（新增）
+  totalTarget: number;  // 总目标分数（新增）
   totalGap: number;
   avgGap: number;
   employeeCount: number;
@@ -130,6 +132,8 @@ export function calculateTeamModuleStats(
         color: moduleInfo.color,
         avgCurrent: stats.totalCurrent / stats.count,
         avgTarget: stats.totalTarget / stats.count,
+        totalCurrent: stats.totalCurrent,  // 新增：总现状分数
+        totalTarget: stats.totalTarget,    // 新增：总目标分数
         totalGap: stats.totalGap,
         avgGap: stats.totalGap / stats.count,
         employeeCount: stats.employees.size,
@@ -144,6 +148,8 @@ export function calculateTeamModuleStats(
         color: moduleInfo.color,
         avgCurrent: 0,
         avgTarget: 0,
+        totalCurrent: 0,  // 新增：总现状分数
+        totalTarget: 0,   // 新增：总目标分数
         totalGap: 0,
         avgGap: 0,
         employeeCount: 0,
@@ -300,7 +306,7 @@ export function calculatePersonalSkillStats(
   const personalAssessments = assessments.filter(a => a.employee_id === employeeId);
 
   const result: PersonalSkillStats[] = personalAssessments.map(assessment => {
-    const skill = skills.find(s => s.id === assessment.skill_id);
+    void skills.find(s => s.id === assessment.skill_id); // 保留参数兼容性
     
     return {
       skillId: assessment.skill_id,

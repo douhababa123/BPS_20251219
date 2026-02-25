@@ -1,0 +1,329 @@
+import { describe, it, expect } from 'vitest';
+import {
+  MODULE_MAPPING,
+  calculateTeamModuleStats,
+  calculateTeamSkillStats,
+  calculatePersonalModuleStats,
+  calculatePersonalSkillStats,
+  formatNumber,
+  getRankIcon,
+} from '../competencyAggregation';
+import type { AssessmentFull, Skill } from '../database.types';
+
+// ──────────────────────────────────────────────────────────
+// 测试 Fixtures
+// ──────────────────────────────────────────────────────────
+
+const mockSkills: Skill[] = [
+  {
+    id: 1,
+    module_id: 1,
+    module_name: 'BPS elements',
+    skill_name: 'Skill A',
+    skill_code: null,
+    description: null,
+    display_order: 1,
+    is_active: true,
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-01T00:00:00Z',
+  },
+  {
+    id: 2,
+    module_id: 1,
+    module_name: 'BPS elements',
+    skill_name: 'Skill B',
+    skill_code: null,
+    description: null,
+    display_order: 2,
+    is_active: true,
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-01T00:00:00Z',
+  },
+  {
+    id: 3,
+    module_id: 2,
+    module_name: 'Investment efficiency_PGL',
+    skill_name: 'Skill C',
+    skill_code: null,
+    description: null,
+    display_order: 1,
+    is_active: true,
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: '2025-01-01T00:00:00Z',
+  },
+];
+
+const baseAssessment = {
+  id: '',
+  employee_code: 'EMP001',
+  employee_name: '张三',
+  department_name: 'Dept A',
+  department_code: 'D001',
+  module_name: 'BPS elements',
+  skill_name: 'Skill A',
+  display_order: 1,
+  assessment_year: 2025,
+  assessment_date: '2025-01-01',
+  notes: null,
+  created_at: '2025-01-01T00:00:00Z',
+  updated_at: '2025-01-01T00:00:00Z',
+};
+
+const mockAssessments: AssessmentFull[] = [
+  {
+    ...baseAssessment,
+    id: 'a1',
+    employee_id: 'emp-1',
+    skill_id: 1,
+    module_id: 1,
+    current_level: 2,
+    target_level: 4,
+    gap: 2,
+  },
+  {
+    ...baseAssessment,
+    id: 'a2',
+    employee_id: 'emp-1',
+    skill_id: 2,
+    module_id: 1,
+    current_level: 3,
+    target_level: 4,
+    gap: 1,
+  },
+  {
+    ...baseAssessment,
+    id: 'a3',
+    employee_id: 'emp-2',
+    skill_id: 1,
+    module_id: 1,
+    current_level: 4,
+    target_level: 4,
+    gap: 0,
+  },
+  {
+    ...baseAssessment,
+    id: 'a4',
+    employee_id: 'emp-2',
+    skill_id: 3,
+    module_id: 2,
+    module_name: 'Investment efficiency_PGL',
+    skill_name: 'Skill C',
+    current_level: 1,
+    target_level: 3,
+    gap: 2,
+  },
+];
+
+// ──────────────────────────────────────────────────────────
+// MODULE_MAPPING 常量
+// ──────────────────────────────────────────────────────────
+
+describe('MODULE_MAPPING 常量', () => {
+  it('包含 9 个模块', () => {
+    expect(Object.keys(MODULE_MAPPING)).toHaveLength(9);
+  });
+
+  it('模块 ID 从 1 到 9 连续', () => {
+    for (let i = 1; i <= 9; i++) {
+      expect(MODULE_MAPPING[i as keyof typeof MODULE_MAPPING]).toBeDefined();
+    }
+  });
+
+  it('每个模块有 id / name / icon / color 字段', () => {
+    Object.values(MODULE_MAPPING).forEach((m) => {
+      expect(m).toHaveProperty('id');
+      expect(m).toHaveProperty('name');
+      expect(m).toHaveProperty('icon');
+      expect(m).toHaveProperty('color');
+    });
+  });
+});
+
+// ──────────────────────────────────────────────────────────
+// calculateTeamModuleStats
+// ──────────────────────────────────────────────────────────
+
+describe('calculateTeamModuleStats', () => {
+  it('始终返回 9 个模块', () => {
+    const result = calculateTeamModuleStats(mockAssessments, mockSkills);
+    expect(result).toHaveLength(9);
+  });
+
+  it('模块 1 的统计计算正确', () => {
+    const result = calculateTeamModuleStats(mockAssessments, mockSkills);
+    const mod1 = result.find((m) => m.moduleId === 1)!;
+
+    // 3 条记录属于 module 1: gap = 2+1+0 = 3
+    expect(mod1.totalGap).toBe(3);
+    expect(mod1.employeeCount).toBe(2); // emp-1, emp-2
+    expect(mod1.skillCount).toBe(2);    // skill 1, skill 2
+  });
+
+  it('没有数据的模块 gap=0 且 employeeCount=0', () => {
+    const result = calculateTeamModuleStats(mockAssessments, mockSkills);
+    // 模块 3~9 均无数据
+    const mod3 = result.find((m) => m.moduleId === 3)!;
+    expect(mod3.avgGap).toBe(0);
+    expect(mod3.employeeCount).toBe(0);
+  });
+
+  it('空 assessments 时所有模块均为零值', () => {
+    const result = calculateTeamModuleStats([], mockSkills);
+    result.forEach((m) => {
+      expect(m.avgCurrent).toBe(0);
+      expect(m.avgGap).toBe(0);
+    });
+  });
+
+  it('avgCurrent 计算正确', () => {
+    const result = calculateTeamModuleStats(mockAssessments, mockSkills);
+    const mod1 = result.find((m) => m.moduleId === 1)!;
+    // totalCurrent = 2+3+4 = 9, count = 3
+    expect(mod1.avgCurrent).toBeCloseTo(3.0, 5);
+  });
+});
+
+// ──────────────────────────────────────────────────────────
+// calculateTeamSkillStats
+// ──────────────────────────────────────────────────────────
+
+describe('calculateTeamSkillStats', () => {
+  it('返回有数据的技能数量', () => {
+    const result = calculateTeamSkillStats(mockAssessments, mockSkills);
+    // skill 1, skill 2, skill 3 都有数据
+    expect(result).toHaveLength(3);
+  });
+
+  it('按 totalGap 降序排列', () => {
+    const result = calculateTeamSkillStats(mockAssessments, mockSkills);
+    for (let i = 0; i < result.length - 1; i++) {
+      expect(result[i].totalGap).toBeGreaterThanOrEqual(result[i + 1].totalGap);
+    }
+  });
+
+  it('skill 1 统计正确（两人都有）', () => {
+    const result = calculateTeamSkillStats(mockAssessments, mockSkills);
+    const s1 = result.find((s) => s.skillId === 1)!;
+    expect(s1.totalGap).toBe(2); // emp-1: gap=2, emp-2: gap=0
+    expect(s1.employeeCount).toBe(2);
+    expect(s1.avgCurrent).toBeCloseTo(3.0, 5); // (2+4)/2
+  });
+
+  it('空 assessments 返回空数组', () => {
+    const result = calculateTeamSkillStats([], mockSkills);
+    expect(result).toHaveLength(0);
+  });
+});
+
+// ──────────────────────────────────────────────────────────
+// calculatePersonalModuleStats
+// ──────────────────────────────────────────────────────────
+
+describe('calculatePersonalModuleStats', () => {
+  it('始终返回 9 个模块', () => {
+    const result = calculatePersonalModuleStats('emp-1', mockAssessments, mockSkills);
+    expect(result).toHaveLength(9);
+  });
+
+  it('emp-1 模块 1 数据正确', () => {
+    const result = calculatePersonalModuleStats('emp-1', mockAssessments, mockSkills);
+    const mod1 = result.find((m) => m.moduleId === 1)!;
+    // emp-1: skill1(cur=2,tgt=4,gap=2), skill2(cur=3,tgt=4,gap=1) → avg
+    expect(mod1.current).toBeCloseTo(2.5, 5);
+    expect(mod1.target).toBeCloseTo(4.0, 5);
+    expect(mod1.gap).toBeCloseTo(1.5, 5);
+    expect(mod1.skillCount).toBe(2);
+  });
+
+  it('该员工无数据的模块均为 0', () => {
+    const result = calculatePersonalModuleStats('emp-1', mockAssessments, mockSkills);
+    // emp-1 没有 module 3~9 数据
+    const mod3 = result.find((m) => m.moduleId === 3)!;
+    expect(mod3.current).toBe(0);
+    expect(mod3.gap).toBe(0);
+  });
+
+  it('不存在的员工返回全零模块', () => {
+    const result = calculatePersonalModuleStats('nonexistent', mockAssessments, mockSkills);
+    result.forEach((m) => {
+      expect(m.current).toBe(0);
+      expect(m.gap).toBe(0);
+    });
+  });
+});
+
+// ──────────────────────────────────────────────────────────
+// calculatePersonalSkillStats
+// ──────────────────────────────────────────────────────────
+
+describe('calculatePersonalSkillStats', () => {
+  it('只返回该员工的技能', () => {
+    const result = calculatePersonalSkillStats('emp-1', mockAssessments, mockSkills);
+    expect(result).toHaveLength(2); // emp-1 有 2 条记录
+  });
+
+  it('按 gap 降序排列', () => {
+    const result = calculatePersonalSkillStats('emp-1', mockAssessments, mockSkills);
+    for (let i = 0; i < result.length - 1; i++) {
+      expect(result[i].gap).toBeGreaterThanOrEqual(result[i + 1].gap);
+    }
+  });
+
+  it('不存在的员工返回空数组', () => {
+    const result = calculatePersonalSkillStats('nonexistent', mockAssessments, mockSkills);
+    expect(result).toHaveLength(0);
+  });
+});
+
+// ──────────────────────────────────────────────────────────
+// formatNumber
+// ──────────────────────────────────────────────────────────
+
+describe('formatNumber', () => {
+  it('默认保留 1 位小数', () => {
+    expect(formatNumber(3.14159)).toBe('3.1');
+  });
+
+  it('指定精度', () => {
+    expect(formatNumber(3.14159, 2)).toBe('3.14');
+  });
+
+  it('undefined 返回 "0"', () => {
+    expect(formatNumber(undefined)).toBe('0');
+  });
+
+  it('null 返回 "0"', () => {
+    expect(formatNumber(null)).toBe('0');
+  });
+
+  it('NaN 返回 "0"', () => {
+    expect(formatNumber(NaN)).toBe('0');
+  });
+
+  it('整数值保留小数位', () => {
+    expect(formatNumber(3, 1)).toBe('3.0');
+  });
+});
+
+// ──────────────────────────────────────────────────────────
+// getRankIcon
+// ──────────────────────────────────────────────────────────
+
+describe('getRankIcon', () => {
+  it('第 1 名返回 🥇', () => {
+    expect(getRankIcon(1)).toBe('🥇');
+  });
+
+  it('第 2 名返回 🥈', () => {
+    expect(getRankIcon(2)).toBe('🥈');
+  });
+
+  it('第 3 名返回 🥉', () => {
+    expect(getRankIcon(3)).toBe('🥉');
+  });
+
+  it('其他名次返回数字字符串', () => {
+    expect(getRankIcon(4)).toBe('4');
+    expect(getRankIcon(10)).toBe('10');
+  });
+});

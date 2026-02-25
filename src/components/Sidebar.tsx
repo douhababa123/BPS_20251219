@@ -1,21 +1,25 @@
-import { LayoutDashboard, Calendar, Target, Award, BarChart3, FileSpreadsheet } from 'lucide-react';
+import { LayoutDashboard, Calendar, Target, Award, BarChart3, FileSpreadsheet, Settings } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useNewAuth } from '../contexts/NewAuthContext';
 
 interface SidebarProps {
   currentPage: string;
   onNavigate: (page: string) => void;
 }
 
-const navItems = [
-  { id: 'dashboard', icon: LayoutDashboard, label: '总览' },
-  { id: 'schedule', icon: Calendar, label: '日程管理' },
-  { id: 'competency', icon: Award, label: '能力画像' },
-  { id: 'assessment', icon: BarChart3, label: '能力评估' },
-  { id: 'matching', icon: Target, label: '任务分配' },
-  { id: 'importNew', icon: FileSpreadsheet, label: '数据导入' },
+const allNavItems = [
+  { id: 'dashboard', icon: LayoutDashboard, label: '总览', adminOnly: false },
+  { id: 'schedule', icon: Calendar, label: '日程管理', adminOnly: false },
+  { id: 'competency', icon: Award, label: '能力画像', adminOnly: false },
+  { id: 'assessment', icon: BarChart3, label: '能力评估', adminOnly: false },
+  { id: 'matching', icon: Target, label: '任务分配', adminOnly: false },
+  { id: 'importNew', icon: FileSpreadsheet, label: '数据导入', adminOnly: false },
+  { id: 'admin', icon: Settings, label: '管理员', adminOnly: true },
 ];
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+  const { isAdmin } = useNewAuth();
+  const navItems = allNavItems.filter(item => !item.adminOnly || isAdmin);
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
       <div className="p-6 border-b border-gray-200">
