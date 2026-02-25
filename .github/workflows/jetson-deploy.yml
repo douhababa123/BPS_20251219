@@ -96,9 +96,6 @@ jobs:
     if: github.event_name == 'push' && (needs.test.result == 'success' || needs.test.result == 'failure')
     
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-      
       - name: 执行部署
         run: |
           set -e
@@ -106,11 +103,14 @@ jobs:
           echo "  开始部署 BPS 到 Jetson"
           echo "  分支: ${{ github.ref_name }}"
           echo "  提交: ${{ github.sha }}"
-          echo "  工作目录: $GITHUB_WORKSPACE"
           echo "=========================================="
 
-          # 代码已由 actions/checkout 检出到 $GITHUB_WORKSPACE，直接使用
-          cd "$GITHUB_WORKSPACE"
+          # 使用本地仓库，只做增量 git pull（避免从 GitHub 重新下载全部代码）
+          cd /mnt/nvme/BPS
+
+          echo "📥 拉取最新代码..."
+          git fetch --depth=1 origin ${{ github.ref_name }}
+          git reset --hard origin/${{ github.ref_name }}
 
           # 停止旧容器
           echo "🛑 停止现有容器..."
@@ -138,6 +138,7 @@ jobs:
 
           echo "❌ 健康检查失败"
           docker compose logs --tail=50 backend
+          exit 1
           exit 1
 
   # Job 4: 回滚（手动触发，同样在 Jetson self-hosted runner 上运行）
