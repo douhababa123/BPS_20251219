@@ -96,6 +96,17 @@ jobs:
     if: github.event_name == 'push' && (needs.test.result == 'success' || needs.test.result == 'failure')
     
     steps:
+      - name: 拉取 Docker 基础镜像（带重试）
+        run: |
+          echo "📦 预拉取基础镜像，避免构建时超时..."
+          for i in 1 2 3; do
+            docker pull python:3.9-slim-bullseye && echo "✅ 基础镜像拉取成功" && break
+            echo "⚠️ 第 $i 次拉取失败，等待 10s 后重试..."
+            sleep 10
+          done
+          # 检查镜像是否已在本地（即使拉取失败，缓存可能已存在）
+          docker image inspect python:3.9-slim-bullseye > /dev/null 2>&1 && echo "✅ 镜像已在本地缓存" || echo "⚠️ 镜像不在本地，构建将尝试拉取"
+
       - name: 执行部署
         run: |
           set -e
@@ -112,13 +123,26 @@ jobs:
           git fetch --depth=1 origin ${{ github.ref_name }}
           git reset --hard origin/${{ github.ref_name }}
 
+          # 构建前端 dist/（nginx 需要此目录）
+          echo "🏗️ 构建前端..."
+          if command -v node > /dev/null 2>&1; then
+            npm ci --prefer-offline 2>/dev/null || npm ci
+            npm run build
+            echo "✅ 前端构建完成"
+          elif [ -d "dist" ]; then
+            echo "⚠️ Node.js 不可用，使用已有 dist/ 目录"
+          else
+            echo "❌ Node.js 不可用且 dist/ 不存在，前端无法部署"
+            exit 1
+          fi
+
           # 停止旧容器
           echo "🛑 停止现有容器..."
           docker compose down || true
 
-          # 构建新镜像
+          # 构建新镜像（使用本地缓存的基础镜像，不再重新 pull）
           echo "🔨 构建新镜像..."
-          docker compose build
+          docker compose build --pull=false
 
           # 启动新容器
           echo "🚀 启动新容器..."
@@ -138,7 +162,6 @@ jobs:
 
           echo "❌ 健康检查失败"
           docker compose logs --tail=50 backend
-          exit 1
           exit 1
 
   # Job 4: 回滚（手动触发，同样在 Jetson self-hosted runner 上运行）
