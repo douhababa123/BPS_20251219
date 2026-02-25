@@ -118,8 +118,8 @@ jobs:
           platforms: linux/arm64
           push: false  # 不推送到 Docker Hub，直接在 Jetson 上构建
           tags: bps_backend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend-msodbcsql18
+          cache-to: type=gha,scope=backend-msodbcsql18,mode=max
 
   # Job 3: 部署到 Jetson
   deploy:
