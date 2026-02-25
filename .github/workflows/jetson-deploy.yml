@@ -182,19 +182,19 @@ jobs:
             
             # 备份当前版本
             echo "📦 备份当前版本..."
-            docker-compose ps -q | xargs docker commit || true
+            docker compose ps -q | xargs docker commit || true
             
             # 停止旧容器
             echo "🛑 停止现有容器..."
-            docker-compose down || true
+            docker compose down || true
             
             # 构建新镜像
             echo "🔨 构建新镜像..."
-            docker-compose build
+            docker compose build
             
             # 启动新容器
             echo "🚀 启动新容器..."
-            docker-compose up -d
+            docker compose up -d
             
             # 等待服务启动
             echo "⏳ 等待服务启动..."
@@ -228,7 +228,7 @@ jobs:
             echo "=========================================="
             
             # 检查容器状态
-            docker-compose ps
+            docker compose ps
             
             # 测试 API
             echo ""
@@ -282,14 +282,14 @@ jobs:
             echo "=========================================="
             
             # 停止当前容器
-            docker-compose down
+            docker compose down
             
             # 回到上一个提交
             git checkout HEAD~1
             
             # 重新构建和启动
-            docker-compose build
-            docker-compose up -d
+            docker compose build
+            docker compose up -d
             
             # 健康检查
             sleep 10
