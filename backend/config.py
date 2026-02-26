@@ -43,6 +43,8 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://localhost:5174",  # Vite dev server alternative port
         "http://localhost:3000",
+        "http://10.70.80.183:3000",  # Jetson 部署地址
+        "http://10.70.80.183",
     ]
     
     # 允许的邮箱域名
