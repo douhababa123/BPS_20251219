@@ -2,8 +2,8 @@
 能力评估路由
 """
 
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List
+from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import List, Optional
 from uuid import UUID
 import logging
 import sys
@@ -21,6 +21,78 @@ from .auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.get("/full")
+def get_competency_assessments_full(
+    department_id: Optional[int] = None,
+    cursor=Depends(get_db)
+):
+    """
+    获取完整能力评估数据（含员工、技能、部门关联信息）
+    单次 SQL JOIN 返回，避免前端多请求合并
+    """
+    query = """
+        SELECT
+            ca.id,
+            CAST(ca.employee_id AS NVARCHAR(36)) AS employee_id,
+            e.employee_id AS employee_code,
+            e.name AS employee_name,
+            d.name AS department_name,
+            d.code AS department_code,
+            ca.skill_id,
+            s.module_id,
+            s.module_name,
+            s.skill_name,
+            COALESCE(s.display_order, 0) AS display_order,
+            ca.current_level,
+            ca.target_level,
+            COALESCE(ca.gap, ca.target_level - ca.current_level) AS gap,
+            COALESCE(ca.assessment_year, YEAR(ca.assessment_date)) AS assessment_year,
+            ca.assessment_date,
+            ca.notes,
+            ca.created_at,
+            ca.updated_at
+        FROM dbo.competency_assessments ca
+        JOIN dbo.employees e ON ca.employee_id = e.id
+        LEFT JOIN dbo.departments d ON e.department_id = d.id
+        JOIN dbo.skills s ON ca.skill_id = s.id
+        WHERE e.is_active = 1
+    """
+    params = []
+    if department_id is not None:
+        query += " AND e.department_id = ?"
+        params.append(department_id)
+    query += " ORDER BY e.name, s.module_id, s.display_order"
+
+    cursor.execute(query, params) if params else cursor.execute(query)
+
+    results = []
+    for row in cursor.fetchall():
+        assessment_date = row[15]
+        results.append({
+            "id": str(row[0]),
+            "employee_id": str(row[1]),
+            "employee_code": row[2] or "",
+            "employee_name": row[3] or "",
+            "department_name": row[4],
+            "department_code": row[5],
+            "skill_id": row[6],
+            "module_id": row[7],
+            "module_name": row[8] or "",
+            "skill_name": row[9] or "",
+            "display_order": row[10] or 0,
+            "current_level": row[11],
+            "target_level": row[12],
+            "gap": row[13],
+            "assessment_year": row[14],
+            "assessment_date": assessment_date.isoformat() if assessment_date else None,
+            "notes": row[16],
+            "created_at": row[17].isoformat() if row[17] else None,
+            "updated_at": row[18].isoformat() if row[18] else None,
+        })
+
+    return results
 
 
 @router.get("/", response_model=List[CompetencyAssessment])
