@@ -5,8 +5,8 @@
 
 import axios from 'axios';
 
-// API 基础 URL - 从环境变量获取
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+// API 基础 URL - 从环境变量获取（生产环境用相对路径由 nginx 代理）
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? 'http://localhost:8000/api' : '/api');
 
 /**
  * 创建 Axios 实例
@@ -20,16 +20,12 @@ export const apiClient = axios.create({
 });
 
 /**
- * 请求拦截器 - 自动添加 JWT Token + 自动补全 trailing slash
- * FastAPI 路由要求 URL 以 / 结尾，否则返回 307 重定向导致超时
+ * 请求拦截器 - 自动添加 JWT Token
+ * 注意：不要自动补全 trailing slash，FastAPI 路由均以无斜杠定义
+ * 添加 trailing slash 会触发 FastAPI 307 重定向，且重定向会丢失端口号
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // 自动补全 trailing slash，防止 FastAPI 307 重定向
-    if (config.url && !config.url.endsWith('/')) {
-      config.url += '/';
-    }
-
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
