@@ -47,7 +47,11 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // Token 过期或无效
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // 仅当请求携带了 Authorization token 时才视为"过期"
+    // 登录/注册等认证端点的 401 是正常的业务错误（密码错误等），不应触发跳转
+    const hadToken = !!originalRequest.headers?.Authorization;
+    const isAuthEndpoint = originalRequest.url?.includes('/auth/');
+    if (error.response?.status === 401 && !originalRequest._retry && hadToken && !isAuthEndpoint) {
       originalRequest._retry = true;
       
       // 清除本地存储
