@@ -25,7 +25,8 @@ app = FastAPI(
     description="BPS 后端 API - 员工技能管理和资源规划系统",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
+    redirect_slashes=False,  # 禁用 trailing slash 重定向，避免端口丢失
 )
 
 # ============================================================================
