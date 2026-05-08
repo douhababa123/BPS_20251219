@@ -30,8 +30,13 @@ def get_tasks(
     """获取任务列表，支持筛选"""
     query = """
         SELECT id, task_name, task_type, task_location, assigned_employee_id,
-               start_date, end_date, hours_per_day, total_hours, status,
-               notes, time_slot, created_at, updated_at,
+               start_date, end_date,
+               COALESCE(hours_per_day, CASE WHEN time_slot IN ('AM','PM') THEN 4 ELSE 8 END) AS hours_per_day,
+               COALESCE(total_hours,
+                 (DATEDIFF(day, start_date, end_date) + 1) *
+                 CASE WHEN time_slot IN ('AM','PM') THEN 4 ELSE 8 END
+               ) AS total_hours,
+               status, notes, time_slot, created_at, updated_at,
                rejection_reason, requester_id, rejected_by
         FROM dbo.tasks
         WHERE 1=1
@@ -87,8 +92,13 @@ def get_task(task_id: UUID, cursor=Depends(get_db)):
     """获取指定任务"""
     cursor.execute("""
         SELECT id, task_name, task_type, task_location, assigned_employee_id,
-               start_date, end_date, hours_per_day, total_hours, status,
-               notes, time_slot, created_at, updated_at,
+               start_date, end_date,
+               COALESCE(hours_per_day, CASE WHEN time_slot IN ('AM','PM') THEN 4 ELSE 8 END) AS hours_per_day,
+               COALESCE(total_hours,
+                 (DATEDIFF(day, start_date, end_date) + 1) *
+                 CASE WHEN time_slot IN ('AM','PM') THEN 4 ELSE 8 END
+               ) AS total_hours,
+               status, notes, time_slot, created_at, updated_at,
                rejection_reason, requester_id, rejected_by
         FROM dbo.tasks
         WHERE id = ?
@@ -127,6 +137,19 @@ def create_task(
 ):
     """创建任务"""
     try:
+        # 自动计算 hours_per_day 和 total_hours（若未提供）
+        from datetime import date as date_type
+        hours_per_day = task.hours_per_day
+        if hours_per_day is None:
+            hours_per_day = 4 if task.time_slot in ('AM', 'PM') else 8
+
+        total_hours = task.total_hours
+        if total_hours is None and task.start_date and task.end_date:
+            start = task.start_date if isinstance(task.start_date, date_type) else date_type.fromisoformat(str(task.start_date))
+            end = task.end_date if isinstance(task.end_date, date_type) else date_type.fromisoformat(str(task.end_date))
+            days_count = (end - start).days + 1
+            total_hours = days_count * hours_per_day
+
         cursor.execute("""
             INSERT INTO dbo.tasks 
             (task_name, task_type, task_location, assigned_employee_id,
@@ -140,8 +163,8 @@ def create_task(
             str(task.assigned_employee_id) if task.assigned_employee_id else None,
             task.start_date,
             task.end_date,
-            task.hours_per_day,
-            task.total_hours,
+            hours_per_day,
+            total_hours,
             task.status,
             task.notes,
             task.time_slot

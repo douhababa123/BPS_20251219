@@ -1185,6 +1185,14 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
     e.preventDefault();
     
     const taskType = showCustomType ? formData.custom_task_type : formData.task_type;
+
+    // 计算工时
+    const hoursPerDay = formData.time_slot === 'FULL_DAY' ? 8 : 4;
+    const daysCount = formData.start_date && formData.end_date
+      ? Math.round((new Date(formData.end_date).getTime() - new Date(formData.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
+      : 1;
+    const totalHours = daysCount * hoursPerDay;
+
     const taskData = {
       task_name: formData.task_name,
       task_type: taskType,
@@ -1193,6 +1201,9 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
       start_date: formData.start_date,
       end_date: formData.end_date,
       time_slot: formData.time_slot,
+      hours_per_day: hoursPerDay,
+      days_count: daysCount,
+      total_hours: totalHours,
       status: formData.status,
       notes: formData.notes,
       source: 'manual',
