@@ -1149,16 +1149,23 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
       const task: any = await tasksService.create(data);
       
       // 如果是 Site PS 为其他员工创建任务，发送通知
-      if (user && task.assigned_employee_id && task.assigned_employee_id !== user.id) {
+      // 注意：user.id 是 users 表的 ID，而 employees.id 是员工表的 ID，需要通过 email 匹配找到当前用户的员工记录
+      const currentEmployee = user ? employees.find((emp: any) => emp.email === user.email) : null;
+      if (currentEmployee && task.assigned_employee_id && task.assigned_employee_id !== currentEmployee.id) {
         const assignedEmployee = employees.find((emp: any) => emp.id === task.assigned_employee_id);
         if (assignedEmployee) {
-          await scheduleNotificationsService.create({
-            task_id: task.id,
-            affected_employee_id: assignedEmployee.id,
-            modified_by_employee_id: user.id,
-            notification_type: 'CREATED',
-            change_description: `创建任务：${task.task_name}（${task.start_date} - ${task.end_date}）`,
-          });
+          try {
+            await scheduleNotificationsService.create({
+              task_id: task.id,
+              affected_employee_id: assignedEmployee.id,
+              modified_by_employee_id: currentEmployee.id,
+              notification_type: 'CREATED',
+              change_description: `创建任务：${task.task_name}（${task.start_date} - ${task.end_date}）`,
+            });
+          } catch (notifError) {
+            // 通知发送失败不影响任务创建成功
+            console.warn('📭 通知发送失败（不影响任务创建）:', notifError);
+          }
         }
       }
       
