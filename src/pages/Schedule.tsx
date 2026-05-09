@@ -139,7 +139,7 @@ export function Schedule() {
         if (!Array.isArray(old)) return old;
         return old.filter((t: any) => t.id !== taskId);
       });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.refetchQueries({ queryKey: ['tasks'] });
     },
   });
 
@@ -153,7 +153,7 @@ export function Schedule() {
         if (!Array.isArray(old)) return old;
         return old.map((t: any) => t.id === updatedTask.id ? updatedTask : t);
       });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.refetchQueries({ queryKey: ['tasks'] });
     },
   });
 
@@ -1170,7 +1170,8 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
         if (!Array.isArray(old)) return old;
         return [...old, newTask];
       });
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      // 强制立即重新请求（不受 staleTime 限制）
+      queryClient.refetchQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['notification-count'] });
       onSuccess();
     },
