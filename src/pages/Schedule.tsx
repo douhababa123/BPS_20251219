@@ -236,22 +236,6 @@ export function Schedule() {
     };
   }, [filteredTasks, selectedEmployeeIds.length]);
 
-  // 任务类型统计
-  const typeStats = useMemo(() => {
-    const statsMap = new Map();
-    let total = 0;
-
-    filteredTasks.forEach((task: any) => {
-      const hours = task.total_hours || 0;
-      const existing = statsMap.get(task.task_type) || { name: task.task_type, value: 0 };
-      existing.value += hours;
-      total += hours;
-      statsMap.set(task.task_type, existing);
-    });
-
-    return Array.from(statsMap.values());
-  }, [filteredTasks]);
-
   // 任务地点统计
   const locationStats = useMemo(() => {
     const statsMap = new Map();

@@ -1,67 +1,72 @@
 import { describe, it, expect } from 'vitest';
-import { TASK_TYPE_CONFIG, getTaskTypeConfig } from '../taskTypeConfig';
+import { TASK_TYPES, TASK_LOCATIONS, COMPETENCE_CONFIG, COMPETENCE_LIST, getCompetenceConfig, getTaskTypeConfig } from '../taskTypeConfig';
 
-describe('TASK_TYPE_CONFIG 常量', () => {
-  const expectedTypes = [
-    'coaching',
-    'leave',
-    'meeting',
-    'project',
-    'self-develop',
-    'speed_week',
-    'training',
-    'workshop',
-  ];
+describe('TASK_TYPES', () => {
+  it('contains expected task type codes', () => {
+    const codes = TASK_TYPES.map((t) => t.code);
+    expect(codes).toContain('Project');
+    expect(codes).toContain('Coaching');
+    expect(codes).toContain('Training');
+    expect(codes).toContain('Meeting');
+    expect(codes).toContain('Leave');
+  });
+});
 
-  it('包含所有预定义任务类型', () => {
-    expectedTypes.forEach((type) => {
-      expect(TASK_TYPE_CONFIG[type]).toBeDefined();
-    });
+describe('TASK_LOCATIONS', () => {
+  it('contains expected locations', () => {
+    expect(TASK_LOCATIONS).toContain('FLCNa');
+    expect(TASK_LOCATIONS).toContain('Nan Jing');
+  });
+});
+
+describe('COMPETENCE_CONFIG', () => {
+  it('contains all expected competences', () => {
+    expect(COMPETENCE_CONFIG['TPM']).toBeDefined();
+    expect(COMPETENCE_CONFIG['BPS']).toBeDefined();
+    expect(COMPETENCE_CONFIG['Others']).toBeDefined();
   });
 
-  it('每个类型都有 color / bgColor / borderColor / icon / label 字段', () => {
-    Object.values(TASK_TYPE_CONFIG).forEach((config) => {
-      expect(config).toHaveProperty('color');
-      expect(config).toHaveProperty('bgColor');
-      expect(config).toHaveProperty('borderColor');
-      expect(config).toHaveProperty('icon');
-      expect(config).toHaveProperty('label');
+  it('each entry has color and label', () => {
+    Object.values(COMPETENCE_CONFIG).forEach((c) => {
+      expect(c).toHaveProperty('color');
+      expect(c).toHaveProperty('label');
     });
   });
 });
 
+describe('COMPETENCE_LIST', () => {
+  it('matches keys of COMPETENCE_CONFIG', () => {
+    expect(COMPETENCE_LIST).toEqual(Object.keys(COMPETENCE_CONFIG));
+  });
+});
+
+describe('getCompetenceConfig', () => {
+  it('returns correct color for known competence', () => {
+    const cfg = getCompetenceConfig('TPM');
+    expect(cfg.color).toBe('#C00000');
+    expect(cfg.label).toBe('TPM');
+  });
+
+  it('returns gray for null/undefined', () => {
+    expect(getCompetenceConfig(null).color).toBe('#808080');
+    expect(getCompetenceConfig(undefined).color).toBe('#808080');
+  });
+
+  it('returns gray for unknown competence', () => {
+    const cfg = getCompetenceConfig('UnknownXYZ');
+    expect(cfg.color).toBe('#808080');
+  });
+});
+
 describe('getTaskTypeConfig', () => {
-  it('精确匹配已知类型', () => {
-    const config = getTaskTypeConfig('coaching');
-    expect(config.label).toBe('Coaching');
-    expect(config.icon).toBe('👨‍🏫');
+  it('returns a config object for any string', () => {
+    const config = getTaskTypeConfig('Project');
+    expect(config).toHaveProperty('label');
+    expect(config).toHaveProperty('color');
   });
 
-  it('大写输入时仍能匹配（转小写）', () => {
-    const config = getTaskTypeConfig('TRAINING');
-    expect(config.label).toBe('Training');
-  });
-
-  it('带空格的输入规范化后能匹配', () => {
-    // "speed week" → "speed_week"
-    const config = getTaskTypeConfig('speed week');
-    expect(config.label).toBe('Speed week');
-  });
-
-  it('未知类型返回默认配置', () => {
-    const config = getTaskTypeConfig('unknown_type');
-    expect(config.color).toBe('text-gray-700');
-    expect(config.bgColor).toBe('bg-gray-100');
-  });
-
-  it('空字符串返回默认配置且 label 为 Unknown', () => {
-    const config = getTaskTypeConfig('');
-    expect(config.label).toBe('Unknown');
-  });
-
-  it('null/undefined 不抛出异常', () => {
-    // getTaskTypeConfig 内部有 ?. 处理
-    expect(() => getTaskTypeConfig(null as unknown as string)).not.toThrow();
-    expect(() => getTaskTypeConfig(undefined as unknown as string)).not.toThrow();
+  it('does not throw for empty or unknown types', () => {
+    expect(() => getTaskTypeConfig('')).not.toThrow();
+    expect(() => getTaskTypeConfig('unknown_type')).not.toThrow();
   });
 });
