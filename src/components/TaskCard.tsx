@@ -1,5 +1,5 @@
 import { getTimeSlotLabel, getTimeSlotColor } from './TimeSlotSelector';
-import { getTaskTypeConfig } from '../lib/taskTypeConfig';
+import { getCompetenceConfig } from '../lib/taskTypeConfig';
 import type { TimeSlot } from '../lib/database.types';
 import { cn } from '../lib/utils';
 
@@ -28,6 +28,7 @@ interface TaskCardProps {
     id: string;
     task_name: string;
     task_type: string;
+    competence?: string;
     status?: 'planned' | 'in_progress' | 'completed' | 'cancelled'
            | 'pending_approval' | 'rejected' | 'confirmed' | 'employee_rejected';
     time_slot?: TimeSlot;
@@ -107,8 +108,13 @@ export function TaskCard({ task, onClick, className, showEmployee = false }: Tas
 export function TaskCardCompact({ task, onClick }: TaskCardProps) {
   const timeSlot = task.time_slot || 'FULL_DAY';
   const timeSlotLabel = getTimeSlotLabel(timeSlot);
-  const taskTypeConfig = getTaskTypeConfig(task.task_type);
+  const competenceConfig = getCompetenceConfig(task.competence);
   const statusConfig = getTaskStatusConfig(task.status);
+
+  // 根据能力域hex色生成半透明背景和边框
+  const hexColor = competenceConfig.color;
+  const bgStyle = hexColor + '22'; // ~13% opacity
+  const borderStyle = hexColor + '88'; // ~53% opacity
 
   // 根据时间槽显示不同的标记
   const getTimeIcon = () => {
@@ -125,6 +131,7 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
   // 生成 tooltip 内容
   const tooltipContent = `${task.task_name}
 类型: ${task.task_type}
+能力域: ${competenceConfig.label}
 状态: ${statusConfig.label}
 时间: ${timeSlotLabel} (${task.total_hours || 0}h)
 日期: ${task.start_date} ~ ${task.end_date}`;
@@ -133,16 +140,16 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
     <div
       onClick={onClick}
       title={tooltipContent}
-      className={cn(
-        'px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md hover:scale-105 border group',
-        taskTypeConfig.bgColor,
-        taskTypeConfig.borderColor,
-        taskTypeConfig.color
-      )}
+      style={{
+        backgroundColor: bgStyle,
+        borderColor: borderStyle,
+        color: hexColor,
+      }}
+      className="px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md hover:scale-105 border group"
     >
       <div className="flex items-center gap-1">
-        {/* 任务类型图标 */}
-        <span className="flex-shrink-0 text-sm">{taskTypeConfig.icon}</span>
+        {/* 任务类型首字母 */}
+        <span className="flex-shrink-0 font-bold text-[10px] opacity-80">{task.task_type.charAt(0)}</span>
         
         {/* 任务名称 */}
         <span className="truncate flex-1 font-medium group-hover:font-semibold">
@@ -169,4 +176,5 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
     </div>
   );
 }
+
 

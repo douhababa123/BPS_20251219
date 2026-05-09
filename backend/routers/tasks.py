@@ -37,7 +37,7 @@ def get_tasks(
                  CASE WHEN time_slot IN ('AM','PM') THEN 4 ELSE 8 END
                ) AS total_hours,
                status, notes, time_slot, created_at, updated_at,
-               rejection_reason, requester_id, rejected_by
+               rejection_reason, requester_id, rejected_by, competence
         FROM dbo.tasks
         WHERE 1=1
     """
@@ -82,6 +82,7 @@ def get_tasks(
             rejection_reason=row[14] if len(row) > 14 else None,
             requester_id=row[15] if len(row) > 15 else None,
             rejected_by=row[16] if len(row) > 16 else None,
+            competence=row[17] if len(row) > 17 else None,
         ))
 
     return tasks
@@ -99,7 +100,7 @@ def get_task(task_id: UUID, cursor=Depends(get_db)):
                  CASE WHEN time_slot IN ('AM','PM') THEN 4 ELSE 8 END
                ) AS total_hours,
                status, notes, time_slot, created_at, updated_at,
-               rejection_reason, requester_id, rejected_by
+               rejection_reason, requester_id, rejected_by, competence
         FROM dbo.tasks
         WHERE id = ?
     """, str(task_id))
@@ -126,6 +127,7 @@ def get_task(task_id: UUID, cursor=Depends(get_db)):
         rejection_reason=row[14] if len(row) > 14 else None,
         requester_id=row[15] if len(row) > 15 else None,
         rejected_by=row[16] if len(row) > 16 else None,
+        competence=row[17] if len(row) > 17 else None,
     )
 
 
@@ -154,8 +156,8 @@ def create_task(
             INSERT INTO dbo.tasks 
             (task_name, task_type, task_location, assigned_employee_id,
              start_date, end_date, hours_per_day, total_hours, status,
-             notes, time_slot)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             notes, time_slot, competence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             task.task_name,
             task.task_type,
@@ -167,7 +169,8 @@ def create_task(
             total_hours,
             task.status,
             task.notes,
-            task.time_slot
+            task.time_slot,
+            task.competence
         ))
         
         cursor.execute("SELECT CAST(@@IDENTITY AS VARCHAR(36))")
@@ -230,6 +233,9 @@ def update_task(
     if task.time_slot is not None:
         update_fields.append("time_slot = ?")
         params.append(task.time_slot)
+    if task.competence is not None:
+        update_fields.append("competence = ?")
+        params.append(task.competence)
     
     if not update_fields:
         return existing

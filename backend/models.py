@@ -391,6 +391,7 @@ class TaskBase(BaseModel):
     required_skills: Optional[List[int]] = None
     notes: Optional[str] = None
     time_slot: Optional[str] = None
+    competence: Optional[str] = None
     # 审批工作流字段
     rejection_reason: Optional[str] = None
     requester_id: Optional[UUID] = None
@@ -414,6 +415,7 @@ class TaskUpdate(BaseModel):
     required_skills: Optional[List[int]] = None
     notes: Optional[str] = None
     time_slot: Optional[str] = None
+    competence: Optional[str] = None
     rejection_reason: Optional[str] = None
     requester_id: Optional[UUID] = None
     rejected_by: Optional[str] = None

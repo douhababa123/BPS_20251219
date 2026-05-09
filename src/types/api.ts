@@ -313,6 +313,7 @@ export interface Task {
   required_skills?: number[];
   notes?: string;
   time_slot?: string;
+  competence?: string;
   // 审批工作流字段
   rejection_reason?: string;
   requester_id?: string;
@@ -334,6 +335,7 @@ export interface TaskCreate {
   required_skills?: number[];
   notes?: string;
   time_slot?: string;
+  competence?: string;
 }
 
 export interface TaskUpdate {
@@ -349,6 +351,7 @@ export interface TaskUpdate {
   required_skills?: number[];
   notes?: string;
   time_slot?: string;
+  competence?: string;
   rejection_reason?: string;
 }
 

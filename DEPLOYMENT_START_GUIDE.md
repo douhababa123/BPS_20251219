@@ -6,17 +6,18 @@
 
 在开始之前，请确认：
 
-- [ ] ✅ **Jetson 已准备好** (IP: 10.70.80.183)
+- [ ]  ✅ **Jetson 已准备好** (IP: 10.70.80.183)
+
   - 已安装 Ubuntu 18.04/20.04
   - 已安装 Docker 和 Docker Compose
   - 网络连接正常（能访问 SQL Server 10.88.43.154）
+- [ ]  ✅ **SQL Server 已准备好** (IP: 10.88.43.154)
 
-- [ ] ✅ **SQL Server 已准备好** (IP: 10.88.43.154)
   - 数据库 `DCCT_BPS_Debug` 已创建
   - 已导入 `SQLSERVER_SCHEMA.sql` 的表结构
   - 防火墙已开放 1433 端口
+- [ ]  ✅ **Windows 开发环境正常**
 
-- [ ] ✅ **Windows 开发环境正常**
   - Git 已安装
   - 可以 SSH 到 Jetson: `ssh user@10.70.80.183`
 
@@ -28,28 +29,33 @@
 
 ### 方案对比
 
-| 特性 | 方案 A: 快速手动部署 | 方案 B: CI/CD 自动化部署 |
-|-----|-------------------|---------------------|
-| **首次部署时间** | 30 分钟 | 40 分钟（含配置 CI/CD） |
-| **后续更新时间** | 20-30 分钟 | 2 分钟（自动化） |
-| **技术难度** | 简单 | 中等 |
-| **适用场景** | 一次性部署或偶尔更新 | 频繁迭代开发 |
-| **推荐度** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+
+| 特性             | 方案 A: 快速手动部署 | 方案 B: CI/CD 自动化部署 |
+| ---------------- | -------------------- | ------------------------ |
+| **首次部署时间** | 30 分钟              | 40 分钟（含配置 CI/CD）  |
+| **后续更新时间** | 20-30 分钟           | 2 分钟（自动化）         |
+| **技术难度**     | 简单                 | 中等                     |
+| **适用场景**     | 一次性部署或偶尔更新 | 频繁迭代开发             |
+| **推荐度**       | ⭐⭐⭐               | ⭐⭐⭐⭐⭐               |
 
 ### 我的推荐
 
 #### 🚀 如果您是初次部署：
+
 **推荐: 先用方案 A 快速部署，让系统跑起来**
 
 理由：
+
 1. 快速验证环境是否正常
 2. 先让系统运行起来，确保业务可用
 3. 稍后随时可以配置 CI/CD（不影响已部署的系统）
 
 #### 🔄 如果您计划频繁更新功能：
+
 **推荐: 直接用方案 B 配置 CI/CD**
 
 理由：
+
 1. 一次配置，长期受益
 2. 节省后续每次更新的 20+ 分钟
 3. 减少人为错误，提高稳定性
@@ -168,6 +174,7 @@ http://10.70.80.183
 ### 如果遇到问题
 
 参考详细的故障排除指南：
+
 - **部署失败**: 查看 `QUICKSTART_JETSON.md` 第 9 节
 - **数据库连接失败**: 查看 `DEPLOYMENT_TROUBLESHOOTING.md` 第 2 节
 - **Docker 问题**: 查看 `DEPLOYMENT_TROUBLESHOOTING.md` 第 3 节
@@ -378,19 +385,23 @@ cat CI_CD_QUICKSTART.md
 ## 📚 相关文档索引
 
 ### 快速开始
+
 - **[QUICKSTART_JETSON.md](QUICKSTART_JETSON.md)** - Jetson 部署详细步骤（30 分钟）
 - **[CI_CD_QUICKSTART.md](CI_CD_QUICKSTART.md)** - CI/CD 配置快速指南（10 分钟）
 - **[CI_CD_EXPLAINED.md](CI_CD_EXPLAINED.md)** - CI/CD 概念详解
 
 ### 完整文档
+
 - **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - 完整部署指南（所有细节）
 - **[CI_CD_GUIDE.md](CI_CD_GUIDE.md)** - CI/CD 完整技术文档
 
 ### 故障排除
+
 - **[DEPLOYMENT_TROUBLESHOOTING.md](DEPLOYMENT_TROUBLESHOOTING.md)** - 部署问题解决
 - **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - 部署检查清单
 
 ### 脚本文件
+
 - **[deploy.sh](deploy.sh)** - 首次部署脚本
 - **[update.sh](update.sh)** - 更新部署脚本（含蓝绿部署）
 - **[monitor.sh](monitor.sh)** - 监控脚本
@@ -401,14 +412,16 @@ cat CI_CD_QUICKSTART.md
 
 ### Q1: 我应该选择哪个方案？
 
-**A**: 
+**A**:
+
 - **新手 / 不确定**: 选方案 A（快速手动部署）
 - **已有经验 / 频繁更新**: 选方案 B（CI/CD 自动化）
 - **最佳实践**: 先用方案 A 部署，稳定后配置方案 B
 
 ### Q2: 两个方案可以切换吗？
 
-**A**: 
+**A**:
+
 - 可以！先用方案 A 手动部署，后续随时可以配置 CI/CD
 - 配置 CI/CD 不会影响已部署的系统
 - CI/CD 配置后，仍然可以手动执行 `bash update.sh`
@@ -416,12 +429,14 @@ cat CI_CD_QUICKSTART.md
 ### Q3: deploy.sh 和 update.sh 有什么区别？
 
 **A**:
+
 - `deploy.sh`: 首次部署用（创建环境、初始化配置）
 - `update.sh`: 后续更新用（蓝绿部署、自动备份、自动回滚）
 
 ### Q4: 如果部署失败怎么办？
 
 **A**:
+
 1. 查看错误日志: `docker-compose logs`
 2. 参考故障排除文档: `DEPLOYMENT_TROUBLESHOOTING.md`
 3. 使用诊断脚本: `bash diagnose.sh`
@@ -429,6 +444,7 @@ cat CI_CD_QUICKSTART.md
 ### Q5: 需要在 Jetson 上安装什么软件？
 
 **A**:
+
 - Docker (20.10+)
 - Docker Compose (1.29+)
 - Git
@@ -467,3 +483,21 @@ cat CI_CD_QUICKSTART.md
 ---
 
 **祝部署顺利！🚀**
+
+[部署到 Jetson](https://github.com/douhababa123/BPS_20251219/actions/runs/22390243062/job/64810267261#logs)
+
+Started 25s **ago**
+
+Evaluating deploy.if
+
+Evaluating: (success() && (((github.event\_name == 'push') && (((needs.test.result == 'success') || (needs.test.result == 'failure'))))))
+
+Expanded: (true && (('push' == 'push') && (('success' == 'success') || (needs.test.result == 'failure'))))
+
+Result: true
+
+Requested labels: self-hosted, linux, arm64
+
+Job defined at: douhababa123/BPS\_20251219/.github/workflows/jetson-deploy.yml@refs/heads/DEV
+
+Waiting for a runner to pick up this job...

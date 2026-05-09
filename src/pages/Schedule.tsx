@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { tasksService, employeesService, taskTypesService, factoriesService, scheduleNotificationsService } from '../services';
+import { tasksService, employeesService, scheduleNotificationsService } from '../services';
+import { TASK_TYPES, TASK_LOCATIONS, COMPETENCE_CONFIG, getCompetenceConfig } from '../lib/taskTypeConfig';
 import { taskWorkflowService } from '../services/task-workflow.service';
 import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -38,9 +39,6 @@ const TASK_STATUS_CONFIG = {
   confirmed: { label: '已确认', color: 'bg-teal-100 text-teal-700 border-teal-300' },
   employee_rejected: { label: '工程师拒绝', color: 'bg-purple-100 text-purple-700 border-purple-300' },
 };
-
-// 预设颜色
-const COLORS = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#6366F1', '#64748B', '#14B8A6', '#EC4899'];
 
 export function Schedule() {
   const queryClient = useQueryClient();
@@ -84,18 +82,6 @@ export function Schedule() {
     isLoading: isEmployeesLoading,
     count: employeeList.length,
     error: employeesError
-  });
-
-  const { data: taskTypes = [] } = useQuery({
-    queryKey: ['task-types'],
-    queryFn: () => taskTypesService.getAll(),
-    retry: 1,
-  });
-
-  const { data: factories = [] } = useQuery({
-    queryKey: ['factories'],
-    queryFn: () => factoriesService.getAll(),
-    retry: 1,
   });
 
   const [year, month] = selectedDate.split('-').map(Number);
@@ -276,6 +262,19 @@ export function Schedule() {
       statsMap.set(task.task_location, existing);
     });
 
+    return Array.from(statsMap.values());
+  }, [filteredTasks]);
+
+  // 能力域统计（用于图表，带hex颜色）
+  const competenceStats = useMemo(() => {
+    const statsMap = new Map<string, { name: string; value: number; color: string }>();
+    filteredTasks.forEach((task: any) => {
+      const key = task.competence || 'Others';
+      const cfg = getCompetenceConfig(key);
+      const existing = statsMap.get(key) || { name: cfg.label, value: 0, color: cfg.color };
+      existing.value += task.total_hours || 0;
+      statsMap.set(key, existing);
+    });
     return Array.from(statsMap.values());
   }, [filteredTasks]);
 
@@ -629,7 +628,7 @@ export function Schedule() {
             selectedDate={selectedDate}
             selectedEmployeeIds={selectedEmployeeIds}
             employees={employees}
-            typeStats={typeStats}
+            competenceStats={competenceStats}
             locationStats={locationStats}
             periodType={periodType}
             setPeriodType={setPeriodType}
@@ -659,8 +658,6 @@ export function Schedule() {
       {showTaskForm && (
         <TaskFormModal
           employees={employees}
-          taskTypes={taskTypes}
-          factories={factories}
           prefilledData={prefilledTaskData}
           onClose={() => {
             setShowTaskForm(false);
@@ -678,8 +675,6 @@ export function Schedule() {
       {editingTask && (
         <TaskFormModal
           employees={employees}
-          taskTypes={taskTypes}
-          factories={factories}
           editingTask={editingTask}
           onClose={() => setEditingTask(null)}
           onSuccess={() => {
@@ -773,7 +768,7 @@ function TeamView({
   selectedDate,
   selectedEmployeeIds,
   employees,
-  typeStats,
+  competenceStats,
   locationStats,
   periodType,
   setPeriodType,
@@ -902,10 +897,10 @@ function TeamView({
 
       {/* 分析图表 */}
       <div className="grid grid-cols-2 gap-4">
-        {/* 任务类型占比 */}
+        {/* 能力域占比 */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-900">任务类型占比 Task Types</h3>
+            <h3 className="text-lg font-bold text-gray-900">能力域占比 Competence</h3>
             <div className="flex gap-1 text-xs">
               {(['month', 'quarter', 'year'] as const).map(period => (
                 <button
@@ -926,7 +921,7 @@ function TeamView({
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie
-                data={typeStats}
+                data={competenceStats}
                 dataKey="value"
                 nameKey="name"
                 cx="50%"
@@ -934,8 +929,8 @@ function TeamView({
                 outerRadius={100}
                 label
               >
-                {typeStats.map((_: any, index: number) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                {competenceStats.map((entry: any) => (
+                  <Cell key={`cell-${entry.name}`} fill={entry.color} />
                 ))}
               </Pie>
               <Tooltip formatter={(value: any) => `${value}h`} />
@@ -969,13 +964,15 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
   const selectedEmp = employees.find((e: any) => e.id === selectedEmpId);
   const empTasks = tasks.filter((t: any) => t.assigned_employee_id === selectedEmpId);
 
-  // 个人任务类型统计
-  const empTypeStats = useMemo(() => {
-    const statsMap = new Map();
+  // 个人能力域统计（带hex颜色）
+  const empCompetenceStats = useMemo(() => {
+    const statsMap = new Map<string, { name: string; value: number; color: string }>();
     empTasks.forEach((task: any) => {
-      const existing = statsMap.get(task.task_type) || { name: task.task_type, value: 0 };
+      const key = task.competence || 'Others';
+      const cfg = getCompetenceConfig(key);
+      const existing = statsMap.get(key) || { name: cfg.label, value: 0, color: cfg.color };
       existing.value += task.total_hours || 0;
-      statsMap.set(task.task_type, existing);
+      statsMap.set(key, existing);
     });
     return Array.from(statsMap.values());
   }, [empTasks]);
@@ -1054,11 +1051,11 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
           {/* 个人任务占比 */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">任务类型占比</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">能力域占比 Competence</h3>
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie
-                    data={empTypeStats}
+                    data={empCompetenceStats}
                     dataKey="value"
                     nameKey="name"
                     cx="50%"
@@ -1066,8 +1063,8 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
                     outerRadius={100}
                     label
                   >
-                    {empTypeStats.map((_: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    {empCompetenceStats.map((entry: any) => (
+                      <Cell key={`cell-${entry.name}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: any) => `${value}h`} />
@@ -1090,7 +1087,7 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
                     label
                   >
                     {empLocationStats.map((_: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={['#3B82F6','#8B5CF6','#10B981','#F59E0B','#EF4444','#6366F1','#64748B','#14B8A6','#EC4899'][index % 9]} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: any) => `${value}h`} />
@@ -1135,7 +1132,7 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
 }
 
 // 任务表单弹窗
-function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilledData, onClose, onSuccess, onUpdate }: any) {
+function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSuccess, onUpdate }: any) {
   const queryClient = useQueryClient();
   const { user } = useNewAuth();
   const isEditMode = !!editingTask;
@@ -1143,8 +1140,8 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
   const [formData, setFormData] = useState({
     task_name: editingTask?.task_name || '',
     task_type: editingTask?.task_type || '',
-    custom_task_type: '',
     task_location: editingTask?.task_location || '',
+    competence: editingTask?.competence || '',
     assigned_employee_id: editingTask?.assigned_employee_id || prefilledData?.employeeId || '',
     start_date: editingTask?.start_date || prefilledData?.date || '',
     end_date: editingTask?.end_date || prefilledData?.date || '',
@@ -1152,7 +1149,6 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
     status: (editingTask?.status || 'planned') as 'planned' | 'in_progress' | 'completed' | 'cancelled',
     notes: editingTask?.notes || '',
   });
-  const [showCustomType, setShowCustomType] = useState(false);
 
   const createTaskMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -1183,8 +1179,6 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const taskType = showCustomType ? formData.custom_task_type : formData.task_type;
 
     // 计算工时
     const hoursPerDay = formData.time_slot === 'FULL_DAY' ? 8 : 4;
@@ -1195,8 +1189,9 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
 
     const taskData = {
       task_name: formData.task_name,
-      task_type: taskType,
+      task_type: formData.task_type,
       task_location: formData.task_location,
+      competence: formData.competence || null,
       assigned_employee_id: formData.assigned_employee_id || null,
       start_date: formData.start_date,
       end_date: formData.end_date,
@@ -1210,10 +1205,8 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
     };
     
     if (isEditMode && onUpdate) {
-      // 编辑模式：更新任务
       onUpdate(editingTask.id, taskData);
     } else {
-      // 新建模式：创建任务
       createTaskMutation.mutate(taskData);
     }
   };
@@ -1252,50 +1245,17 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
             <label className="block text-sm font-medium text-gray-700 mb-1">
               任务类型 <span className="text-red-500">*</span>
             </label>
-            <div className="flex gap-2">
-              {!showCustomType ? (
-                <>
-                  <select
-                    required
-                    value={formData.task_type}
-                    onChange={(e) => setFormData({ ...formData, task_type: e.target.value })}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">请选择...</option>
-                    {taskTypes.map((type: any) => (
-                      <option key={type.id} value={type.code}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowCustomType(true)}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    自定义
-                  </button>
-                </>
-              ) : (
-                <>
-                  <input
-                    type="text"
-                    required
-                    value={formData.custom_task_type}
-                    onChange={(e) => setFormData({ ...formData, custom_task_type: e.target.value })}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="输入自定义类型"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCustomType(false)}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                  >
-                    取消
-                  </button>
-                </>
-              )}
-            </div>
+            <select
+              required
+              value={formData.task_type}
+              onChange={(e) => setFormData({ ...formData, task_type: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">请选择...</option>
+              {TASK_TYPES.map(type => (
+                <option key={type.code} value={type.code}>{type.label}</option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -1309,10 +1269,25 @@ function TaskFormModal({ employees, taskTypes, factories, editingTask, prefilled
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">请选择...</option>
-              {factories.map((factory: any) => (
-                <option key={factory.id} value={factory.code}>
-                  {factory.name}
-                </option>
+              {TASK_LOCATIONS.map(loc => (
+                <option key={loc} value={loc}>{loc}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              能力域 Competence <span className="text-red-500">*</span>
+            </label>
+            <select
+              required
+              value={formData.competence}
+              onChange={(e) => setFormData({ ...formData, competence: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">请选择能力域...</option>
+              {Object.entries(COMPETENCE_CONFIG).map(([key, cfg]) => (
+                <option key={key} value={key}>{cfg.label}</option>
               ))}
             </select>
           </div>
