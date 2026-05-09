@@ -174,7 +174,7 @@ def create_task(
             task.competence
         ))
         
-        new_id = cursor.fetchone()[0]
+        new_id = str(cursor.fetchone()[0])
         cursor.commit()
         
         return get_task(UUID(new_id), cursor)
