@@ -157,6 +157,7 @@ def create_task(
             (task_name, task_type, task_location, assigned_employee_id,
              start_date, end_date, hours_per_day, total_hours, status,
              notes, time_slot, competence)
+            OUTPUT INSERTED.id
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             task.task_name,
@@ -173,7 +174,6 @@ def create_task(
             task.competence
         ))
         
-        cursor.execute("SELECT CAST(@@IDENTITY AS VARCHAR(36))")
         new_id = cursor.fetchone()[0]
         cursor.commit()
         

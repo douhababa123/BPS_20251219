@@ -133,7 +133,12 @@ export function Schedule() {
   // 删除任务 mutation
   const deleteTaskMutation = useMutation({
     mutationFn: (taskId: string) => tasksService.delete(taskId),
-    onSuccess: () => {
+    onSuccess: (_: any, taskId: string) => {
+      // 直接从缓存中移除，立即反映删除
+      queryClient.setQueriesData({ queryKey: ['tasks'] }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.filter((t: any) => t.id !== taskId);
+      });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
@@ -142,7 +147,12 @@ export function Schedule() {
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: any }) => 
       tasksService.update(id, updates),
-    onSuccess: () => {
+    onSuccess: (updatedTask: any) => {
+      // 直接替换缓存中的旧任务，立即反映更新
+      queryClient.setQueriesData({ queryKey: ['tasks'] }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((t: any) => t.id === updatedTask.id ? updatedTask : t);
+      });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
@@ -1154,10 +1164,18 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
       
       return task;
     },
-    onSuccess: () => {
+    onSuccess: (newTask: any) => {
+      // 将新任务直接插入缓存，立即显示，无需等待重新请求
+      queryClient.setQueriesData({ queryKey: ['tasks'] }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return [...old, newTask];
+      });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['notification-count'] });
       onSuccess();
+    },
+    onError: (e: any) => {
+      alert(`创建任务失败: ${e?.response?.data?.detail || e?.message || '未知错误'}`);
     },
   });
 
