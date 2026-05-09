@@ -23,6 +23,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _resolve_modifier_employee_id(cursor, current_user: dict, requested_employee_id: str) -> str:
+    """Resolve the modifier to a valid employees.id, tolerating stale client payloads."""
+    cursor.execute(
+        "SELECT id FROM dbo.employees WHERE id = ?",
+        requested_employee_id
+    )
+    existing_employee = cursor.fetchone()
+    if existing_employee:
+        return str(existing_employee[0])
+
+    cursor.execute("""
+        SELECT e.id
+        FROM dbo.employees e
+        INNER JOIN dbo.users u ON u.email = e.email
+        WHERE u.id = ?
+    """, current_user.get("user_id"))
+    current_employee = cursor.fetchone()
+    if current_employee:
+        return str(current_employee[0])
+
+    raise HTTPException(
+        status_code=400,
+        detail="当前登录账号未绑定员工记录，无法创建计划变更通知"
+    )
+
+
 @router.get("/", response_model=List[ScheduleChangeNotification])
 def get_notifications(
     employee_id: Optional[UUID] = None,
@@ -103,6 +129,12 @@ def create_notification(
 ):
     """创建计划变更通知"""
     try:
+        modifier_employee_id = _resolve_modifier_employee_id(
+            cursor,
+            current_user,
+            str(notification.modified_by_employee_id)
+        )
+
         cursor.execute("""
             INSERT INTO dbo.schedule_change_notifications 
             (task_id, affected_employee_id, modified_by_employee_id,
@@ -112,7 +144,7 @@ def create_notification(
         """, (
             str(notification.task_id),
             str(notification.affected_employee_id),
-            str(notification.modified_by_employee_id),
+            modifier_employee_id,
             notification.notification_type,
             notification.change_description,
             notification.is_read
@@ -123,6 +155,9 @@ def create_notification(
         
         return get_notification(UUID(new_id), cursor)
     
+    except HTTPException:
+        cursor.rollback()
+        raise
     except Exception as e:
         cursor.rollback()
         logger.error(f"创建通知失败: {str(e)}")
