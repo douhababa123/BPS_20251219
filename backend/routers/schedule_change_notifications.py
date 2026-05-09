@@ -107,6 +107,7 @@ def create_notification(
             INSERT INTO dbo.schedule_change_notifications 
             (task_id, affected_employee_id, modified_by_employee_id,
              notification_type, change_description, is_read)
+            OUTPUT INSERTED.id
             VALUES (?, ?, ?, ?, ?, ?)
         """, (
             str(notification.task_id),
@@ -117,8 +118,7 @@ def create_notification(
             notification.is_read
         ))
         
-        cursor.execute("SELECT CAST(@@IDENTITY AS VARCHAR(36))")
-        new_id = cursor.fetchone()[0]
+        new_id = str(cursor.fetchone()[0])
         cursor.commit()
         
         return get_notification(UUID(new_id), cursor)

@@ -15,7 +15,7 @@ class ScheduleNotificationsService extends BaseService<
   ScheduleChangeNotificationUpdate
 > {
   constructor() {
-    super('/notifications');
+    super('/schedule-change-notifications');
   }
 
   /**
