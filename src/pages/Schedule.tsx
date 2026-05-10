@@ -130,6 +130,20 @@ export function Schedule() {
     isTasksLoading
   });
 
+  const normalizedTasks = useMemo(() => {
+    return (tasks || []).map((task: any) => {
+      const assignedEmployee = employeeList.find((emp: any) => emp.id === task.assigned_employee_id);
+
+      return {
+        ...task,
+        task_name: task.task_name || task.name || '未命名任务',
+        task_type: task.task_type || '未分类',
+        employee_name: task.employee_name || assignedEmployee?.name || '',
+        assigned_employee_email: task.assigned_employee_email || assignedEmployee?.email || '',
+      };
+    });
+  }, [tasks, employeeList]);
+
   // 删除任务 mutation
   const deleteTaskMutation = useMutation({
     mutationFn: (taskId: string) => tasksService.delete(taskId),
@@ -181,16 +195,16 @@ export function Schedule() {
   // 我的待确认任务：status=planned 且 assigned_employee_id 与当前用户匹配（通过邮箱）
   const myPlannedTasks = useMemo(() => {
     if (!user) return [];
-    return tasks.filter((t: any) =>
+    return normalizedTasks.filter((t: any) =>
       t.status === 'planned' && t.assigned_employee_email === user.email
     );
-  }, [tasks, user]);
+  }, [normalizedTasks, user]);
 
   // Admin 待审批任务
   const pendingApprovalTasks = useMemo(() => {
     if (!isAdmin) return [];
-    return tasks.filter((t: any) => t.status === 'pending_approval');
-  }, [tasks, isAdmin]);
+    return normalizedTasks.filter((t: any) => t.status === 'pending_approval');
+  }, [normalizedTasks, isAdmin]);
 
   // Admin 审批 / 拒绝 mutation
   const [adminRejectModal, setAdminRejectModal] = useState<{ taskId: string; taskName: string } | null>(null);
@@ -215,7 +229,7 @@ export function Schedule() {
 
   // 筛选任务（增加状态筛选）
   const filteredTasks = useMemo(() => {
-    let result = tasks;
+    let result = normalizedTasks;
     
     // 员工筛选
     if (selectedEmployeeIds.length > 0) {
@@ -228,7 +242,7 @@ export function Schedule() {
     }
     
     return result;
-  }, [tasks, selectedEmployeeIds, statusFilter]);
+  }, [normalizedTasks, selectedEmployeeIds, statusFilter]);
 
   // 计算统计数据
   const statistics = useMemo(() => {

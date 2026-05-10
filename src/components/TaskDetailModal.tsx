@@ -29,6 +29,7 @@ export function TaskDetailModal({ task, onClose, onEdit, onDelete }: TaskDetailM
   const timeSlotLabel = getTimeSlotLabel(timeSlot);
   const timeSlotColorClass = getTimeSlotColor(timeSlot);
   const statusConfig = getTaskStatusConfig(task.status);
+  const taskTitle = task.task_name || task.name || '未命名任务';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -36,7 +37,7 @@ export function TaskDetailModal({ task, onClose, onEdit, onDelete }: TaskDetailM
         {/* 头部 */}
         <div className="flex items-start justify-between mb-6">
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">{task.task_name}</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{taskTitle}</h2>
             <div className="flex items-center gap-2">
               <span className={cn('inline-block px-3 py-1 rounded-full text-sm font-medium', timeSlotColorClass)}>
                 {timeSlotLabel}
