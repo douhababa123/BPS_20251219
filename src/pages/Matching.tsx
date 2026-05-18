@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { employeesService } from '../services';
 import { matchingApi } from '../lib/matchingApi';
 import { TASK_TYPES, LOCATIONS, ROLES, ROLE_THRESHOLDS } from '../lib/constants';
 import { taskTypesService } from '../services';
@@ -114,9 +115,7 @@ export function Matching() {
   const { data: users } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      // 获取员工列表作为用户列表
-      const response = await fetch('http://localhost:8000/api/employees');
-      const employees = await response.json();
+      const employees = await employeesService.getAll();
       return employees.map((emp: any) => ({
         id: emp.id,
         name: emp.employee_name || emp.name,
