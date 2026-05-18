@@ -36,6 +36,51 @@ export function Matching() {
   const [currentTaskInfo, setCurrentTaskInfo] = useState<any>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null); // 内联确认中的候选人 userId
   const [_lastSubmittedStatus, setLastSubmittedStatus] = useState<'pending_approval' | 'planned' | null>(null);
+  const [submissionFeedback, setSubmissionFeedback] = useState<{
+    taskId: string;
+    taskName: string;
+    employeeName: string;
+    status: 'pending_approval' | 'planned';
+  } | null>(null);
+
+  const focusSubmittedFeedback = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const pushTaskIntoHistory = (data: {
+    taskId: string;
+    taskName: string;
+    taskType: string;
+    location: string;
+    employeeId: string;
+    employeeName: string;
+    startDate: string;
+    endDate: string;
+    status: 'pending_approval' | 'planned';
+  }) => {
+    queryClient.setQueryData(['matching-history'], (old: any) => {
+      const previous = Array.isArray(old) ? old : [];
+      const withoutCurrent = previous.filter((item: any) => item.id !== data.taskId);
+
+      return [
+        {
+          id: data.taskId,
+          taskName: data.taskName,
+          taskType: data.taskType,
+          location: data.location,
+          employeeId: data.employeeId,
+          employeeName: data.employeeName,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          createdAt: new Date().toISOString(),
+          status: data.status,
+          rejectionReason: null,
+          requesterName: user?.email || '',
+        },
+        ...withoutCurrent,
+      ];
+    });
+  };
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm({
     resolver: zodResolver(matchingSchema),
@@ -127,13 +172,31 @@ export function Matching() {
         notes: `通过智能匹配系统分配 (综合评分: ${(data.candidate.finalScore * 100).toFixed(0)}%)`
       });
     },
-    onSuccess: () => {
+    onSuccess: (response, variables) => {
       console.log('✅ [提交成功] 正在刷新任务看板数据...');
       setLastSubmittedStatus('pending_approval');
+      setSubmissionFeedback({
+        taskId: response.taskId,
+        taskName: variables.taskInfo.name,
+        employeeName: variables.candidate.name,
+        status: 'pending_approval',
+      });
+      pushTaskIntoHistory({
+        taskId: response.taskId,
+        taskName: variables.taskInfo.name,
+        taskType: variables.taskInfo.type,
+        location: variables.taskInfo.location,
+        employeeId: String(variables.candidate.userId),
+        employeeName: variables.candidate.name,
+        startDate: variables.taskInfo.startDate,
+        endDate: variables.taskInfo.endDate,
+        status: 'pending_approval',
+      });
       setConfirmingId(null);
       queryClient.invalidateQueries({ queryKey: ['matching-history'] });
       console.log('✅ [提交成功] 缓存已失效，切换到看板标签...');
       setActiveTab('kanban');
+      focusSubmittedFeedback();
       console.log('✅ [提交成功] 已切换到看板标签');
     },
   });
@@ -150,11 +213,29 @@ export function Matching() {
         notes: `强制指派(智能匹配系统) (综合评分: ${(data.candidate.finalScore * 100).toFixed(0)}%)`
       });
     },
-    onSuccess: () => {
+    onSuccess: (response, variables) => {
       setLastSubmittedStatus('planned');
+      setSubmissionFeedback({
+        taskId: response.taskId,
+        taskName: variables.taskInfo.name,
+        employeeName: variables.candidate.name,
+        status: 'planned',
+      });
+      pushTaskIntoHistory({
+        taskId: response.taskId,
+        taskName: variables.taskInfo.name,
+        taskType: variables.taskInfo.type,
+        location: variables.taskInfo.location,
+        employeeId: String(variables.candidate.userId),
+        employeeName: variables.candidate.name,
+        startDate: variables.taskInfo.startDate,
+        endDate: variables.taskInfo.endDate,
+        status: 'planned',
+      });
       setConfirmingId(null);
       queryClient.invalidateQueries({ queryKey: ['matching-history'] });
       setActiveTab('kanban');
+      focusSubmittedFeedback();
     },
   });
 
@@ -282,6 +363,36 @@ export function Matching() {
 
   return (
     <div className="space-y-6">
+      {submissionFeedback && (
+        <div className={cn(
+          'rounded-2xl border px-5 py-4 flex items-start justify-between gap-4',
+          submissionFeedback.status === 'pending_approval'
+            ? 'bg-amber-50 border-amber-200 text-amber-800'
+            : 'bg-green-50 border-green-200 text-green-800'
+        )}>
+          <div>
+            <p className="text-sm font-bold">
+              {submissionFeedback.status === 'pending_approval' ? '任务申请已提交，当前状态：待审批' : '任务已直接写入日程，当前状态：待确认'}
+            </p>
+            <p className="text-sm mt-1">
+              {submissionFeedback.taskName} {'->'} {submissionFeedback.employeeName}
+            </p>
+            <p className="text-xs mt-1 opacity-80">任务编号: {submissionFeedback.taskId}</p>
+            <p className="text-xs mt-2 font-medium">
+              {submissionFeedback.status === 'pending_approval'
+                ? '下一步：等待 Site PS 审批，审批通过后申请人和工程师都会收到通知。'
+                : '下一步：等待工程师在日程管理中确认接受。'}
+            </p>
+          </div>
+          <button
+            onClick={() => setSubmissionFeedback(null)}
+            className="text-xs px-3 py-1 rounded-lg border border-current/20 hover:bg-white/40 transition-colors"
+          >
+            关闭
+          </button>
+        </div>
+      )}
+
       {/* Tab 切换 */}
       <div className="bg-white rounded-2xl p-2 border border-gray-100 shadow-sm flex gap-2">
         <button
@@ -911,14 +1022,25 @@ export function Matching() {
 
       {/* 任务看板视图 */}
       {activeTab === 'kanban' && (
-        <TaskKanban tasks={matchingHistory} />
+        <TaskKanban tasks={matchingHistory} submissionFeedback={submissionFeedback} />
       )}
     </div>
   );
 }
 
 // 任务看板组件
-function TaskKanban({ tasks }: { tasks: any[] }) {
+function TaskKanban({
+  tasks,
+  submissionFeedback,
+}: {
+  tasks: any[];
+  submissionFeedback: {
+    taskId: string;
+    taskName: string;
+    employeeName: string;
+    status: 'pending_approval' | 'planned';
+  } | null;
+}) {
   const queryClient = useQueryClient();
   const { user } = useNewAuth();
   const isAdmin = user?.role === 'admin';
@@ -1013,13 +1135,24 @@ function TaskKanban({ tasks }: { tasks: any[] }) {
 
   const dbStatusLabel: Record<string, string> = {
     pending_approval: '待审批',
-    planned: '待确认',
+    planned: '待工程师确认',
     confirmed: '已确认',
     in_progress: '进行中',
     completed: '已完成',
     rejected: '已拒绝',
     employee_rejected: '工程师拒绝',
     cancelled: '已取消',
+  };
+
+  const nextStepLabel: Record<string, string> = {
+    pending_approval: '下一步：等待 Site PS 审批',
+    planned: '下一步：等待工程师在日程管理中接受或拒绝',
+    confirmed: '下一步：工程师已接受，流程完成',
+    in_progress: '下一步：任务执行中',
+    completed: '下一步：任务已完成',
+    rejected: '下一步：申请已结束，可修改后重新提交',
+    employee_rejected: '下一步：工程师已退回，请重新分配或调整需求',
+    cancelled: '下一步：任务已取消',
   };
 
   const currentTasks = tasksByStatus[selectedTab];
@@ -1074,6 +1207,27 @@ function TaskKanban({ tasks }: { tasks: any[] }) {
           )}
         </div>
 
+        {submissionFeedback && (
+          <div className={cn(
+            'mx-4 mt-4 rounded-xl border px-4 py-3',
+            submissionFeedback.status === 'pending_approval'
+              ? 'bg-amber-50 border-amber-200 text-amber-800'
+              : 'bg-green-50 border-green-200 text-green-800'
+          )}>
+            <p className="text-sm font-bold">
+              {submissionFeedback.status === 'pending_approval' ? '你刚提交的任务申请已进入待审批' : '你刚提交的任务已进入待确认'}
+            </p>
+            <p className="text-sm mt-1">
+              {submissionFeedback.taskName} {'->'} {submissionFeedback.employeeName}
+            </p>
+            <p className="text-xs mt-2">
+              {submissionFeedback.status === 'pending_approval'
+                ? '下一步：等待 Site PS 审批。'
+                : '下一步：等待工程师确认接受。'}
+            </p>
+          </div>
+        )}
+
         <div className="p-4">
           {currentTasks.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
@@ -1119,6 +1273,9 @@ function TaskKanban({ tasks }: { tasks: any[] }) {
                           拒绝原因: {task.rejectionReason}
                         </p>
                       )}
+                      <p className="mt-2 text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
+                        {nextStepLabel[task.status] || '下一步：请关注后续状态变化'}
+                      </p>
                     </div>
 
                     {/* 操作按钮 */}

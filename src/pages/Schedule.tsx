@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { tasksService, employeesService, scheduleNotificationsService } from '../services';
+import { tasksService, employeesService, scheduleNotificationsService, taskTypesService, competencyDefinitionsService } from '../services';
 import { TASK_TYPES, TASK_LOCATIONS, COMPETENCE_CONFIG, getCompetenceConfig } from '../lib/taskTypeConfig';
 import { taskWorkflowService } from '../services/task-workflow.service';
 import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
@@ -1144,7 +1144,7 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
   const queryClient = useQueryClient();
   const { user } = useNewAuth();
   const isEditMode = !!editingTask;
-  
+
   const [formData, setFormData] = useState({
     task_name: editingTask?.task_name || '',
     task_type: editingTask?.task_type || '',
@@ -1158,6 +1158,56 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
     notes: editingTask?.notes || '',
   });
 
+  const { data: taskTypes = [] } = useQuery({
+    queryKey: ['schedule-task-types'],
+    queryFn: () => taskTypesService.getAll(),
+  });
+
+  const { data: competencyDefinitions = [] } = useQuery({
+    queryKey: ['schedule-competency-definitions'],
+    queryFn: () => competencyDefinitionsService.getAll(),
+  });
+
+  const availableTaskTypes = useMemo(() => {
+    const apiOptions = taskTypes
+      .filter((item: any) => item.is_active !== false)
+      .map((item: any) => ({ value: item.code, label: item.name || item.code }));
+
+    const fallbackOptions = TASK_TYPES.map((item) => ({ value: item.code, label: item.label }));
+    const merged = apiOptions.length > 0 ? apiOptions : fallbackOptions;
+
+    if (formData.task_type && !merged.some((item) => item.value === formData.task_type)) {
+      return [{ value: formData.task_type, label: formData.task_type }, ...merged];
+    }
+
+    return merged;
+  }, [taskTypes, formData.task_type]);
+
+  const availableCompetences = useMemo(() => {
+    const apiValues = Array.from(
+      new Set(
+        competencyDefinitions
+          .map((item: any) => item.competency_type)
+          .filter((value: string | undefined): value is string => Boolean(value && value.trim()))
+      )
+    ).sort((left, right) => left.localeCompare(right, 'zh-CN'));
+
+    const fallbackValues = Object.entries(COMPETENCE_CONFIG).map(([key, cfg]) => ({
+      value: key,
+      label: cfg.label,
+    }));
+
+    const merged = apiValues.length > 0
+      ? apiValues.map((value) => ({ value, label: value }))
+      : fallbackValues;
+
+    if (formData.competence && !merged.some((item) => item.value === formData.competence)) {
+      return [{ value: formData.competence, label: formData.competence }, ...merged];
+    }
+
+    return merged;
+  }, [competencyDefinitions, formData.competence]);
+  
   const createTaskMutation = useMutation({
     mutationFn: async (data: any) => {
       const task: any = await tasksService.create(data);
@@ -1276,8 +1326,8 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">请选择...</option>
-              {TASK_TYPES.map(type => (
-                <option key={type.code} value={type.code}>{type.label}</option>
+              {availableTaskTypes.map((type) => (
+                <option key={type.value} value={type.value}>{type.label}</option>
               ))}
             </select>
           </div>
@@ -1310,8 +1360,8 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">请选择能力域...</option>
-              {Object.entries(COMPETENCE_CONFIG).map(([key, cfg]) => (
-                <option key={key} value={key}>{cfg.label}</option>
+              {availableCompetences.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
               ))}
             </select>
           </div>

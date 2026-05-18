@@ -335,18 +335,28 @@ def approve_task(
             WHERE id = ?
         """, str(task_id))
 
-        # 通知被指派工程师
-        from .notifications import create_notification, get_all_admin_ids
+        # 通知被指派工程师 + 申请人
+        from .notifications import create_notification
+        assignee_user_id = None
         if task['assigned_employee_id']:
-            user_id = _find_user_by_employee_id(cursor, task['assigned_employee_id'])
-            if user_id:
+            assignee_user_id = _find_user_by_employee_id(cursor, task['assigned_employee_id'])
+            if assignee_user_id:
                 create_notification(
-                    cursor, user_id,
+                    cursor, assignee_user_id,
                     'task_approved',
                     f'您有新任务待确认：{task["task_name"]}',
                     f'您的任务申请已通过审批，任务：{task["task_name"]}，请前往日程页确认接受。',
                     str(task_id)
                 )
+
+        if task['requester_id'] and task['requester_id'] != assignee_user_id:
+            create_notification(
+                cursor, task['requester_id'],
+                'task_approved',
+                f'任务申请已通过审批：{task["task_name"]}',
+                f'您的任务申请《{task["task_name"]}》已通过 Site PS 审批，当前正在等待工程师确认接受。',
+                str(task_id)
+            )
 
         cursor.commit()
         logger.info(f"✅ 任务审批通过: {task['task_name']} ({task_id})")
