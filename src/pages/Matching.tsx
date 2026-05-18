@@ -25,6 +25,48 @@ const matchingSchema = z.object({
   suggestedUserId: z.number().optional(),
 });
 
+type WorkflowStatus = 'pending_approval' | 'planned' | 'confirmed' | 'in_progress' | 'completed' | 'rejected' | 'employee_rejected' | 'cancelled';
+
+type StatusFeedback = {
+  taskId: string;
+  taskName: string;
+  employeeName: string;
+  status: WorkflowStatus;
+};
+
+const feedbackToneClass: Record<WorkflowStatus, string> = {
+  pending_approval: 'bg-amber-50 border-amber-200 text-amber-800',
+  planned: 'bg-blue-50 border-blue-200 text-blue-800',
+  confirmed: 'bg-green-50 border-green-200 text-green-800',
+  in_progress: 'bg-blue-50 border-blue-200 text-blue-800',
+  completed: 'bg-green-50 border-green-200 text-green-800',
+  rejected: 'bg-red-50 border-red-200 text-red-800',
+  employee_rejected: 'bg-red-50 border-red-200 text-red-800',
+  cancelled: 'bg-gray-50 border-gray-200 text-gray-700',
+};
+
+const feedbackTitle: Record<WorkflowStatus, string> = {
+  pending_approval: '任务申请已提交，当前状态：待审批',
+  planned: '任务审批已通过，当前状态：待工程师确认',
+  confirmed: '任务已被工程师确认，当前状态：已确认',
+  in_progress: '任务已开始执行，当前状态：进行中',
+  completed: '任务已完成，当前状态：已完成',
+  rejected: '任务申请未通过，当前状态：已拒绝',
+  employee_rejected: '工程师已退回任务，当前状态：工程师拒绝',
+  cancelled: '任务已取消，当前状态：已取消',
+};
+
+const feedbackNextStep: Record<WorkflowStatus, string> = {
+  pending_approval: '下一步：等待 Site PS 审批，审批通过后申请人和工程师都会收到通知。',
+  planned: '下一步：等待工程师在日程管理中接受或拒绝。',
+  confirmed: '下一步：工程师已接受，流程完成。',
+  in_progress: '下一步：任务执行中，请关注后续完成状态。',
+  completed: '下一步：任务已完成，无需额外操作。',
+  rejected: '下一步：申请已结束，可调整需求后重新提交。',
+  employee_rejected: '下一步：请调整需求或重新分配工程师。',
+  cancelled: '下一步：任务已取消，如需继续请重新提交。',
+};
+
 export function Matching() {
   const queryClient = useQueryClient();
   const { user } = useNewAuth();
@@ -37,12 +79,7 @@ export function Matching() {
   const [currentTaskInfo, setCurrentTaskInfo] = useState<any>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null); // 内联确认中的候选人 userId
   const [_lastSubmittedStatus, setLastSubmittedStatus] = useState<'pending_approval' | 'planned' | null>(null);
-  const [submissionFeedback, setSubmissionFeedback] = useState<{
-    taskId: string;
-    taskName: string;
-    employeeName: string;
-    status: 'pending_approval' | 'planned';
-  } | null>(null);
+  const [submissionFeedback, setSubmissionFeedback] = useState<StatusFeedback | null>(null);
 
   const focusSubmittedFeedback = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -57,7 +94,7 @@ export function Matching() {
     employeeName: string;
     startDate: string;
     endDate: string;
-    status: 'pending_approval' | 'planned';
+    status: WorkflowStatus;
   }) => {
     queryClient.setQueryData(['matching-history'], (old: any) => {
       const previous = Array.isArray(old) ? old : [];
@@ -131,6 +168,23 @@ export function Matching() {
     queryFn: () => matchingApi.getMatchingHistory(50),
     // refetchInterval: 30000, // 每30秒刷新 - 暂时禁用以避免干扰后端
   });
+
+  const visibleFeedback = useMemo<StatusFeedback | null>(() => {
+    if (submissionFeedback) {
+      return submissionFeedback;
+    }
+    if (isAdmin || matchingHistory.length === 0) {
+      return null;
+    }
+
+    const latestTask = matchingHistory[0];
+    return {
+      taskId: latestTask.id,
+      taskName: latestTask.taskName,
+      employeeName: latestTask.employeeName || '待分配工程师',
+      status: (latestTask.status || 'pending_approval') as WorkflowStatus,
+    };
+  }, [isAdmin, matchingHistory, submissionFeedback]);
 
   // 调试：打印匹配历史数据
   useEffect(() => {
@@ -362,33 +416,32 @@ export function Matching() {
 
   return (
     <div className="space-y-6">
-      {submissionFeedback && (
-        <div className={cn(
-          'rounded-2xl border px-5 py-4 flex items-start justify-between gap-4',
-          submissionFeedback.status === 'pending_approval'
-            ? 'bg-amber-50 border-amber-200 text-amber-800'
-            : 'bg-green-50 border-green-200 text-green-800'
-        )}>
+      {visibleFeedback && (
+        <div className={cn('rounded-2xl border px-5 py-4 flex items-start justify-between gap-4', feedbackToneClass[visibleFeedback.status])}>
           <div>
             <p className="text-sm font-bold">
-              {submissionFeedback.status === 'pending_approval' ? '任务申请已提交，当前状态：待审批' : '任务已直接写入日程，当前状态：待确认'}
+              {feedbackTitle[visibleFeedback.status]}
             </p>
             <p className="text-sm mt-1">
-              {submissionFeedback.taskName} {'->'} {submissionFeedback.employeeName}
+              {visibleFeedback.taskName} {'->'} {visibleFeedback.employeeName}
             </p>
-            <p className="text-xs mt-1 opacity-80">任务编号: {submissionFeedback.taskId}</p>
+            <p className="text-xs mt-1 opacity-80">任务编号: {visibleFeedback.taskId}</p>
             <p className="text-xs mt-2 font-medium">
-              {submissionFeedback.status === 'pending_approval'
-                ? '下一步：等待 Site PS 审批，审批通过后申请人和工程师都会收到通知。'
-                : '下一步：等待工程师在日程管理中确认接受。'}
+              {feedbackNextStep[visibleFeedback.status]}
             </p>
           </div>
-          <button
-            onClick={() => setSubmissionFeedback(null)}
-            className="text-xs px-3 py-1 rounded-lg border border-current/20 hover:bg-white/40 transition-colors"
-          >
-            关闭
-          </button>
+          {submissionFeedback ? (
+            <button
+              onClick={() => setSubmissionFeedback(null)}
+              className="text-xs px-3 py-1 rounded-lg border border-current/20 hover:bg-white/40 transition-colors"
+            >
+              关闭
+            </button>
+          ) : (
+            <span className="text-xs px-3 py-1 rounded-lg border border-current/20">
+              最近一次申请状态
+            </span>
+          )}
         </div>
       )}
 
@@ -1021,7 +1074,7 @@ export function Matching() {
 
       {/* 任务看板视图 */}
       {activeTab === 'kanban' && (
-        <TaskKanban tasks={matchingHistory} submissionFeedback={submissionFeedback} />
+        <TaskKanban tasks={matchingHistory} statusFeedback={visibleFeedback} />
       )}
     </div>
   );
@@ -1030,15 +1083,10 @@ export function Matching() {
 // 任务看板组件
 function TaskKanban({
   tasks,
-  submissionFeedback,
+  statusFeedback,
 }: {
   tasks: any[];
-  submissionFeedback: {
-    taskId: string;
-    taskName: string;
-    employeeName: string;
-    status: 'pending_approval' | 'planned';
-  } | null;
+  statusFeedback: StatusFeedback | null;
 }) {
   const queryClient = useQueryClient();
   const { user } = useNewAuth();
@@ -1062,6 +1110,12 @@ function TaskKanban({
     if (['rejected', 'employee_rejected', 'cancelled'].includes(dbStatus)) return 'rejected';
     return 'matching'; // 不存在的状态兜底
   };
+
+  useEffect(() => {
+    if (statusFeedback) {
+      setSelectedTab(toKanbanStatus(statusFeedback.status));
+    }
+  }, [statusFeedback]);
 
   const tasksByStatus = useMemo(() => {
     const groups: Record<KanbanTab, any[]> = {
@@ -1206,23 +1260,16 @@ function TaskKanban({
           )}
         </div>
 
-        {submissionFeedback && (
-          <div className={cn(
-            'mx-4 mt-4 rounded-xl border px-4 py-3',
-            submissionFeedback.status === 'pending_approval'
-              ? 'bg-amber-50 border-amber-200 text-amber-800'
-              : 'bg-green-50 border-green-200 text-green-800'
-          )}>
+        {statusFeedback && (
+          <div className={cn('mx-4 mt-4 rounded-xl border px-4 py-3', feedbackToneClass[statusFeedback.status])}>
             <p className="text-sm font-bold">
-              {submissionFeedback.status === 'pending_approval' ? '你刚提交的任务申请已进入待审批' : '你刚提交的任务已进入待确认'}
+              {feedbackTitle[statusFeedback.status]}
             </p>
             <p className="text-sm mt-1">
-              {submissionFeedback.taskName} {'->'} {submissionFeedback.employeeName}
+              {statusFeedback.taskName} {'->'} {statusFeedback.employeeName}
             </p>
             <p className="text-xs mt-2">
-              {submissionFeedback.status === 'pending_approval'
-                ? '下一步：等待 Site PS 审批。'
-                : '下一步：等待工程师确认接受。'}
+              {feedbackNextStep[statusFeedback.status]}
             </p>
           </div>
         )}
