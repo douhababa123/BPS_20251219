@@ -675,7 +675,7 @@ def get_matching_history(
                 t.id, t.task_name, t.task_type, t.task_location,
                 t.assigned_employee_id, e.name as employee_name,
                 t.start_date, t.end_date,
-                t.created_at, t.status, t.rejection_reason,
+                t.created_at, t.updated_at, t.status, t.rejection_reason,
                 u.name as requester_name
             FROM dbo.tasks t
             LEFT JOIN dbo.employees e ON t.assigned_employee_id = e.id
@@ -689,7 +689,7 @@ def get_matching_history(
                 t.id, t.task_name, t.task_type, t.task_location,
                 t.assigned_employee_id, e.name as employee_name,
                 t.start_date, t.end_date,
-                t.created_at, t.status, t.rejection_reason,
+                t.created_at, t.updated_at, t.status, t.rejection_reason,
                 u.name as requester_name
             FROM dbo.tasks t
             LEFT JOIN dbo.employees e ON t.assigned_employee_id = e.id
@@ -711,9 +711,10 @@ def get_matching_history(
             'startDate': row[6].isoformat() if row[6] else None,
             'endDate': row[7].isoformat() if row[7] else None,
             'createdAt': row[8].isoformat() if row[8] else None,
-            'status': row[9] or 'pending_approval',
-            'rejectionReason': row[10],
-            'requesterName': row[11],
+            'updatedAt': row[9].isoformat() if row[9] else None,
+            'status': row[10] or 'pending_approval',
+            'rejectionReason': row[11],
+            'requesterName': row[12],
         })
     
     logger.info(f"📊 查询到 {len(history)} 条匹配历史记录")

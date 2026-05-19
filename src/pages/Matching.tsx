@@ -32,6 +32,26 @@ type StatusFeedback = {
   taskName: string;
   employeeName: string;
   status: WorkflowStatus;
+  updatedAt?: string | null;
+};
+
+const formatStatusTimestamp = (timestamp?: string | null) => {
+  if (!timestamp) {
+    return null;
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 const feedbackToneClass: Record<WorkflowStatus, string> = {
@@ -95,6 +115,7 @@ export function Matching() {
     startDate: string;
     endDate: string;
     status: WorkflowStatus;
+    updatedAt?: string;
   }) => {
     queryClient.setQueryData(['matching-history'], (old: any) => {
       const previous = Array.isArray(old) ? old : [];
@@ -111,6 +132,7 @@ export function Matching() {
           startDate: data.startDate,
           endDate: data.endDate,
           createdAt: new Date().toISOString(),
+          updatedAt: data.updatedAt || new Date().toISOString(),
           status: data.status,
           rejectionReason: null,
           requesterName: user?.email || '',
@@ -183,6 +205,7 @@ export function Matching() {
       taskName: latestTask.taskName,
       employeeName: latestTask.employeeName || '待分配工程师',
       status: (latestTask.status || 'pending_approval') as WorkflowStatus,
+      updatedAt: latestTask.updatedAt || latestTask.createdAt || null,
     };
   }, [isAdmin, matchingHistory, submissionFeedback]);
 
@@ -233,6 +256,7 @@ export function Matching() {
         taskName: variables.taskInfo.name,
         employeeName: variables.candidate.name,
         status: 'pending_approval',
+        updatedAt: new Date().toISOString(),
       });
       pushTaskIntoHistory({
         taskId: response.taskId,
@@ -244,6 +268,7 @@ export function Matching() {
         startDate: variables.taskInfo.startDate,
         endDate: variables.taskInfo.endDate,
         status: 'pending_approval',
+        updatedAt: new Date().toISOString(),
       });
       setConfirmingId(null);
       queryClient.invalidateQueries({ queryKey: ['matching-history'] });
@@ -273,6 +298,7 @@ export function Matching() {
         taskName: variables.taskInfo.name,
         employeeName: variables.candidate.name,
         status: 'planned',
+        updatedAt: new Date().toISOString(),
       });
       pushTaskIntoHistory({
         taskId: response.taskId,
@@ -284,6 +310,7 @@ export function Matching() {
         startDate: variables.taskInfo.startDate,
         endDate: variables.taskInfo.endDate,
         status: 'planned',
+        updatedAt: new Date().toISOString(),
       });
       setConfirmingId(null);
       queryClient.invalidateQueries({ queryKey: ['matching-history'] });
@@ -426,6 +453,9 @@ export function Matching() {
               {visibleFeedback.taskName} {'->'} {visibleFeedback.employeeName}
             </p>
             <p className="text-xs mt-1 opacity-80">任务编号: {visibleFeedback.taskId}</p>
+            {formatStatusTimestamp(visibleFeedback.updatedAt) && (
+              <p className="text-xs mt-1 opacity-80">状态时间: {formatStatusTimestamp(visibleFeedback.updatedAt)}</p>
+            )}
             <p className="text-xs mt-2 font-medium">
               {feedbackNextStep[visibleFeedback.status]}
             </p>
@@ -1268,6 +1298,9 @@ function TaskKanban({
             <p className="text-sm mt-1">
               {statusFeedback.taskName} {'->'} {statusFeedback.employeeName}
             </p>
+            {formatStatusTimestamp(statusFeedback.updatedAt) && (
+              <p className="text-xs mt-1 opacity-80">状态时间: {formatStatusTimestamp(statusFeedback.updatedAt)}</p>
+            )}
             <p className="text-xs mt-2">
               {feedbackNextStep[statusFeedback.status]}
             </p>
@@ -1312,6 +1345,9 @@ function TaskKanban({
                         )}
                         <div className="flex items-center gap-1 text-gray-400 text-xs">
                           <span>提交: {task.createdAt ? new Date(task.createdAt).toLocaleDateString('zh-CN') : '-'}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-gray-400 text-xs">
+                          <span>状态时间: {formatStatusTimestamp(task.updatedAt || task.createdAt) || '-'}</span>
                         </div>
                       </div>
                       {task.rejectionReason && (
