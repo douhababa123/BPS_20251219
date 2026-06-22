@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tasksService, employeesService, scheduleNotificationsService, taskTypesService, competencyDefinitionsService } from '../services';
-import { TASK_TYPES, TASK_LOCATIONS, COMPETENCE_CONFIG, getCompetenceConfig } from '../lib/taskTypeConfig';
+import { TASK_TYPES, TASK_LOCATIONS, getCompetenceConfig } from '../lib/taskTypeConfig';
 import { taskWorkflowService } from '../services/task-workflow.service';
 import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -26,6 +26,14 @@ import {
 type ViewMode = 'team' | 'personal';
 type PeriodType = 'month' | 'quarter' | 'year';
 type TaskStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled' | 'pending_approval' | 'rejected' | 'confirmed' | 'employee_rejected' | 'all';
+const COMPETENCE_SEPARATOR = ' | ';
+
+function parseTaskCompetence(value: string | null | undefined) {
+  if (!value) return { moduleName: '', competencyType: '' };
+  const [moduleName, ...rest] = value.split(COMPETENCE_SEPARATOR);
+  if (rest.length === 0) return { moduleName: '', competencyType: value };
+  return { moduleName, competencyType: rest.join(COMPETENCE_SEPARATOR) };
+}
 
 // 任务状态配置
 const TASK_STATUS_CONFIG = {
@@ -1144,12 +1152,15 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
   const queryClient = useQueryClient();
   const { user } = useNewAuth();
   const isEditMode = !!editingTask;
+  const initialCompetence = parseTaskCompetence(editingTask?.competence || '');
 
   const [formData, setFormData] = useState({
     task_name: editingTask?.task_name || '',
     task_type: editingTask?.task_type || '',
     task_location: editingTask?.task_location || '',
     competence: editingTask?.competence || '',
+    competence_module: initialCompetence.moduleName,
+    competence_type: initialCompetence.competencyType,
     assigned_employee_id: editingTask?.assigned_employee_id || prefilledData?.employeeId || '',
     start_date: editingTask?.start_date || prefilledData?.date || '',
     end_date: editingTask?.end_date || prefilledData?.date || '',
@@ -1183,30 +1194,56 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
     return merged;
   }, [taskTypes, formData.task_type]);
 
-  const availableCompetences = useMemo(() => {
-    const apiValues = Array.from(
-      new Set(
-        competencyDefinitions
-          .map((item: any) => item.competency_type)
-          .filter((value: string | undefined): value is string => Boolean(value && value.trim()))
-      )
-    ).sort((left, right) => left.localeCompare(right, 'zh-CN'));
+  const competenceModules = useMemo(() => {
+    const moduleMap = new Map<string, number>();
+    competencyDefinitions
+      .filter((item: any) => item.module_name && item.competency_type)
+      .forEach((item: any) => {
+        if (!moduleMap.has(item.module_name)) {
+          moduleMap.set(item.module_name, item.module_id ?? 999);
+        }
+      });
 
-    const fallbackValues = Object.entries(COMPETENCE_CONFIG).map(([key, cfg]) => ({
-      value: key,
-      label: cfg.label,
-    }));
+    return Array.from(moduleMap.entries())
+      .map(([value, moduleId]) => ({ value, label: value, moduleId }))
+      .sort((left, right) => left.moduleId - right.moduleId || left.label.localeCompare(right.label, 'zh-CN'));
+  }, [competencyDefinitions]);
 
-    const merged = apiValues.length > 0
-      ? apiValues.map((value) => ({ value, label: value }))
-      : fallbackValues;
+  const competenceItems = useMemo(() => {
+    if (!formData.competence_module) return [];
 
-    if (formData.competence && !merged.some((item) => item.value === formData.competence)) {
-      return [{ value: formData.competence, label: formData.competence }, ...merged];
+    const rows = competencyDefinitions
+      .filter((item: any) => item.module_name === formData.competence_module && item.competency_type)
+      .map((item: any) => ({
+        value: item.competency_type,
+        label: item.competency_type,
+        code: item.competency_code || '',
+      }))
+      .sort((left, right) => {
+        const leftNo = Number(left.code.match(/-(\d+)$/)?.[1] || 999);
+        const rightNo = Number(right.code.match(/-(\d+)$/)?.[1] || 999);
+        return leftNo - rightNo || left.label.localeCompare(right.label, 'zh-CN');
+      });
+
+    if (formData.competence_type && !rows.some((item) => item.value === formData.competence_type)) {
+      return [{ value: formData.competence_type, label: formData.competence_type, code: '' }, ...rows];
     }
 
-    return merged;
-  }, [competencyDefinitions, formData.competence]);
+    return rows;
+  }, [competencyDefinitions, formData.competence_module, formData.competence_type]);
+
+  useEffect(() => {
+    if (!formData.competence || formData.competence_module || competencyDefinitions.length === 0) return;
+
+    const match = competencyDefinitions.find((item: any) => item.competency_type === formData.competence);
+    if (match) {
+      setFormData((current) => ({
+        ...current,
+        competence_module: match.module_name,
+        competence_type: match.competency_type,
+      }));
+    }
+  }, [competencyDefinitions, formData.competence, formData.competence_module]);
   
   const createTaskMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -1261,11 +1298,15 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
       : 1;
     const totalHours = daysCount * hoursPerDay;
 
+    const competenceValue = formData.competence_module && formData.competence_type
+      ? `${formData.competence_module}${COMPETENCE_SEPARATOR}${formData.competence_type}`
+      : formData.competence_type || formData.competence || null;
+
     const taskData = {
       task_name: formData.task_name,
       task_type: formData.task_type,
       task_location: formData.task_location,
-      competence: formData.competence || null,
+      competence: competenceValue,
       assigned_employee_id: formData.assigned_employee_id || null,
       start_date: formData.start_date,
       end_date: formData.end_date,
@@ -1355,12 +1396,46 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
             </label>
             <select
               required
-              value={formData.competence}
-              onChange={(e) => setFormData({ ...formData, competence: e.target.value })}
+              value={formData.competence_module}
+              onChange={(e) => {
+                setFormData({
+                  ...formData,
+                  competence_module: e.target.value,
+                  competence_type: '',
+                  competence: '',
+                });
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">请选择能力域...</option>
-              {availableCompetences.map((item) => (
+              {competenceModules.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Competence Item <span className="text-red-500">*</span>
+            </label>
+            <select
+              required
+              value={formData.competence_type}
+              onChange={(e) => {
+                const competenceType = e.target.value;
+                setFormData({
+                  ...formData,
+                  competence_type: competenceType,
+                  competence: formData.competence_module && competenceType
+                    ? `${formData.competence_module}${COMPETENCE_SEPARATOR}${competenceType}`
+                    : '',
+                });
+              }}
+              disabled={!formData.competence_module}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+            >
+              <option value="">Select competence item...</option>
+              {competenceItems.map((item) => (
                 <option key={item.value} value={item.value}>{item.label}</option>
               ))}
             </select>

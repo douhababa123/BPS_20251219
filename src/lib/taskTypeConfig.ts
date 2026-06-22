@@ -22,6 +22,12 @@ export const TASK_LOCATIONS = [
 
 // 能力维度配置（含十六进制颜色）
 export const COMPETENCE_CONFIG: Record<string, { color: string; label: string }> = {
+  'BPS elements':            { color: '#92D050', label: 'BPS elements' },
+  'Investment efficiency_PGL': { color: '#FF0000', label: 'Investment efficiency_PGL' },
+  'Investment efficiency_IE': { color: '#FFC000', label: 'Investment efficiency_IE' },
+  'Waste-free&stable flow_TPM': { color: '#C00000', label: 'Waste-free&stable flow_TPM' },
+  'Waste-free&stable flow_LBP': { color: '#7030A0', label: 'Waste-free&stable flow_LBP' },
+  'CIP in indirect area_LEAN': { color: '#00B0F0', label: 'CIP in indirect area_LEAN' },
   'TPM':                    { color: '#C00000', label: 'TPM' },
   'PGL':                    { color: '#FF0000', label: 'PGL' },
   'IE':                     { color: '#FFC000', label: 'IE' },
@@ -42,7 +48,9 @@ export function getCompetenceConfig(competence: string | null | undefined) {
   if (!competence) {
     return { color: '#808080', label: 'Others' };
   }
-  return COMPETENCE_CONFIG[competence] || { color: '#808080', label: competence };
+  const moduleName = competence.includes(' | ') ? competence.split(' | ')[0] : competence;
+  const config = COMPETENCE_CONFIG[moduleName];
+  return config ? { color: config.color, label: competence } : { color: '#808080', label: competence };
 }
 
 // 向后兼容：保留旧函数（用于不需要颜色的地方）
