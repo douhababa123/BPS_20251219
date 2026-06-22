@@ -52,8 +52,9 @@ export function SimpleLoginScreen() {
           user_id: data.user_id,
           email: data.email,
           role: data.role,
+          must_change_password: !!data.must_change_password,
         });
-        navigate('/', { replace: true });
+        navigate(data.must_change_password ? '/change-password' : '/', { replace: true });
       }
     } catch (err: any) {
       console.error('❌ 登录失败:', err);

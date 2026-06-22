@@ -17,6 +17,7 @@ class AuthService {
   private readonly TOKEN_KEY = 'access_token';
   private readonly USER_ID_KEY = 'user_id';
   private readonly USER_EMAIL_KEY = 'user_email';
+  private readonly MUST_CHANGE_PASSWORD_KEY = 'must_change_password';
 
   /**
    * 请求 OTP - 发送验证码到邮箱
@@ -59,6 +60,7 @@ class AuthService {
     localStorage.setItem(this.TOKEN_KEY, tokenData.access_token);
     localStorage.setItem(this.USER_ID_KEY, tokenData.user_id);
     localStorage.setItem(this.USER_EMAIL_KEY, tokenData.email);
+    localStorage.setItem(this.MUST_CHANGE_PASSWORD_KEY, String(!!tokenData.must_change_password));
   }
 
   /**
@@ -68,6 +70,7 @@ class AuthService {
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.USER_ID_KEY);
     localStorage.removeItem(this.USER_EMAIL_KEY);
+    localStorage.removeItem(this.MUST_CHANGE_PASSWORD_KEY);
   }
 
   /**
@@ -90,12 +93,22 @@ class AuthService {
   getCurrentUser(): CurrentUser | null {
     const id = localStorage.getItem(this.USER_ID_KEY);
     const email = localStorage.getItem(this.USER_EMAIL_KEY);
+    const mustChangePassword = localStorage.getItem(this.MUST_CHANGE_PASSWORD_KEY) === 'true';
 
     if (!id || !email) {
       return null;
     }
 
-    return { id, email };
+    return { id, email, must_change_password: mustChangePassword };
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<MessageResponse> {
+    const response = await apiClient.post<MessageResponse>('/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    localStorage.setItem(this.MUST_CHANGE_PASSWORD_KEY, 'false');
+    return response.data;
   }
 }
 

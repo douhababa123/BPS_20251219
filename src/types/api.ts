@@ -39,12 +39,14 @@ export interface TokenResponse {
   user_id: string;
   email: string;
   role: string;
+  must_change_password?: boolean;
 }
 
 export interface CurrentUser {
   id: string;
   email: string;
   role?: string;
+  must_change_password?: boolean;
 }
 
 // ============================================================================

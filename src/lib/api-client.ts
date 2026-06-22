@@ -58,6 +58,8 @@ apiClient.interceptors.response.use(
       localStorage.removeItem('access_token');
       localStorage.removeItem('user_id');
       localStorage.removeItem('user_email');
+      localStorage.removeItem('user_role');
+      localStorage.removeItem('must_change_password');
       
       // 重定向到登录页
       if (window.location.pathname !== '/login') {

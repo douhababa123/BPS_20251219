@@ -134,6 +134,46 @@ export interface SkillUpdateRequest {
   display_order?: number;
 }
 
+export interface AccountStatus {
+  employee_uuid: string;
+  employee_id: string;
+  employee_name: string;
+  employee_email?: string;
+  employee_role?: string;
+  employee_active: boolean;
+  auth_user_id?: string;
+  user_id?: string;
+  user_email?: string;
+  user_name?: string;
+  user_role?: string;
+  user_active?: boolean;
+  has_password: boolean;
+  must_change_password: boolean;
+  mapped_user_role: string;
+  is_bound: boolean;
+  last_login_at?: string;
+  login_count?: number;
+}
+
+export interface GeneratedAccountPassword {
+  employee_id?: string;
+  employee_name?: string;
+  email: string;
+  user_id: string;
+  role: string;
+  temporary_password: string;
+  reason: string;
+}
+
+export interface AccountSyncResponse {
+  employees_seen: number;
+  created: number;
+  updated: number;
+  bound: number;
+  skipped_without_email: number;
+  passwords: GeneratedAccountPassword[];
+}
+
 // ============================================================================
 // Departments 部门管理
 // ============================================================================
@@ -591,6 +631,21 @@ export const importSkillsCSV = async (
  * @param tableName 筛选表名（可选）
  * @param limit 返回记录数
  */
+export const getAccountStatuses = async (): Promise<AccountStatus[]> => {
+  const response = await apiClient.get<{ accounts: AccountStatus[]; count: number }>('/admin/accounts');
+  return response.data.accounts ?? [];
+};
+
+export const syncAccounts = async (): Promise<AccountSyncResponse> => {
+  const response = await apiClient.post<AccountSyncResponse>('/admin/accounts/sync');
+  return response.data;
+};
+
+export const resetAccountPassword = async (userId: string): Promise<GeneratedAccountPassword> => {
+  const response = await apiClient.post<GeneratedAccountPassword>(`/admin/accounts/${userId}/reset-password`);
+  return response.data;
+};
+
 export const getImportHistory = async (
   tableName?: string,
   limit = 20

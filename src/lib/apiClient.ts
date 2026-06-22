@@ -59,6 +59,8 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('access_token');
         localStorage.removeItem('user_id');
         localStorage.removeItem('user_email');
+        localStorage.removeItem('user_role');
+        localStorage.removeItem('must_change_password');
         
         // 跳转到登录页（避免死循环）
         if (!window.location.pathname.includes('/login')) {

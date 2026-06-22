@@ -14,7 +14,8 @@ interface NewAuthContextType {
   isLoading: boolean;
   requestOTP: (email: string) => Promise<void>;
   verifyOTP: (email: string, otp: string) => Promise<void>;
-  loginWithPassword: (userData: { user_id: string; email: string; name?: string; role?: string }) => void;
+  loginWithPassword: (userData: { user_id: string; email: string; name?: string; role?: string; must_change_password?: boolean }) => void;
+  markPasswordChanged: () => void;
   logout: () => Promise<void>;
 }
 
@@ -35,6 +36,7 @@ export const NewAuthProvider: React.FC<NewAuthProviderProps> = ({ children }) =>
       const token = localStorage.getItem('access_token');
       const userId = localStorage.getItem('user_id');
       const userEmail = localStorage.getItem('user_email');
+      const mustChangePassword = localStorage.getItem('must_change_password') === 'true';
       
       if (token && userId && userEmail) {
         // 优先从 localStorage 读 role，否则从 JWT payload 解码
@@ -48,7 +50,7 @@ export const NewAuthProvider: React.FC<NewAuthProviderProps> = ({ children }) =>
             userRole = 'user';
           }
         }
-        setUser({ id: userId, email: userEmail, role: userRole ?? undefined });
+        setUser({ id: userId, email: userEmail, role: userRole ?? undefined, must_change_password: mustChangePassword });
         setIsLoading(false);
         return;
       }
@@ -67,12 +69,18 @@ export const NewAuthProvider: React.FC<NewAuthProviderProps> = ({ children }) =>
   /**
    * 密码登录后同步用户状态（写 localStorage + 更新内存 state）
    */
-  const loginWithPassword = (userData: { user_id: string; email: string; name?: string; role?: string }): void => {
+  const loginWithPassword = (userData: { user_id: string; email: string; name?: string; role?: string; must_change_password?: boolean }): void => {
     const role = userData.role || 'user';
     localStorage.setItem('user_id', userData.user_id);
     localStorage.setItem('user_email', userData.email);
     localStorage.setItem('user_role', role);
-    setUser({ id: userData.user_id, email: userData.email, role });
+    localStorage.setItem('must_change_password', String(!!userData.must_change_password));
+    setUser({ id: userData.user_id, email: userData.email, role, must_change_password: !!userData.must_change_password });
+  };
+
+  const markPasswordChanged = (): void => {
+    localStorage.setItem('must_change_password', 'false');
+    setUser(current => current ? { ...current, must_change_password: false } : current);
   };
 
   /**
@@ -89,7 +97,8 @@ export const NewAuthProvider: React.FC<NewAuthProviderProps> = ({ children }) =>
     const tokenData: TokenResponse = await authService.verifyOTP({ email, otp });
     const role = tokenData.role || 'user';
     localStorage.setItem('user_role', role);
-    setUser({ id: tokenData.user_id, email: tokenData.email, role });
+    localStorage.setItem('must_change_password', String(!!tokenData.must_change_password));
+    setUser({ id: tokenData.user_id, email: tokenData.email, role, must_change_password: !!tokenData.must_change_password });
   };
 
   /**
@@ -103,6 +112,7 @@ export const NewAuthProvider: React.FC<NewAuthProviderProps> = ({ children }) =>
     localStorage.removeItem('user_id');
     localStorage.removeItem('user_email');
     localStorage.removeItem('user_role');
+    localStorage.removeItem('must_change_password');
     
     setUser(null);
   };
@@ -115,6 +125,7 @@ export const NewAuthProvider: React.FC<NewAuthProviderProps> = ({ children }) =>
     requestOTP,
     verifyOTP,
     loginWithPassword,
+    markPasswordChanged,
     logout,
   };
 

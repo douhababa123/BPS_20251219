@@ -8,6 +8,7 @@ import { OTPLogin } from './components/OTPLogin';
 import SimpleLoginScreen from './components/SimpleLoginScreen';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { PasswordLoginPage } from './pages/auth/PasswordLoginPage';
+import { ChangePasswordPage } from './pages/auth/ChangePasswordPage';
 import { Dashboard } from './pages/Dashboard';
 import { Calendar } from './pages/Calendar';
 import { Schedule } from './pages/Schedule';
@@ -51,6 +52,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (user.must_change_password && window.location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />;
   }
 
   return <>{children}</>;
@@ -98,6 +103,14 @@ function App() {
       <Route path="/password-login" element={<PasswordLoginPage />} />
       <Route path="/login" element={<SimpleLoginScreen />} />
       <Route path="/login-otp" element={<OTPLogin />} />
+      <Route
+        path="/change-password"
+        element={
+          <ProtectedRoute>
+            <ChangePasswordPage />
+          </ProtectedRoute>
+        }
+      />
       
       {/* 主应用路由 */}
       <Route

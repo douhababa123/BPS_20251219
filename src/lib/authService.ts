@@ -304,6 +304,7 @@ export interface SimpleLoginResponse {
   user_id: string;
   email: string;
   role: string;
+  must_change_password?: boolean;
 }
 
 /**
@@ -336,6 +337,7 @@ export async function simpleLogin(email: string, password: string): Promise<{
     localStorage.setItem('user_id', response.data.user_id);
     localStorage.setItem('user_email', response.data.email);
     localStorage.setItem('user_role', response.data.role || 'user');
+    localStorage.setItem('must_change_password', String(!!response.data.must_change_password));
 
     return {
       data: response.data,
@@ -359,6 +361,8 @@ export async function simpleLogout(): Promise<{ error: Error | null }> {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user_id');
     localStorage.removeItem('user_email');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('must_change_password');
 
     return { error: null };
   } catch (error: any) {

@@ -18,7 +18,7 @@ if parent_dir not in sys.path:
 # 导入模型
 from models import (
     OTPRequest, OTPVerifyRequest, TokenResponse, MessageResponse,
-    PasswordLoginRequest, RegisterRequest
+    PasswordLoginRequest, RegisterRequest, ChangePasswordRequest
 )
 
 # 导入父目录的 auth 模块（使用 importlib 避免命名冲突）
@@ -28,10 +28,133 @@ auth = importlib.util.module_from_spec(auth_spec)
 auth_spec.loader.exec_module(auth)
 
 from database import get_db
+from account_management import ensure_account_columns, normalize_email, role_from_employee_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 security = HTTPBearer()
+
+
+def _get_active_employee(cursor, email: str):
+    cursor.execute(
+        """
+        SELECT TOP 1 id, employee_id, name, email, role, auth_user_id
+        FROM dbo.employees
+        WHERE email IS NOT NULL
+          AND LOWER(email) = LOWER(?)
+          AND ISNULL(is_active, 1) = 1
+        """,
+        email,
+    )
+    return cursor.fetchone()
+
+
+def _get_user_by_email(cursor, email: str):
+    ensure_account_columns(cursor)
+    cursor.execute(
+        """
+        SELECT TOP 1 id, email, name, password_hash, role, is_active, must_change_password
+        FROM dbo.users
+        WHERE LOWER(email) = LOWER(?)
+        ORDER BY created_at ASC
+        """,
+        email,
+    )
+    return cursor.fetchone()
+
+
+def _login_employee_user(request: PasswordLoginRequest, cursor):
+    email_input = normalize_email(request.email)
+    if not auth.is_email_allowed(email_input):
+        raise HTTPException(
+            status_code=400,
+            detail="邮箱域名不被允许，请使用 @bosch.com 或 @bshg.com 邮箱",
+        )
+
+    employee = _get_active_employee(cursor, email_input)
+    if not employee:
+        raise HTTPException(
+            status_code=403,
+            detail="该邮箱未在员工表中启用，请联系管理员开通账号",
+        )
+
+    user = _get_user_by_email(cursor, email_input)
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="账号尚未同步，请联系管理员执行账号同步",
+        )
+
+    user_id = str(user[0])
+    email = user[1]
+    name = user[2] or employee[2] or email.split("@")[0]
+    password_hash = user[3]
+    mapped_role = role_from_employee_role(employee[4])
+    is_active = bool(user[5]) if user[5] is not None else True
+    must_change_password = bool(user[6]) if user[6] is not None else False
+
+    if not is_active:
+        raise HTTPException(status_code=403, detail="账号已停用，请联系管理员")
+
+    if not password_hash:
+        raise HTTPException(status_code=403, detail="账号未设置密码，请联系管理员重置密码")
+
+    if not auth.verify_password(request.password, password_hash):
+        raise HTTPException(status_code=401, detail="邮箱或密码错误")
+
+    cursor.execute(
+        """
+        UPDATE dbo.users
+        SET role = ?, name = ?, last_login_at = GETDATE(), updated_at = GETDATE()
+        WHERE id = ?
+        """,
+        mapped_role,
+        name,
+        user_id,
+    )
+    cursor.execute(
+        """
+        UPDATE dbo.employees
+        SET auth_user_id = ?, last_login_at = GETDATE(),
+            login_count = ISNULL(login_count, 0) + 1,
+            updated_at = GETDATE()
+        WHERE id = ?
+        """,
+        user_id,
+        str(employee[0]),
+    )
+    cursor.commit()
+
+    return {
+        "user_id": user_id,
+        "email": email,
+        "name": name,
+        "role": mapped_role,
+        "must_change_password": must_change_password,
+    }
+
+
+def _token_response_for_user(user_info: dict, remember_me: bool = False):
+    from datetime import timedelta
+
+    token_expires_minutes = 43200 if remember_me else 1440
+    token = auth.create_access_token(
+        data={
+            "user_id": user_info["user_id"],
+            "email": user_info["email"],
+            "name": user_info["name"],
+            "role": user_info["role"],
+        },
+        expires_delta=timedelta(minutes=token_expires_minutes),
+    )
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        user_id=user_info["user_id"],
+        email=user_info["email"],
+        role=user_info["role"],
+        must_change_password=user_info.get("must_change_password", False),
+    )
 
 
 # ============================================================================
@@ -39,7 +162,7 @@ security = HTTPBearer()
 # ============================================================================
 
 @router.post("/signup-otp", response_model=MessageResponse)
-async def signup_with_otp(request: OTPRequest):
+async def signup_with_otp(request: OTPRequest, cursor=Depends(get_db)):
     """
     注册/登录第一步：发送 OTP 到邮箱
     """
@@ -49,6 +172,12 @@ async def signup_with_otp(request: OTPRequest):
             status_code=400,
             detail=f"邮箱域名不被允许，请使用 @bosch.com 或 @bshg.com 邮箱"
         )
+
+    email = normalize_email(request.email)
+    if not _get_active_employee(cursor, email):
+        raise HTTPException(status_code=403, detail="该邮箱未在员工表中启用，请联系管理员开通账号")
+    if not _get_user_by_email(cursor, email):
+        raise HTTPException(status_code=404, detail="账号尚未同步，请联系管理员执行账号同步")
     
     # 生成并存储 OTP
     otp = auth.generate_otp()
@@ -80,6 +209,10 @@ def verify_otp_and_login(request: OTPVerifyRequest, cursor=Depends(get_db)):
             status_code=400,
             detail="OTP 验证失败，请检查验证码是否正确或已过期"
         )
+
+    employee = _get_active_employee(cursor, normalize_email(request.email))
+    if not employee:
+        raise HTTPException(status_code=403, detail="该邮箱未在员工表中启用，请联系管理员开通账号")
     
     # 查询或创建用户
     cursor.execute(
@@ -167,6 +300,10 @@ async def logout(current_user: dict = Depends(get_current_user)):
 
 @router.post("/register", response_model=TokenResponse)
 def register(request: RegisterRequest, cursor=Depends(get_db)):
+    raise HTTPException(
+        status_code=403,
+        detail="已关闭公开注册。请管理员先在员工表中维护人员并执行账号同步。",
+    )
     """
     注册新用户：邮箱+密码
     自动登录并返回token（30天有效）
@@ -252,6 +389,8 @@ def register(request: RegisterRequest, cursor=Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(request: PasswordLoginRequest, cursor=Depends(get_db)):
+    user_info = _login_employee_user(request, cursor)
+    return _token_response_for_user(user_info, remember_me=bool(request.remember_me))
     """
     密码登录：邮箱+密码
     返回token（30天有效）
@@ -320,8 +459,51 @@ def login(request: PasswordLoginRequest, cursor=Depends(get_db)):
 # 简化端点：兼容前端simple-login调用
 # ============================================================================
 
+@router.post("/change-password", response_model=MessageResponse)
+def change_password(
+    request: ChangePasswordRequest,
+    cursor=Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if len(request.new_password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="新密码过长，最多支持 72 字节")
+    if request.current_password == request.new_password:
+        raise HTTPException(status_code=400, detail="新密码不能与当前密码相同")
+
+    user_id = current_user.get("user_id")
+    ensure_account_columns(cursor)
+    cursor.execute(
+        """
+        SELECT TOP 1 id, password_hash
+        FROM dbo.users
+        WHERE id = ? AND ISNULL(is_active, 1) = 1
+        """,
+        user_id,
+    )
+    user = cursor.fetchone()
+    if not user:
+        raise HTTPException(status_code=404, detail="账号不存在或已停用")
+    if not user[1] or not auth.verify_password(request.current_password, user[1]):
+        raise HTTPException(status_code=401, detail="当前密码错误")
+
+    cursor.execute(
+        """
+        UPDATE dbo.users
+        SET password_hash = ?, must_change_password = 0,
+            password_updated_at = GETDATE(), updated_at = GETDATE()
+        WHERE id = ?
+        """,
+        auth.hash_password(request.new_password),
+        user_id,
+    )
+    cursor.commit()
+    return MessageResponse(message="密码已更新", detail="请使用新密码登录")
+
+
 @router.post("/simple-login", response_model=TokenResponse)
 def simple_login_compat(request: PasswordLoginRequest, cursor=Depends(get_db)):
+    user_info = _login_employee_user(request, cursor)
+    return _token_response_for_user(user_info, remember_me=bool(request.remember_me))
     """
     简化登录端点（兼容性）：自动注册或登录
     - 新用户：自动注册

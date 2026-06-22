@@ -155,7 +155,7 @@ from routers import competency_definitions, competency_assessments, tasks as tas
 from routers import resource_task_types, resource_planning_tasks
 from routers import schedule_change_notifications, views, matching, admin_test, audit, audit_logs
 from routers import notifications as notifications_router
-from routers import admin_departments, admin_employees, admin_skills, admin_factories, admin_task_types, admin_tasks, admin_competency_definitions, admin_competency_assessments, admin_resource_task_types, admin_resource_planning_tasks, admin_schedule_change_notifications
+from routers import admin_departments, admin_employees, admin_skills, admin_factories, admin_task_types, admin_tasks, admin_competency_definitions, admin_competency_assessments, admin_resource_task_types, admin_resource_planning_tasks, admin_schedule_change_notifications, admin_accounts
 
 app.include_router(auth.router, prefix="/api/auth", tags=["认证"])
 app.include_router(departments.router, prefix="/api/departments", tags=["部门"])
@@ -186,6 +186,7 @@ app.include_router(admin_competency_assessments.router, prefix="/api", tags=["�
 app.include_router(admin_resource_task_types.router, prefix="/api", tags=["资源任务类型管理"])
 app.include_router(admin_resource_planning_tasks.router, prefix="/api", tags=["资源规划任务管理"])
 app.include_router(admin_schedule_change_notifications.router, prefix="/api", tags=["计划变更通知管理"])
+app.include_router(admin_accounts.router, prefix="/api", tags=["账号管理"])
 
 
 # ============================================================================

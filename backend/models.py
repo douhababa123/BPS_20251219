@@ -36,6 +36,12 @@ class PasswordLoginRequest(BaseModel):
     remember_me: Optional[bool] = False  # 记住登录状态（30天免登录）
 
 
+class ChangePasswordRequest(BaseModel):
+    """Change password request."""
+    current_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=8)
+
+
 class RegisterRequest(BaseModel):
     """注册请求"""
     email: EmailStr
@@ -61,6 +67,7 @@ class TokenResponse(BaseModel):
     user_id: str
     email: str
     role: str = "user"
+    must_change_password: bool = False
 
 
 class UserResponse(BaseModel):
