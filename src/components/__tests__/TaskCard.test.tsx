@@ -104,12 +104,15 @@ describe('TaskCardCompact 组件', () => {
     expect(screen.getByText('t')).toBeInTheDocument();
   });
 
-  it('按能力域应用统一颜色', () => {
+  it('按能力域应用背景色并使用黑色文字', () => {
     const { container } = render(
       <TaskCardCompact task={{ ...baseTask, competence: 'BPS elements | VSM/VSD' }} />
     );
     const card = container.firstElementChild as HTMLElement;
-    expect(card).toHaveStyle({ color: '#92D050' });
+    expect(card).toHaveStyle({
+      backgroundColor: '#92D050',
+      color: '#111827',
+    });
   });
 
   it('点击触发 onClick 回调', () => {

@@ -128,8 +128,7 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
 
   // 根据能力域hex色生成半透明背景和边框
   const hexColor = competenceConfig.color;
-  const bgStyle = hexColor + '22'; // ~13% opacity
-  const borderStyle = hexColor + '88'; // ~53% opacity
+  const borderStyle = hexColor === '#808080' ? '#666666' : hexColor;
 
   // 根据时间槽显示不同的标记
   const getTimeIcon = () => {
@@ -156,9 +155,9 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
       onClick={onClick}
       title={tooltipContent}
       style={{
-        backgroundColor: bgStyle,
+        backgroundColor: hexColor,
         borderColor: borderStyle,
-        color: hexColor,
+        color: '#111827',
       }}
       className="px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md hover:scale-105 border group"
     >
