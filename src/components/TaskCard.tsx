@@ -23,6 +23,23 @@ const getTaskStatusConfig = (status?: string) => {
   return TASK_STATUS_CONFIG[status as keyof typeof TASK_STATUS_CONFIG];
 };
 
+const getReadableTextColor = (hexColor: string) => {
+  const normalized = hexColor.replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return '#111827';
+  }
+
+  const r = parseInt(normalized.slice(0, 2), 16) / 255;
+  const g = parseInt(normalized.slice(2, 4), 16) / 255;
+  const b = parseInt(normalized.slice(4, 6), 16) / 255;
+  const linear = [r, g, b].map((value) =>
+    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  );
+  const luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+
+  return luminance > 0.45 ? '#111827' : '#FFFFFF';
+};
+
 interface TaskCardProps {
   task: {
     id: string;
@@ -129,6 +146,7 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
   // 根据能力域hex色生成半透明背景和边框
   const hexColor = competenceConfig.color;
   const borderStyle = hexColor === '#808080' ? '#666666' : hexColor;
+  const textColor = getReadableTextColor(hexColor);
 
   // 根据时间槽显示不同的标记
   const getTimeIcon = () => {
@@ -157,7 +175,7 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
       style={{
         backgroundColor: hexColor,
         borderColor: borderStyle,
-        color: '#111827',
+        color: textColor,
       }}
       className="px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md hover:scale-105 border group"
     >

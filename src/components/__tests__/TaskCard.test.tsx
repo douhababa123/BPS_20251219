@@ -104,7 +104,7 @@ describe('TaskCardCompact 组件', () => {
     expect(screen.getByText('t')).toBeInTheDocument();
   });
 
-  it('按能力域应用背景色并使用黑色文字', () => {
+  it('浅色能力域背景使用黑色文字', () => {
     const { container } = render(
       <TaskCardCompact task={{ ...baseTask, competence: 'BPS elements | VSM/VSD' }} />
     );
@@ -112,6 +112,17 @@ describe('TaskCardCompact 组件', () => {
     expect(card).toHaveStyle({
       backgroundColor: '#92D050',
       color: '#111827',
+    });
+  });
+
+  it('深色能力域背景使用白色文字', () => {
+    const { container } = render(
+      <TaskCardCompact task={{ ...baseTask, competence: "Everybody's CIP | Top idea" }} />
+    );
+    const card = container.firstElementChild as HTMLElement;
+    expect(card).toHaveStyle({
+      backgroundColor: '#002060',
+      color: '#FFFFFF',
     });
   });
 
