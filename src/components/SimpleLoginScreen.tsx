@@ -9,9 +9,11 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, Zap, LogIn } from 'lucide-react';
 import { EmailInput } from './EmailInput';
 import { simpleLogin } from '../lib/authService';
+import { useNewAuth } from '../contexts/NewAuthContext';
 
 export function SimpleLoginScreen() {
   const navigate = useNavigate();
+  const { loginWithPassword } = useNewAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -46,7 +48,12 @@ export function SimpleLoginScreen() {
       if (data) {
         console.log('✅ 登录成功:', data.email);
         // 登录成功，跳转到主页
-        navigate('/dashboard');
+        loginWithPassword({
+          user_id: data.user_id,
+          email: data.email,
+          role: data.role,
+        });
+        navigate('/', { replace: true });
       }
     } catch (err: any) {
       console.error('❌ 登录失败:', err);

@@ -303,6 +303,7 @@ export interface SimpleLoginResponse {
   token_type: string;
   user_id: string;
   email: string;
+  role: string;
 }
 
 /**
@@ -334,6 +335,7 @@ export async function simpleLogin(email: string, password: string): Promise<{
     localStorage.setItem('access_token', response.data.access_token);
     localStorage.setItem('user_id', response.data.user_id);
     localStorage.setItem('user_email', response.data.email);
+    localStorage.setItem('user_role', response.data.role || 'user');
 
     return {
       data: response.data,
