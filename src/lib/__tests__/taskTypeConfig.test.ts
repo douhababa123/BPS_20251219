@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TASK_TYPES, TASK_LOCATIONS, COMPETENCE_CONFIG, COMPETENCE_LIST, getCompetenceConfig, getTaskTypeConfig } from '../taskTypeConfig';
+import { TASK_TYPES, TASK_LOCATIONS, COMPETENCE_CONFIG, COMPETENCE_LIST, getCompetenceColorKey, getCompetenceConfig, getTaskTypeConfig } from '../taskTypeConfig';
 
 describe('TASK_TYPES', () => {
   it('contains expected task type codes', () => {
@@ -45,6 +45,28 @@ describe('getCompetenceConfig', () => {
     const cfg = getCompetenceConfig('TPM');
     expect(cfg.color).toBe('#C00000');
     expect(cfg.label).toBe('TPM');
+  });
+
+  it('maps module names to the standard competence colors', () => {
+    expect(getCompetenceColorKey('BPS elements')).toBe('BPS');
+    expect(getCompetenceConfig('BPS elements').color).toBe('#92D050');
+    expect(getCompetenceColorKey('Investment efficiency_PGL')).toBe('PGL');
+    expect(getCompetenceConfig('Investment efficiency_PGL').color).toBe('#FF0000');
+    expect(getCompetenceColorKey('Investment efficiency_IE')).toBe('IE');
+    expect(getCompetenceConfig('Investment efficiency_IE').color).toBe('#FFC000');
+    expect(getCompetenceColorKey('Waste-free&stable flow_TPM')).toBe('TPM');
+    expect(getCompetenceConfig('Waste-free&stable flow_TPM').color).toBe('#C00000');
+    expect(getCompetenceColorKey('Waste-free&stable flow_LBP')).toBe('LSC');
+    expect(getCompetenceConfig('Waste-free&stable flow_LBP').color).toBe('#7030A0');
+    expect(getCompetenceColorKey('CIP in indirect area_LEAN')).toBe('LEAN');
+    expect(getCompetenceConfig('CIP in indirect area_LEAN').color).toBe('#00B0F0');
+  });
+
+  it('maps stored task competence values by their module prefix', () => {
+    const cfg = getCompetenceConfig('BPS elements | VSM/VSD');
+    expect(cfg.colorKey).toBe('BPS');
+    expect(cfg.color).toBe('#92D050');
+    expect(cfg.label).toBe('BPS elements | VSM/VSD');
   });
 
   it('returns gray for null/undefined', () => {

@@ -99,9 +99,17 @@ describe('TaskCardCompact 组件', () => {
     expect(screen.getByText('测试任务')).toBeInTheDocument();
   });
 
-  it('渲染任务类型图标（training → 🎓）', () => {
+  it('渲染任务类型首字母', () => {
     render(<TaskCardCompact task={baseTask} />);
-    expect(screen.getByText('🎓')).toBeInTheDocument();
+    expect(screen.getByText('t')).toBeInTheDocument();
+  });
+
+  it('按能力域应用统一颜色', () => {
+    const { container } = render(
+      <TaskCardCompact task={{ ...baseTask, competence: 'BPS elements | VSM/VSD' }} />
+    );
+    const card = container.firstElementChild as HTMLElement;
+    expect(card).toHaveStyle({ color: '#92D050' });
   });
 
   it('点击触发 onClick 回调', () => {

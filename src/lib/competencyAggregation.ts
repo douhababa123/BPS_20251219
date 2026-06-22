@@ -7,15 +7,15 @@ import type { AssessmentFull, Skill } from './database.types';
 
 // 9大模块映射
 export const MODULE_MAPPING = {
-  1: { id: 1, name: 'BPS elements', icon: '🎯', color: '#1E3A8A' },
-  2: { id: 2, name: 'Investment efficiency_PGL', icon: '📊', color: '#2563EB' },
-  3: { id: 3, name: 'Investment efficiency_IE', icon: '📈', color: '#3B82F6' },
-  4: { id: 4, name: 'Waste-free&stable flow_TPM', icon: '⚙️', color: '#0EA5E9' },
-  5: { id: 5, name: 'Waste-free&stable flow_LBP', icon: '🔄', color: '#06B6D4' },
-  6: { id: 6, name: "Everybody's CIP", icon: '💡', color: '#14B8A6' },
-  7: { id: 7, name: 'Leadership commitment', icon: '👥', color: '#10B981' },
-  8: { id: 8, name: 'CIP in indirect area_LEAN', icon: '⚡', color: '#84CC16' },
-  9: { id: 9, name: 'Digital Transformation', icon: '💻', color: '#EAB308' },
+  1: { id: 1, name: 'BPS elements', icon: '🎯', color: '#92D050' },
+  2: { id: 2, name: 'Investment efficiency_PGL', icon: '📊', color: '#FF0000' },
+  3: { id: 3, name: 'Investment efficiency_IE', icon: '📈', color: '#FFC000' },
+  4: { id: 4, name: 'Waste-free&stable flow_TPM', icon: '⚙️', color: '#C00000' },
+  5: { id: 5, name: 'Waste-free&stable flow_LBP', icon: '🔄', color: '#7030A0' },
+  6: { id: 6, name: "Everybody's CIP", icon: '💡', color: '#002060' },
+  7: { id: 7, name: 'Leadership commitment', icon: '👥', color: '#00B050' },
+  8: { id: 8, name: 'CIP in indirect area_LEAN', icon: '⚡', color: '#00B0F0' },
+  9: { id: 9, name: 'Digital Transformation', icon: '💻', color: '#0070C0' },
 } as const;
 
 // 模块信息

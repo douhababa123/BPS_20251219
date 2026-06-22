@@ -1253,7 +1253,10 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
       });
 
     return Array.from(moduleMap.entries())
-      .map(([value, moduleId]) => ({ value, label: value, moduleId }))
+      .map(([value, moduleId]) => {
+        const cfg = getCompetenceConfig(value);
+        return { value, label: value, moduleId, color: cfg.color, colorKey: cfg.colorKey };
+      })
       .sort((left, right) => left.moduleId - right.moduleId || left.label.localeCompare(right.label, 'zh-CN'));
   }, [competencyDefinitions]);
 
@@ -1279,6 +1282,10 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
 
     return rows;
   }, [competencyDefinitions, formData.competence_module, formData.competence_type]);
+
+  const selectedCompetenceConfig = useMemo(() => {
+    return getCompetenceConfig(formData.competence_module || formData.competence);
+  }, [formData.competence_module, formData.competence]);
 
   useEffect(() => {
     if (!formData.competence || formData.competence_module || competencyDefinitions.length === 0) return;
@@ -1457,9 +1464,21 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
             >
               <option value="">请选择能力域...</option>
               {competenceModules.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
+                <option key={item.value} value={item.value}>
+                  {item.label} ({item.colorKey})
+                </option>
               ))}
             </select>
+            {formData.competence_module && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
+                <span
+                  className="w-3 h-3 rounded-full border border-gray-300"
+                  style={{ backgroundColor: selectedCompetenceConfig.color }}
+                />
+                <span>{selectedCompetenceConfig.colorKey}</span>
+                <span className="text-gray-400">{selectedCompetenceConfig.color}</span>
+              </div>
+            )}
           </div>
 
           <div>

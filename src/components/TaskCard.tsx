@@ -47,10 +47,15 @@ export function TaskCard({ task, onClick, className, showEmployee = false }: Tas
   const timeSlotLabel = getTimeSlotLabel(timeSlot);
   const timeSlotColorClass = getTimeSlotColor(timeSlot);
   const statusConfig = getTaskStatusConfig(task.status);
+  const competenceConfig = getCompetenceConfig(task.competence);
 
   return (
     <div
       onClick={onClick}
+      style={{
+        borderLeftColor: competenceConfig.color,
+        borderLeftWidth: 4,
+      }}
       className={cn(
         'p-2 rounded-lg border cursor-pointer transition-all hover:shadow-md',
         'bg-white hover:bg-gray-50',
@@ -92,6 +97,16 @@ export function TaskCard({ task, onClick, className, showEmployee = false }: Tas
       {/* 任务类型 */}
       <div className="text-xs text-gray-600 mt-1">
         {task.task_type}
+      </div>
+
+      <div className="flex items-center gap-1 mt-1">
+        <span
+          className="w-2 h-2 rounded-full flex-shrink-0"
+          style={{ backgroundColor: competenceConfig.color }}
+        />
+        <span className="text-xs text-gray-500 truncate">
+          {competenceConfig.label}
+        </span>
       </div>
 
       {/* 员工姓名（可选） */}
@@ -176,5 +191,3 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
     </div>
   );
 }
-
-
