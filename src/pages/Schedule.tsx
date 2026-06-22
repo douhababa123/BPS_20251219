@@ -205,8 +205,9 @@ export function Schedule() {
   // 我的待确认任务：status=planned 且 assigned_employee_id 与当前用户匹配（通过邮箱）
   const myPlannedTasks = useMemo(() => {
     if (!user) return [];
+    const userEmail = user.email.toLowerCase();
     return normalizedTasks.filter((t: any) =>
-      t.status === 'planned' && t.assigned_employee_email === user.email
+      t.status === 'planned' && (t.assigned_employee_email || '').toLowerCase() === userEmail
     );
   }, [normalizedTasks, user]);
 
@@ -215,6 +216,14 @@ export function Schedule() {
     if (!isAdmin) return [];
     return normalizedTasks.filter((t: any) => t.status === 'pending_approval');
   }, [normalizedTasks, isAdmin]);
+
+  const canModifyTask = (task: any) => {
+    if (isAdmin) return true;
+    return (
+      task.status === 'pending_approval'
+      && (task.requester_id || '').toLowerCase() === (user?.id || '').toLowerCase()
+    );
+  };
 
   // Admin 审批 / 拒绝 mutation
   const [adminRejectModal, setAdminRejectModal] = useState<{ taskId: string; taskName: string } | null>(null);
@@ -662,6 +671,7 @@ export function Schedule() {
                 deleteTaskMutation.mutate(taskId);
               }
             }}
+            canModifyTask={canModifyTask}
             onQuickAdd={(data: { employeeId: string; date: string }) => {
               // 打开新增任务对话框，预填充员工和日期
               setPrefilledTaskData(data);
@@ -798,6 +808,7 @@ function TeamView({
   setPeriodType,
   onEditTask,
   onDeleteTask,
+  canModifyTask,
   onQuickAdd,
 }: any) {
   const { days } = calendarData;
@@ -948,14 +959,14 @@ function TeamView({
         <TaskDetailModal
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
-          onEdit={() => {
+          onEdit={canModifyTask(selectedTask) ? () => {
             onEditTask(selectedTask);
             setSelectedTask(null);
-          }}
-          onDelete={() => {
+          } : undefined}
+          onDelete={canModifyTask(selectedTask) ? () => {
             onDeleteTask(selectedTask.id);
             setSelectedTask(null);
-          }}
+          } : undefined}
         />
       )}
 
@@ -1306,7 +1317,9 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
       
       // 如果是 Site PS 为其他员工创建任务，发送通知
       // 注意：user.id 是 users 表的 ID，而 employees.id 是员工表的 ID，需要通过 email 匹配找到当前用户的员工记录
-      const currentEmployee = user ? employees.find((emp: any) => emp.email === user.email) : null;
+      const currentEmployee = user
+        ? employees.find((emp: any) => (emp.email || '').toLowerCase() === user.email.toLowerCase())
+        : null;
       if (currentEmployee && task.assigned_employee_id && task.assigned_employee_id !== currentEmployee.id) {
         const assignedEmployee = employees.find((emp: any) => emp.id === task.assigned_employee_id);
         if (assignedEmployee) {

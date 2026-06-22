@@ -13,13 +13,14 @@ const allNavItems = [
   { id: 'competency', icon: Award, label: '能力画像', adminOnly: false },
   { id: 'assessment', icon: BarChart3, label: '能力评估', adminOnly: false },
   { id: 'matching', icon: Target, label: '任务分配', adminOnly: false },
-  { id: 'importNew', icon: FileSpreadsheet, label: '数据导入', adminOnly: false },
+  { id: 'importNew', icon: FileSpreadsheet, label: '数据导入', adminOnly: true },
   { id: 'admin', icon: Settings, label: '管理员', adminOnly: true },
 ];
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const { isAdmin } = useNewAuth();
   const navItems = allNavItems.filter(item => !item.adminOnly || isAdmin);
+
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
       <div className="p-6 border-b border-gray-200">

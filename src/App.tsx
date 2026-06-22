@@ -35,7 +35,8 @@ const pages = {
   debug: { component: DebugPage, title: '连接诊断', subtitle: 'Connection Debug' },
 };
 
-// 受保护的路由组件
+const adminOnlyPages = new Set<keyof typeof pages>(['admin', 'importNew']);
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useNewAuth();
 
@@ -67,7 +68,7 @@ function AppContent() {
   const PageComponent = pages[currentPage].component;
 
   const handleNavigate = (page: string) => {
-    if (page === 'admin' && !isAdmin) return; // 非管理员无法导航到 admin
+    if (adminOnlyPages.has(page as keyof typeof pages) && !isAdmin) return;
     setCurrentPage(page as keyof typeof pages);
   };
 
@@ -79,13 +80,18 @@ function AppContent() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header title={pages[currentPage].title} subtitle={pages[currentPage].subtitle} />
 
-          <main className="flex-1 overflow-y-auto" style={{ 
-            padding: (currentPage === 'assessment' || currentPage === 'competency' || currentPage === 'schedule') ? '0' : '2rem'
-          }}>
-            <div style={{ 
-              maxWidth: (currentPage === 'assessment' || currentPage === 'competency' || currentPage === 'schedule') ? 'none' : '1280px',
-              margin: (currentPage === 'assessment' || currentPage === 'competency' || currentPage === 'schedule') ? '0' : '0 auto'
-            }}>
+          <main
+            className="flex-1 overflow-y-auto"
+            style={{
+              padding: (currentPage === 'assessment' || currentPage === 'competency' || currentPage === 'schedule') ? '0' : '2rem'
+            }}
+          >
+            <div
+              style={{
+                maxWidth: (currentPage === 'assessment' || currentPage === 'competency' || currentPage === 'schedule') ? 'none' : '1280px',
+                margin: (currentPage === 'assessment' || currentPage === 'competency' || currentPage === 'schedule') ? '0' : '0 auto'
+              }}
+            >
               <PageComponent />
             </div>
           </main>
@@ -98,7 +104,6 @@ function AppContent() {
 function App() {
   return (
     <Routes>
-      {/* 认证路由 */}
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/password-login" element={<PasswordLoginPage />} />
       <Route path="/login" element={<SimpleLoginScreen />} />
@@ -111,8 +116,7 @@ function App() {
           </ProtectedRoute>
         }
       />
-      
-      {/* 主应用路由 */}
+
       <Route
         path="/*"
         element={

@@ -7,6 +7,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime, date
 import logging
+import json
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,9 +15,60 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import Task, TaskCreate, TaskUpdate, MessageResponse
 from database import get_db
 from .auth import get_current_user
+from audit import log_audit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _is_admin(current_user: dict) -> bool:
+    return current_user.get('role') == 'admin'
+
+
+def _user_id(current_user: dict) -> str:
+    return str(current_user.get('user_id') or current_user.get('id') or '')
+
+
+def _task_snapshot(task: Task) -> str:
+    if hasattr(task, 'model_dump'):
+        data = task.model_dump()
+    else:
+        data = task.dict()
+    return json.dumps(data, ensure_ascii=False, default=str)
+
+
+def _safe_log_task_audit(
+    task_id: str,
+    operation_type: str,
+    current_user: dict,
+    field_name: Optional[str] = None,
+    old_value: Optional[str] = None,
+    new_value: Optional[str] = None
+) -> None:
+    try:
+        operator_email = current_user.get('email') or ''
+        log_audit(
+            table_name='tasks',
+            record_id=str(task_id),
+            operation_type=operation_type,
+            operator_id=_user_id(current_user),
+            operator_name=current_user.get('name') or operator_email or _user_id(current_user),
+            operator_email=operator_email,
+            field_name=field_name,
+            old_value=old_value,
+            new_value=new_value,
+        )
+    except Exception as audit_error:
+        logger.warning("Failed to write task audit log: %s", audit_error, exc_info=True)
+
+
+def _can_modify_task(task: Task, current_user: dict) -> bool:
+    if _is_admin(current_user):
+        return True
+    return (
+        str(task.requester_id or '').lower() == _user_id(current_user).lower()
+        and task.status == 'pending_approval'
+    )
 
 
 @router.get("/", response_model=List[Task])
@@ -25,7 +77,8 @@ def get_tasks(
     status: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    cursor=Depends(get_db)
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
     """获取任务列表，支持筛选"""
     query = """
@@ -89,7 +142,11 @@ def get_tasks(
 
 
 @router.get("/{task_id}", response_model=Task)
-def get_task(task_id: UUID, cursor=Depends(get_db)):
+def get_task(
+    task_id: UUID,
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user)
+):
     """获取指定任务"""
     cursor.execute("""
         SELECT id, task_name, task_type, task_location, assigned_employee_id,
@@ -152,13 +209,17 @@ def create_task(
             days_count = (end - start).days + 1
             total_hours = days_count * hours_per_day
 
+        status = task.status
+        if not _is_admin(current_user):
+            status = 'pending_approval'
+
         cursor.execute("""
             INSERT INTO dbo.tasks 
             (task_name, task_type, task_location, assigned_employee_id,
              start_date, end_date, hours_per_day, total_hours, status,
-             notes, time_slot, competence)
+             notes, time_slot, competence, requester_id)
             OUTPUT INSERTED.id
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             task.task_name,
             task.task_type,
@@ -168,16 +229,25 @@ def create_task(
             task.end_date,
             hours_per_day,
             total_hours,
-            task.status,
+            status,
             task.notes,
             task.time_slot,
-            task.competence
+            task.competence,
+            _user_id(current_user)
         ))
         
         new_id = str(cursor.fetchone()[0])
         cursor.commit()
-        
-        return get_task(UUID(new_id), cursor)
+
+        created_task = get_task(UUID(new_id), cursor, current_user)
+        _safe_log_task_audit(
+            new_id,
+            'INSERT',
+            current_user,
+            new_value=_task_snapshot(created_task)
+        )
+
+        return created_task
     
     except Exception as e:
         cursor.rollback()
@@ -194,7 +264,11 @@ def update_task(
 ):
     """更新任务"""
     # 检查是否存在
-    existing = get_task(task_id, cursor)
+    existing = get_task(task_id, cursor, current_user)
+    if not _can_modify_task(existing, current_user):
+        raise HTTPException(status_code=403, detail="只能修改自己提交且仍待审批的任务草稿")
+    if not _is_admin(current_user) and task.status is not None and task.status != 'pending_approval':
+        raise HTTPException(status_code=403, detail="普通用户不能修改任务审批状态")
     
     # 构建更新字段
     update_fields = []
@@ -247,8 +321,17 @@ def update_task(
         sql = f"UPDATE dbo.tasks SET {', '.join(update_fields)} WHERE id = ?"
         cursor.execute(sql, params)
         cursor.commit()
-        
-        return get_task(task_id, cursor)
+
+        updated_task = get_task(task_id, cursor, current_user)
+        _safe_log_task_audit(
+            str(task_id),
+            'UPDATE',
+            current_user,
+            old_value=_task_snapshot(existing),
+            new_value=_task_snapshot(updated_task)
+        )
+
+        return updated_task
     
     except Exception as e:
         cursor.rollback()
@@ -264,11 +347,20 @@ def delete_task(
 ):
     """删除任务"""
     # 检查是否存在
-    get_task(task_id, cursor)
+    existing = get_task(task_id, cursor, current_user)
+    if not _can_modify_task(existing, current_user):
+        raise HTTPException(status_code=403, detail="只能删除自己提交且仍待审批的任务草稿")
     
     try:
         cursor.execute("DELETE FROM dbo.tasks WHERE id = ?", str(task_id))
         cursor.commit()
+
+        _safe_log_task_audit(
+            str(task_id),
+            'DELETE',
+            current_user,
+            old_value=_task_snapshot(existing)
+        )
         
         return MessageResponse(message="删除成功")
     
