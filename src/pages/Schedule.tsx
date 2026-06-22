@@ -27,6 +27,8 @@ type ViewMode = 'team' | 'personal';
 type PeriodType = 'month' | 'quarter' | 'year';
 type TaskStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled' | 'pending_approval' | 'rejected' | 'confirmed' | 'employee_rejected' | 'all';
 const COMPETENCE_SEPARATOR = ' | ';
+const NON_REPORTABLE_STATUSES = new Set(['rejected', 'employee_rejected']);
+const UNASSIGNED_ROW_ID = '__unassigned__';
 
 function parseTaskCompetence(value: string | null | undefined) {
   if (!value) return { moduleName: '', competencyType: '' };
@@ -240,7 +242,7 @@ export function Schedule() {
     let result = normalizedTasks;
     
     // 员工筛选
-    if (selectedEmployeeIds.length > 0) {
+    if (selectedEmployeeIds.length > 0 && selectedEmployeeIds.length < employeeList.length) {
       result = result.filter((task: any) => selectedEmployeeIds.includes(task.assigned_employee_id));
     }
     
@@ -250,41 +252,47 @@ export function Schedule() {
     }
     
     return result;
-  }, [normalizedTasks, selectedEmployeeIds, statusFilter]);
+  }, [normalizedTasks, selectedEmployeeIds, statusFilter, employeeList.length]);
+
+  const reportableTasks = useMemo(() => {
+    return filteredTasks.filter((task: any) => !NON_REPORTABLE_STATUSES.has(task.status));
+  }, [filteredTasks]);
 
   // 计算统计数据
   const statistics = useMemo(() => {
     const workingDays = 22; // 假设每月22个工作日
-    const standardHours = selectedEmployeeIds.length * workingDays * 8;
-    const totalHours = filteredTasks.reduce((sum: number, task: any) => sum + (task.total_hours || 0), 0);
+    const selectedEmployeeCount = selectedEmployeeIds.length || employeeList.length;
+    const standardHours = selectedEmployeeCount * workingDays * 8;
+    const totalHours = reportableTasks.reduce((sum: number, task: any) => sum + (task.total_hours || 0), 0);
     const saturation = standardHours > 0 ? Math.round((totalHours / standardHours) * 100) : 0;
 
     return {
-      totalTasks: filteredTasks.length,
+      totalTasks: reportableTasks.length,
       totalHours,
       standardHours,
       saturation,
-      taskCount: filteredTasks.length,
+      taskCount: reportableTasks.length,
     };
-  }, [filteredTasks, selectedEmployeeIds.length]);
+  }, [reportableTasks, selectedEmployeeIds.length, employeeList.length]);
 
   // 任务地点统计
   const locationStats = useMemo(() => {
     const statsMap = new Map();
-    filteredTasks.forEach((task: any) => {
+    reportableTasks.forEach((task: any) => {
       const hours = task.total_hours || 0;
-      const existing = statsMap.get(task.task_location) || { name: task.task_location, value: 0 };
+      const location = task.task_location || 'Unspecified';
+      const existing = statsMap.get(location) || { name: location, value: 0 };
       existing.value += hours;
-      statsMap.set(task.task_location, existing);
+      statsMap.set(location, existing);
     });
 
     return Array.from(statsMap.values());
-  }, [filteredTasks]);
+  }, [reportableTasks]);
 
   // 能力域统计（用于图表，带hex颜色）
   const competenceStats = useMemo(() => {
     const statsMap = new Map<string, { name: string; value: number; color: string }>();
-    filteredTasks.forEach((task: any) => {
+    reportableTasks.forEach((task: any) => {
       const key = task.competence || 'Others';
       const cfg = getCompetenceConfig(key);
       const existing = statsMap.get(key) || { name: cfg.label, value: 0, color: cfg.color };
@@ -292,14 +300,14 @@ export function Schedule() {
       statsMap.set(key, existing);
     });
     return Array.from(statsMap.values());
-  }, [filteredTasks]);
+  }, [reportableTasks]);
 
   // 个人饱和度
   const personalSaturation = useMemo(() => {
     const workingDays = 22;
     return selectedEmployeeIds.map(empId => {
       const emp = employees.find((e: any) => e.id === empId);
-      const empTasks = filteredTasks.filter((t: any) => t.assigned_employee_id === empId);
+      const empTasks = reportableTasks.filter((t: any) => t.assigned_employee_id === empId);
       const hours = empTasks.reduce((sum: number, t: any) => sum + (t.total_hours || 0), 0);
       const saturation = Math.min(100, Math.round((hours / (workingDays * 8)) * 100));
 
@@ -311,7 +319,7 @@ export function Schedule() {
         taskCount: empTasks.length,
       };
     });
-  }, [selectedEmployeeIds, employees, filteredTasks]);
+  }, [selectedEmployeeIds, employees, reportableTasks]);
 
   // 日历数据
   const calendarData = useMemo(() => {
@@ -665,7 +673,7 @@ export function Schedule() {
             personalSaturation={personalSaturation}
             selectedEmployeeIds={selectedEmployeeIds}
             employees={employees}
-            tasks={filteredTasks}
+            tasks={reportableTasks}
           />
         )}
       </div>
@@ -794,6 +802,7 @@ function TeamView({
 }: any) {
   const { days } = calendarData;
   const [selectedTask, setSelectedTask] = useState<any>(null);
+  const unassignedTasks = tasks.filter((task: any) => !task.assigned_employee_id);
 
   // 判断是否为周末
   const isWeekend = (day: any) => {
@@ -890,6 +899,45 @@ function TeamView({
                     })}
                   </tr>
                 ))}
+              {unassignedTasks.length > 0 && (
+                <tr className="hover:bg-amber-50/30 transition-colors">
+                  <td className="sticky left-0 z-10 bg-amber-50 p-2 text-sm font-medium text-amber-900 border-r-2 border-b border-gray-300">
+                    未分配
+                  </td>
+                  {days.map((day: any) => {
+                    const dateStr = `${selectedDate}-${String(day).padStart(2, '0')}`;
+                    const weekend = isWeekend(day);
+                    const dayTasks = unassignedTasks.filter((task: any) => {
+                      const sd = task.start_date ? String(task.start_date).substring(0, 10) : '';
+                      const ed = task.end_date ? String(task.end_date).substring(0, 10) : '';
+                      return sd <= dateStr && ed >= dateStr;
+                    });
+
+                    return (
+                      <td
+                        key={`${UNASSIGNED_ROW_ID}-${day}`}
+                        className={cn(
+                          "p-1 min-h-[60px] text-xs border-b border-r border-gray-200 align-top relative",
+                          weekend ? "bg-amber-50/50" : "bg-amber-50/20"
+                        )}
+                        onDoubleClick={(e) => {
+                          if ((e.target as HTMLElement).closest('.task-card-compact')) return;
+                          onQuickAdd({ employeeId: '', date: dateStr });
+                        }}
+                      >
+                        {dayTasks.map((task: any) => (
+                          <div key={task.id} className="task-card-compact">
+                            <TaskCardCompact
+                              task={task}
+                              onClick={() => setSelectedTask(task)}
+                            />
+                          </div>
+                        ))}
+                      </td>
+                    );
+                  })}
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -916,7 +964,7 @@ function TeamView({
         {/* 能力域占比 */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-900">能力域占比 Competence</h3>
+            <h3 className="text-lg font-bold text-gray-900">能力域工时分布 Competence Hours</h3>
             <div className="flex gap-1 text-xs">
               {(['month', 'quarter', 'year'] as const).map(period => (
                 <button
@@ -957,7 +1005,7 @@ function TeamView({
 
         {/* 任务地点占比 */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">任务地点占比 Locations</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-4">任务地点工时分布 Location Hours</h3>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={locationStats}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -1067,7 +1115,7 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
           {/* 个人任务占比 */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">能力域占比 Competence</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">能力域工时分布 Competence Hours</h3>
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie
@@ -1090,7 +1138,7 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
             </div>
 
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">任务地点占比</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">任务地点工时分布 Location Hours</h3>
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie
