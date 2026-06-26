@@ -26,6 +26,7 @@ import {
   getRankIcon,
   formatNumber,
   type ModuleStats,
+  type PersonalModuleStats,
 } from '../lib/competencyAggregation';
 
 type ViewMode = 'team' | 'personal';
@@ -168,7 +169,7 @@ export function Competency() {
 
   // 准备柱状图数据（显示所有模块和技能）
   const teamBarData = chartType === 'module'
-    ? teamModuleStats
+    ? [...teamModuleStats]
         .sort((a, b) => b.totalGap - a.totalGap)
         .map(m => ({
           name: m.moduleName.length > 18 ? m.moduleName.substring(0, 18) + '...' : m.moduleName,
@@ -183,7 +184,7 @@ export function Competency() {
         }));
 
   const personalBarData = chartType === 'module'
-    ? personalModuleStats
+    ? [...personalModuleStats]
         .sort((a, b) => b.gap - a.gap)
         .map(m => ({
           name: m.moduleName.length > 18 ? m.moduleName.substring(0, 18) + '...' : m.moduleName,
@@ -361,6 +362,7 @@ export function Competency() {
             setSelectedEmployee={setSelectedEmployee}
             radarData={personalRadarData}
             barData={personalBarData}
+            moduleStats={personalModuleStats}
             skillStats={personalSkillStats}
           />
         )}
@@ -571,6 +573,7 @@ function PersonalView({
   setSelectedEmployee,
   radarData,
   barData,
+  moduleStats,
   skillStats,
 }: {
   subViewMode: SubViewMode;
@@ -582,9 +585,13 @@ function PersonalView({
   setSelectedEmployee: (id: string | null) => void;
   radarData: any[];
   barData: any[];
+  moduleStats: PersonalModuleStats[];
   skillStats: any[];
 }) {
   const selectedEmployeeInfo = employees.find(e => e.id === selectedEmployee);
+  const moduleSummary = [...moduleStats].sort(
+    (a, b) => b.gap * b.skillCount - a.gap * a.skillCount
+  );
 
   return (
     <div className="space-y-4">
@@ -756,15 +763,15 @@ function PersonalView({
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {radarData.map((module: any) => {
-                      const totalGap = module.Gap * module.skillCount; // 计算总GAP
-                      const avgGap = module.Gap;
+                    {moduleSummary.map((module) => {
+                      const totalGap = module.gap * module.skillCount;
+                      const avgGap = module.gap;
                       return (
-                        <tr key={module.name} className="hover:bg-gray-50">
+                        <tr key={module.moduleId} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span className="text-xl">{module.icon}</span>
-                              <span className="text-sm font-medium text-gray-900">{module.name}</span>
+                              <span className="text-sm font-medium text-gray-900">{module.moduleName}</span>
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right">
