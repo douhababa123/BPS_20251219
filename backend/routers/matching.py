@@ -59,14 +59,21 @@ def calculate_skill_score(candidate_assessments: List[Dict], required_items: Lis
     
     for req in required_items:
         item_id = req['skill_id']
+        skill_name = req.get('skill_name')
         required_level = req['required_level']
         is_key = req['is_key']
         
         # 查找候选人对该技能的评估
-        assessment = next(
-            (a for a in candidate_assessments if a['skill_id'] == item_id),
-            None
-        )
+        if skill_name:
+            assessment = next(
+                (a for a in candidate_assessments if a.get('skill_name') == skill_name),
+                None
+            )
+        else:
+            assessment = next(
+                (a for a in candidate_assessments if a['skill_id'] == item_id),
+                None
+            )
         
         Ci = assessment['current_level'] if assessment else 0
         Ti = assessment['target_level'] if assessment else 0
@@ -116,18 +123,24 @@ def check_role_gate(
     """
     if role not in ['Lead', 'Expert']:
         return 'OK'
+
+    def req_key(req: Dict) -> Any:
+        return req.get('skill_name') or req['skill_id']
+
+    def assessment_key(assessment: Dict) -> Any:
+        return assessment.get('skill_name') or assessment['skill_id']
     
     # 计算关键项平均分
-    key_skill_ids = [req['skill_id'] for req in required_items if req['is_key']]
-    key_assessments = [a for a in candidate_assessments if a['skill_id'] in key_skill_ids]
+    key_skill_ids = [req_key(req) for req in required_items if req['is_key']]
+    key_assessments = [a for a in candidate_assessments if assessment_key(a) in key_skill_ids]
     
     key_item_mean = 0
     if key_assessments:
         key_item_mean = sum(a['current_level'] for a in key_assessments) / len(key_assessments)
     
     # 计算模块平均分
-    all_skill_ids = [req['skill_id'] for req in required_items]
-    module_assessments = [a for a in candidate_assessments if a['skill_id'] in all_skill_ids]
+    all_skill_ids = [req_key(req) for req in required_items]
+    module_assessments = [a for a in candidate_assessments if assessment_key(a) in all_skill_ids]
     
     module_mean = 0
     if module_assessments:
@@ -200,33 +213,19 @@ def get_modules(cursor=Depends(get_db)):
     这里使用ROW_NUMBER()只取第一个
     """
     cursor.execute("""
-        WITH RankedModules AS (
-            SELECT 
-                module_id, 
-                module_name,
-                ROW_NUMBER() OVER (PARTITION BY module_id ORDER BY module_name) as rn
-            FROM dbo.skills
-            WHERE is_active = 1
-        )
-        SELECT module_id, module_name
-        FROM RankedModules
-        WHERE rn = 1
+        SELECT module_id, MIN(module_name) as module_name, COUNT(*) as skill_count
+        FROM dbo.competency_definitions
+        GROUP BY module_id
         ORDER BY module_id
     """)
     
     modules = []
-    skill_count_query = """
-        SELECT COUNT(*) FROM dbo.skills 
-        WHERE module_id = ? AND is_active = 1
-    """
-    
     for row in cursor.fetchall():
         module_id = row[0]
         module_name = row[1]
         
         # 获取该模块下的技能数量
-        cursor.execute(skill_count_query, module_id)
-        skill_count = cursor.fetchone()[0]
+        skill_count = row[2]
         
         modules.append({
             'id': module_id,
@@ -242,19 +241,43 @@ def get_skills(module_id: int = None, cursor=Depends(get_db)):
     """
     获取技能列表，可按模块筛选
     """
+    base_query = """
+        SELECT
+            COALESCE(exact_skill.id, fallback_skill.id) as id,
+            cd.module_id,
+            cd.module_name,
+            cd.competency_type as skill_name,
+            cd.competency_code as skill_code,
+            COALESCE(exact_skill.display_order, fallback_skill.display_order, cd.id) as display_order
+        FROM dbo.competency_definitions cd
+        OUTER APPLY (
+            SELECT TOP 1 s.id, s.display_order
+            FROM dbo.skills s
+            WHERE s.is_active = 1
+              AND s.module_id = cd.module_id
+              AND s.module_name = cd.module_name
+              AND s.skill_name = cd.competency_type
+            ORDER BY s.id
+        ) exact_skill
+        OUTER APPLY (
+            SELECT TOP 1 s.id, s.display_order
+            FROM dbo.skills s
+            WHERE s.is_active = 1
+              AND s.skill_name = cd.competency_type
+            ORDER BY
+              CASE WHEN s.module_id = cd.module_id THEN 0 ELSE 1 END,
+              s.id
+        ) fallback_skill
+    """
+
     if module_id:
-        cursor.execute("""
-            SELECT id, module_id, module_name, skill_name, skill_code, display_order
-            FROM dbo.skills
-            WHERE module_id = ? AND is_active = 1
-            ORDER BY display_order, skill_name
+        cursor.execute(base_query + """
+            WHERE cd.module_id = ?
+            ORDER BY display_order, cd.competency_type
         """, module_id)
     else:
-        cursor.execute("""
-            SELECT id, module_id, module_name, skill_name, skill_code, display_order
-            FROM dbo.skills
-            WHERE is_active = 1
-            ORDER BY module_id, display_order, skill_name
+        cursor.execute(base_query + """
+            ORDER BY cd.module_id, display_order, cd.competency_type
         """)
     
     skills = []
@@ -306,6 +329,23 @@ def preview_matching(
         end_date = datetime.fromisoformat(request.get('endDate'))
         required_items = request.get('required', [])
         suggested_user_id = request.get('suggestedUserId')
+
+        if required_items:
+            requested_skill_ids = tuple(req['skill_id'] for req in required_items)
+            placeholders = ','.join(['?' for _ in requested_skill_ids])
+            cursor.execute(f"""
+                SELECT id, skill_name
+                FROM dbo.skills
+                WHERE id IN ({placeholders})
+            """, *requested_skill_ids)
+            skill_names_by_id = {row[0]: row[1] for row in cursor.fetchall()}
+            required_items = [
+                {
+                    **req,
+                    'skill_name': skill_names_by_id.get(req['skill_id'])
+                }
+                for req in required_items
+            ]
         
         # 角色门槛配置（与前端 constants.ts ROLE_THRESHOLDS 保持一致）
         role_thresholds = {
@@ -341,25 +381,31 @@ def preview_matching(
             employee_id = emp['id']
             
             # 1. 获取员工的能力评估
-            skill_ids = tuple([req['skill_id'] for req in required_items])
-            if not skill_ids:
+            skill_names = tuple([req.get('skill_name') for req in required_items if req.get('skill_name')])
+            if not skill_names:
                 continue
                 
-            placeholders = ','.join(['?' for _ in skill_ids])
+            placeholders = ','.join(['?' for _ in skill_names])
             cursor.execute(f"""
-                SELECT skill_id, current_level, target_level
-                FROM dbo.competency_assessments
-                WHERE employee_id = ? 
-                  AND skill_id IN ({placeholders})
-                ORDER BY assessment_date DESC
-            """, employee_id, *skill_ids)
+                SELECT
+                    MIN(ca.skill_id) as skill_id,
+                    s.skill_name,
+                    MAX(ca.current_level) as current_level,
+                    MAX(ca.target_level) as target_level
+                FROM dbo.competency_assessments ca
+                JOIN dbo.skills s ON s.id = ca.skill_id
+                WHERE ca.employee_id = ?
+                  AND s.skill_name IN ({placeholders})
+                GROUP BY s.skill_name
+            """, employee_id, *skill_names)
             
             assessments = []
             for row in cursor.fetchall():
                 assessments.append({
                     'skill_id': row[0],
-                    'current_level': row[1],
-                    'target_level': row[2]
+                    'skill_name': row[1],
+                    'current_level': row[2],
+                    'target_level': row[3]
                 })
             
             # 2. 计算技能评分
