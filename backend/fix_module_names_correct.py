@@ -13,9 +13,9 @@ settings = Settings()
 MODULE_MAPPING = {
     1: "BPS elements",
     2: "Investment efficiency_PGL",
-    3: "Investment efficiency_IE",
-    4: "Waste-free&stable flow_TPM",
-    5: "Waste-free&stable flow_LBP",
+    3: "Waste-free, stable flow_IE",
+    4: "Waste-free, stable flow_TPM",
+    5: "Waste-free, stable flow_LBP",
     6: "Everybody's CIP",
     7: "Leadership commitment",
     8: "CIP in indirect area_LEAN",

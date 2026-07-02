@@ -51,47 +51,54 @@ export interface ParseResult {
  * 模块名称映射到ID
  */
 const MODULE_MAP: Record<string, number> = {
-  'BPS System approach': 1,
-  'Investment efficiency': 1,
-  'PGL': 1,
-  'IE': 2,
-  'TPM': 3,
-  'LBP': 4,
-  'LEAN': 5,
-  'Waste-free': 2,
-  'Everybody': 4,
-  'Leadership': 6,
-  'CIP': 4,
-  'Digital': 7,
-  'VSM': 2,
-  'SMC': 2,
-  'Problem solving': 3,
-  'Workplace design': 2,
-  'MTM': 2,
-  'Loss': 3,
-  'Logistic': 2,
-  'Pull': 2,
-  'Package': 2,
-  'Material': 2,
-  'Ship': 2,
-  'Top idea': 4,
-  'Give me 5': 4,
-  'Speed week': 4,
-  'Kaizen': 4,
-  'BLI': 4,
-  'Kyoben': 4,
-  'Jishuken': 4,
-  'BMT': 6,
-  'BPS Essential': 1,
-  'BPS maturity': 1,
-  'Customer interview': 1,
-  'Employee capacity': 6,
-  'Meeting cascade': 6,
-  'WILO': 6,
-  'Skill Matrix': 6,
-  'Lean Leadership': 6,
-  'Power BI': 7,
-  'Low code': 7,
+  'Leading in a BPS Plant': 1,
+  'BPS Basic': 1,
+  'BPS elements': 1,
+  'VSM': 1,
+  'SMC': 1,
+  'WAS': 1,
+  'Problem solving': 1,
+  'Investment efficiency': 2,
+  'PGL': 2,
+  'Premises': 2,
+  'DFMA': 2,
+  'LLD': 2,
+  'FOL': 2,
+  'Scaling': 2,
+  'Waste-free': 3,
+  'IE': 3,
+  'Workplace design': 3,
+  'MTM-UAS': 3,
+  'MTM-LOG': 3,
+  'MTM-Inspection': 3,
+  'TPM': 4,
+  'Loss': 4,
+  'LBP': 5,
+  'Logistic': 5,
+  'Pull': 5,
+  'Package': 5,
+  'Material': 5,
+  'Ship': 5,
+  'Everybody': 6,
+  'Top idea': 6,
+  'Give me 5': 6,
+  'Speed week': 6,
+  'Kaizen': 6,
+  'Leadership': 7,
+  'BLI': 7,
+  'Kyoben': 7,
+  'Jishuken': 7,
+  'BMT': 7,
+  'BPS maturity': 7,
+  'LEAN': 8,
+  'Customer interview': 8,
+  'Employee capacity': 8,
+  'Meeting cascade': 8,
+  'WILO': 8,
+  'Skill Matrix': 8,
+  'Lean Leadership': 8,
+  'Digital': 9,
+  'Business analysis': 9,
 };
 
 /**
@@ -111,7 +118,7 @@ function inferModule(skillName: string): { moduleId: number; moduleName: string 
   }
   
   // 默认返回TPM基础
-  return { moduleId: 1, moduleName: 'TPM基础' };
+  return { moduleId: 1, moduleName: 'BPS elements' };
 }
 
 /**
@@ -119,22 +126,19 @@ function inferModule(skillName: string): { moduleId: number; moduleName: string 
  */
 function getModuleName(moduleId: number): string {
   const names: Record<number, string> = {
-    1: 'TPM基础',
-    2: '精益流程',
-    3: '问题解决',
-    4: '项目管理',
-    5: '数据分析',
-    6: '团队领导',
-    7: '质量管理',
-    8: '设备管理',
-    9: '流程优化',
+    1: 'BPS elements',
+    2: 'Investment efficiency_PGL',
+    3: 'Waste-free, stable flow_IE',
+    4: 'Waste-free, stable flow_TPM',
+    5: 'Waste-free, stable flow_LBP',
+    6: "Everybody's CIP",
+    7: 'Leadership commitment',
+    8: 'CIP in indirect area_LEAN',
+    9: 'Digital Transformation',
   };
-  return names[moduleId] || 'TPM基础';
+  return names[moduleId] || 'BPS elements';
 }
 
-/**
- * 解析复杂Excel文件
- */
 export async function parseComplexExcel(file: File): Promise<ParseResult> {
   const errors: ParseError[] = [];
   

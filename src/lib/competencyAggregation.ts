@@ -9,9 +9,9 @@ import type { AssessmentFull, Skill } from './database.types';
 export const MODULE_MAPPING = {
   1: { id: 1, name: 'BPS elements', icon: '🎯', color: '#92D050' },
   2: { id: 2, name: 'Investment efficiency_PGL', icon: '📊', color: '#FF0000' },
-  3: { id: 3, name: 'Investment efficiency_IE', icon: '📈', color: '#FFC000' },
-  4: { id: 4, name: 'Waste-free&stable flow_TPM', icon: '⚙️', color: '#C00000' },
-  5: { id: 5, name: 'Waste-free&stable flow_LBP', icon: '🔄', color: '#7030A0' },
+  3: { id: 3, name: 'Waste-free, stable flow_IE', icon: '📈', color: '#FFC000' },
+  4: { id: 4, name: 'Waste-free, stable flow_TPM', icon: '⚙️', color: '#C00000' },
+  5: { id: 5, name: 'Waste-free, stable flow_LBP', icon: '🔄', color: '#7030A0' },
   6: { id: 6, name: "Everybody's CIP", icon: '💡', color: '#002060' },
   7: { id: 7, name: 'Leadership commitment', icon: '👥', color: '#00B050' },
   8: { id: 8, name: 'CIP in indirect area_LEAN', icon: '⚡', color: '#00B0F0' },

@@ -196,7 +196,7 @@ export function Import() {
                   <li>• 第1行：标题行（编号、模块、类型、工程师）</li>
                   <li>• 第2行起：数据行</li>
                   <li>• <strong>模块</strong>：9大能力名称（如：BPS elements）</li>
-                  <li>• <strong>类型</strong>：具体能力名称（如：BPS System approach）</li>
+                  <li>• <strong>类型</strong>：具体能力名称（如：Leading in a BPS Plant）</li>
                   <li>• <strong>工程师</strong>：负责人姓名（可选）</li>
                 </ul>
               ) : (

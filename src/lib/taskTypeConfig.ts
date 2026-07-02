@@ -34,9 +34,9 @@ export const COMPETENCE_CONFIG: Record<string, { color: string; label: string }>
 const MODULE_TO_COMPETENCE_KEY: Record<string, keyof typeof COMPETENCE_CONFIG> = {
   'BPS elements': 'BPS',
   'Investment efficiency_PGL': 'PGL',
-  'Investment efficiency_IE': 'IE',
-  'Waste-free&stable flow_TPM': 'TPM',
-  'Waste-free&stable flow_LBP': 'LSC',
+  'Waste-free, stable flow_IE': 'IE',
+  'Waste-free, stable flow_TPM': 'TPM',
+  'Waste-free, stable flow_LBP': 'LSC',
   'Leadership commitment': 'Leadership commitment',
   'CIP in indirect area_LEAN': 'LEAN',
   'Digital Transformation': 'Digital Transformation',

@@ -14,7 +14,7 @@ interface MatrixViewProps {
 const getSkillIcon = (skillName: string): string => {
   const iconMap: Record<string, string> = {
     // BPS elements
-    'BPS System approach': '🎯',
+    'Leading in a BPS Plant': '🎯',
     'VSM/VSD': '📋',
     'SMC, Process confirmation, Visual management': '👁️',
     'WAS': '🔍',
@@ -37,7 +37,7 @@ const getSkillIcon = (skillName: string): string => {
     'TPM program management': '⚙️',
     'Change management': '🔄',
     'Loss intelligence: Key Performance Indicators & Loss cost matrix & Loss Deployment (Levels 1, 2,3..)': '📉',
-    'Loss eradication: 10KK, RBC, QAM… & AM team': '🎯',
+    'Loss eradication: 10KK, RBC, QAM... & AM team': '🎯',
     'Loss prevention: PCS(incl. DLR)': '🛡️',
     
     // LBP
@@ -56,7 +56,7 @@ const getSkillIcon = (skillName: string): string => {
     
     // Leadership commitment
     'BMT(Moderator/coach)': '👨‍🏫',
-    'BPS Essential': '📘',
+    'BPS Basic': '📘',
     'BPS maturity assessment': '📊',
     'A2_Customer interview': '🎤',
     'B1_Employee capacity & B2_VSDiA': '👥',
@@ -67,8 +67,7 @@ const getSkillIcon = (skillName: string): string => {
     'Lean Leadership system': '🎖️',
     
     // Digital Transformation
-    'Power BI': '📊',
-    'Low code platform(Jiandaoyun, power apps)': '💻',
+    'Business analysis and spec. preparation of digital product': '📊',
     
     // 其他
     '设备管理': '🔧',

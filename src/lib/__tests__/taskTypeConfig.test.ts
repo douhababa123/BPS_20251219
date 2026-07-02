@@ -52,12 +52,12 @@ describe('getCompetenceConfig', () => {
     expect(getCompetenceConfig('BPS elements').color).toBe('#92D050');
     expect(getCompetenceColorKey('Investment efficiency_PGL')).toBe('PGL');
     expect(getCompetenceConfig('Investment efficiency_PGL').color).toBe('#FF0000');
-    expect(getCompetenceColorKey('Investment efficiency_IE')).toBe('IE');
-    expect(getCompetenceConfig('Investment efficiency_IE').color).toBe('#FFC000');
-    expect(getCompetenceColorKey('Waste-free&stable flow_TPM')).toBe('TPM');
-    expect(getCompetenceConfig('Waste-free&stable flow_TPM').color).toBe('#C00000');
-    expect(getCompetenceColorKey('Waste-free&stable flow_LBP')).toBe('LSC');
-    expect(getCompetenceConfig('Waste-free&stable flow_LBP').color).toBe('#7030A0');
+    expect(getCompetenceColorKey('Waste-free, stable flow_IE')).toBe('IE');
+    expect(getCompetenceConfig('Waste-free, stable flow_IE').color).toBe('#FFC000');
+    expect(getCompetenceColorKey('Waste-free, stable flow_TPM')).toBe('TPM');
+    expect(getCompetenceConfig('Waste-free, stable flow_TPM').color).toBe('#C00000');
+    expect(getCompetenceColorKey('Waste-free, stable flow_LBP')).toBe('LSC');
+    expect(getCompetenceConfig('Waste-free, stable flow_LBP').color).toBe('#7030A0');
     expect(getCompetenceColorKey('CIP in indirect area_LEAN')).toBe('LEAN');
     expect(getCompetenceConfig('CIP in indirect area_LEAN').color).toBe('#00B0F0');
   });

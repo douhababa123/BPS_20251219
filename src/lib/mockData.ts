@@ -48,7 +48,7 @@ export const mockItems: CompetencyItem[] = [
 
   { id: 17, moduleId: 5, name: '统计过程控制', owner: 'Quality Team', isKeyDefault: true },
   { id: 18, moduleId: 5, name: 'Excel数据分析', owner: 'Quality Team', isKeyDefault: false },
-  { id: 19, moduleId: 5, name: 'Power BI可视化', owner: 'Quality Team', isKeyDefault: false },
+  { id: 19, moduleId: 9, name: 'Business analysis and spec. preparation of digital product', owner: 'Zhang Fanmin', isKeyDefault: false },
   { id: 20, moduleId: 5, name: 'Python数据处理', owner: 'Quality Team', isKeyDefault: false },
 
   { id: 21, moduleId: 6, name: '项目计划编制', owner: 'Process Engineering', isKeyDefault: true },
@@ -136,7 +136,7 @@ export const mockCompetencyDefinitions: CompetencyDefinition[] = [
   // 数据分析模块
   { id: 17, moduleId: 5, moduleName: '数据分析', competencyType: '统计过程控制', engineer: 'Liu Yang' },
   { id: 18, moduleId: 5, moduleName: '数据分析', competencyType: 'Excel数据分析', engineer: 'Zhao Lin' },
-  { id: 19, moduleId: 5, moduleName: '数据分析', competencyType: 'Power BI可视化', engineer: 'Sun Hui' },
+  { id: 19, moduleId: 9, moduleName: 'Digital Transformation', competencyType: 'Business analysis and spec. preparation of digital product', engineer: 'Zhang Fanmin' },
   { id: 20, moduleId: 5, moduleName: '数据分析', competencyType: 'Python数据处理', engineer: 'Zhou Fang' },
   
   // 项目管理模块

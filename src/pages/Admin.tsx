@@ -33,9 +33,9 @@ type TabType = 'departments' | 'employees' | 'skills' | 'history' | 'approvals' 
 const MODULE_OPTIONS = [
   { id: 1, name: 'BPS elements' },
   { id: 2, name: 'Investment efficiency_PGL' },
-  { id: 3, name: 'Investment efficiency_IE' },
-  { id: 4, name: 'Waste-free&stable flow_TPM' },
-  { id: 5, name: 'Waste-free&stable flow_LBP' },
+  { id: 3, name: 'Waste-free, stable flow_IE' },
+  { id: 4, name: 'Waste-free, stable flow_TPM' },
+  { id: 5, name: 'Waste-free, stable flow_LBP' },
   { id: 6, name: "Everybody's CIP" },
   { id: 7, name: 'Leadership commitment' },
   { id: 8, name: 'CIP in indirect area_LEAN' },

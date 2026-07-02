@@ -34,9 +34,9 @@ export interface SkillParseResult {
 const MODULE_MAPPING: Record<string, number> = {
   'BPS elements': 1,
   'Investment efficiency_PGL': 2,
-  'Investment efficiency_IE': 3,
-  'Waste-free&stable flow_TPM': 4,
-  'Waste-free&stable flow_LBP': 5,
+  'Waste-free, stable flow_IE': 3,
+  'Waste-free, stable flow_TPM': 4,
+  'Waste-free, stable flow_LBP': 5,
   "Everybody's CIP": 6,
   'Leadership commitment': 7,
   'CIP in indirect area_LEAN': 8,
@@ -67,6 +67,7 @@ function getModuleId(moduleName: string): number {
   if (lowerName.includes('bps')) return 1;
   if (lowerName.includes('investment') && lowerName.includes('pgl')) return 2;
   if (lowerName.includes('investment') && lowerName.includes('ie')) return 3;
+  if (lowerName.includes('waste') && lowerName.includes('ie')) return 3;
   if (lowerName.includes('waste') && lowerName.includes('tpm')) return 4;
   if (lowerName.includes('waste') && lowerName.includes('lbp')) return 5;
   if (lowerName.includes('cip') && lowerName.includes('everybody')) return 6;
