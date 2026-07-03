@@ -19,6 +19,7 @@ def get_all_modules(cursor=Depends(get_db)):
     cursor.execute("""
         SELECT DISTINCT module_id, module_name 
         FROM skills 
+        WHERE ISNULL(is_active, 1) = 1
         ORDER BY module_id
     """)
     rows = cursor.fetchall()

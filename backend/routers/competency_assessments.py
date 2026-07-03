@@ -58,6 +58,7 @@ def get_competency_assessments_full(
         LEFT JOIN dbo.departments d ON e.department_id = d.id
         JOIN dbo.skills s ON ca.skill_id = s.id
         WHERE e.is_active = 1
+          AND ISNULL(s.is_active, 1) = 1
     """
     params = []
     if department_id is not None:
