@@ -10,6 +10,10 @@ interface MatrixViewProps {
   isLoading?: boolean;
 }
 
+const formatLevel = (level: number): string => level > 0 ? String(level) : '-';
+const hasIncompleteLevel = (currentLevel: number, targetLevel: number): boolean =>
+  currentLevel <= 0 || targetLevel <= 0;
+
 // 根据技能名称返回对应的图标（41个不同的图标）
 const getSkillIcon = (skillName: string): string => {
   const iconMap: Record<string, string> = {
@@ -156,7 +160,7 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
         row.employeeName,
         ...filteredColumns.map(col => {
           const skill = row.skills[col.skillId];
-          return skill ? `${skill.currentLevel}/${skill.targetLevel}` : '';
+          return skill ? `${formatLevel(skill.currentLevel)}/${formatLevel(skill.targetLevel)}` : '';
         }),
       ];
       csvRows.push(rowData.join(','));
@@ -386,12 +390,17 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
                     }
 
                     const gap = skill.gap;
-                    const bgColor = gap === 0 
+                    const incomplete = hasIncompleteLevel(skill.currentLevel, skill.targetLevel);
+                    const bgColor = incomplete
+                      ? 'bg-gray-50'
+                      : gap === 0 
                       ? 'bg-green-50' 
                       : gap === 1 
                       ? 'bg-yellow-50' 
                       : 'bg-red-50';
-                    const textColor = gap === 0 
+                    const textColor = incomplete
+                      ? 'text-gray-500'
+                      : gap === 0 
                       ? 'text-green-700' 
                       : gap === 1 
                       ? 'text-yellow-700' 
@@ -400,9 +409,9 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
                     return (
                       <td key={col.skillId} className={`px-3 py-3 text-center border-r border-gray-200 ${bgColor}`}>
                         <div className={`text-sm font-medium ${textColor}`}>
-                          {skill.currentLevel}/{skill.targetLevel}
+                          {formatLevel(skill.currentLevel)}/{formatLevel(skill.targetLevel)}
                         </div>
-                        {gap > 0 && (
+                        {!incomplete && gap > 0 && (
                           <div className="text-xs text-gray-500 mt-1">
                             Gap: {gap}
                           </div>

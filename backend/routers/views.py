@@ -281,8 +281,8 @@ def get_department_skill_distribution(
             s.skill_name,
             s.module_name,
             COUNT(DISTINCT e.id) AS employee_count,
-            AVG(COALESCE(ca.current_level, 0)) AS avg_current_level,
-            AVG(COALESCE(ca.target_level, 0)) AS avg_target_level,
+            AVG(NULLIF(ca.current_level, 0)) AS avg_current_level,
+            AVG(NULLIF(ca.target_level, 0)) AS avg_target_level,
             SUM(CASE WHEN ca.current_level >= 1 THEN 1 ELSE 0 END) AS level_1_count,
             SUM(CASE WHEN ca.current_level >= 2 THEN 1 ELSE 0 END) AS level_2_count,
             SUM(CASE WHEN ca.current_level >= 3 THEN 1 ELSE 0 END) AS level_3_count

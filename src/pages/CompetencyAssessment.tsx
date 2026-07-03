@@ -94,6 +94,18 @@ export function CompetencyAssessment() {
 
   // 计算员工汇总数据
   const calculateSummaries = (data: AssessmentFull[]) => {
+    const averagePositive = (values: number[]) => {
+      const positive = values.filter(value => value > 0);
+      return positive.length > 0
+        ? positive.reduce((sum, value) => sum + value, 0) / positive.length
+        : 0;
+    };
+    const averageGap = (items: AssessmentFull[]) => {
+      const complete = items.filter(item => item.current_level > 0 && item.target_level > 0);
+      return complete.length > 0
+        ? complete.reduce((sum, item) => sum + item.gap, 0) / complete.length
+        : 0;
+    };
     const employeeMap = new Map<string, AssessmentFull[]>();
     
     data.forEach(assessment => {
@@ -118,20 +130,22 @@ export function CompetencyAssessment() {
       });
 
       const moduleDetails = Array.from(moduleMap.entries()).map(([moduleId, items]) => {
-        const avgCurrent = items.reduce((sum, i) => sum + i.current_level, 0) / items.length;
-        const avgTarget = items.reduce((sum, i) => sum + i.target_level, 0) / items.length;
+        const avgCurrent = averagePositive(items.map(i => i.current_level));
+        const avgTarget = averagePositive(items.map(i => i.target_level));
+        const avgGap = averageGap(items);
         return {
           moduleName: items[0].module_name,
           moduleId,
           avgCurrent: Math.round(avgCurrent * 10) / 10,
           avgTarget: Math.round(avgTarget * 10) / 10,
-          avgGap: Math.round((avgTarget - avgCurrent) * 10) / 10,
+          avgGap: Math.round(avgGap * 10) / 10,
           itemCount: items.length,
         };
       });
 
-      const avgCurrent = assessments.reduce((sum, a) => sum + a.current_level, 0) / assessments.length;
-      const avgTarget = assessments.reduce((sum, a) => sum + a.target_level, 0) / assessments.length;
+      const avgCurrent = averagePositive(assessments.map(a => a.current_level));
+      const avgTarget = averagePositive(assessments.map(a => a.target_level));
+      const avgGap = averageGap(assessments);
 
       summaryList.push({
         employeeId,
@@ -140,7 +154,7 @@ export function CompetencyAssessment() {
         totalSkills: assessments.length,
         avgCurrent: Math.round(avgCurrent * 10) / 10,
         avgTarget: Math.round(avgTarget * 10) / 10,
-        avgGap: Math.round((avgTarget - avgCurrent) * 10) / 10,
+        avgGap: Math.round(avgGap * 10) / 10,
         moduleDetails,
       });
     });
@@ -198,6 +212,11 @@ export function CompetencyAssessment() {
     return 'text-red-600 bg-red-100';
   };
 
+  const formatLevel = (level: number) => level > 0 ? `L${level}` : '-';
+  const formatLevelValue = (level: number) => level > 0 ? String(level) : '-';
+  const isIncompleteAssessment = (assessment: AssessmentFull) =>
+    assessment.current_level <= 0 || assessment.target_level <= 0;
+
   const getLevelIcon = (level: number) => {
     if (level >= 4) return '🏆';
     if (level >= 3) return '⭐';
@@ -228,9 +247,9 @@ export function CompetencyAssessment() {
       a.employee_name,
       a.module_name,
       a.skill_name,
-      a.current_level,
-      a.target_level,
-      a.gap,
+      formatLevelValue(a.current_level),
+      formatLevelValue(a.target_level),
+      isIncompleteAssessment(a) ? '-' : a.gap,
       a.assessment_year
     ]);
     const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
@@ -599,12 +618,12 @@ export function CompetencyAssessment() {
                                         key={level}
                                         className={cn(
                                           'w-2 h-8 rounded',
-                                          level <= assessment.current_level ? 'bg-blue-500' : 'bg-gray-200'
+                                          assessment.current_level > 0 && level <= assessment.current_level ? 'bg-blue-500' : 'bg-gray-200'
                                         )}
                                       />
                                     ))}
                                   </div>
-                                  <p className="text-xs font-medium text-gray-900 mt-1">L{assessment.current_level}</p>
+                                  <p className="text-xs font-medium text-gray-900 mt-1">{formatLevel(assessment.current_level)}</p>
                                 </div>
                                 <div className="text-center">
                                   <p className="text-xs text-gray-600">目标</p>
@@ -614,20 +633,20 @@ export function CompetencyAssessment() {
                                         key={level}
                                         className={cn(
                                           'w-2 h-8 rounded',
-                                          level <= assessment.target_level ? 'bg-green-500' : 'bg-gray-200'
+                                          assessment.target_level > 0 && level <= assessment.target_level ? 'bg-green-500' : 'bg-gray-200'
                                         )}
                                       />
                                     ))}
                                   </div>
-                                  <p className="text-xs font-medium text-gray-900 mt-1">L{assessment.target_level}</p>
+                                  <p className="text-xs font-medium text-gray-900 mt-1">{formatLevel(assessment.target_level)}</p>
                                 </div>
                                 <div className="text-center">
                                   <p className="text-xs text-gray-600">差距</p>
                                   <span className={cn(
                                     'inline-block px-3 py-1 rounded-full text-sm font-medium',
-                                    getGapColor(assessment.gap)
+                                    isIncompleteAssessment(assessment) ? 'text-gray-600 bg-gray-100' : getGapColor(assessment.gap)
                                   )}>
-                                    {assessment.gap}
+                                    {isIncompleteAssessment(assessment) ? '-' : assessment.gap}
                                   </span>
                                 </div>
                               </div>
@@ -669,20 +688,20 @@ export function CompetencyAssessment() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{assessment.skill_name}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <span className="px-2 py-1 text-sm bg-blue-100 text-blue-700 rounded">
-                          L{assessment.current_level}
+                          {formatLevel(assessment.current_level)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <span className="px-2 py-1 text-sm bg-green-100 text-green-700 rounded">
-                          L{assessment.target_level}
+                          {formatLevel(assessment.target_level)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <span className={cn(
                           'px-2 py-1 text-sm rounded',
-                          getGapColor(assessment.gap)
+                          isIncompleteAssessment(assessment) ? 'text-gray-600 bg-gray-100' : getGapColor(assessment.gap)
                         )}>
-                          {assessment.gap}
+                          {isIncompleteAssessment(assessment) ? '-' : assessment.gap}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-500">

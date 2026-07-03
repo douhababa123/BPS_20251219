@@ -128,14 +128,17 @@ export function Competency() {
 
   // 统计卡片数据
   const statistics = useMemo(() => {
-    const totalGap = assessments.reduce((sum, a) => sum + a.gap, 0);
-    const avgCurrent = assessments.length > 0
-      ? assessments.reduce((sum, a) => sum + a.current_level, 0) / assessments.length
+    const completeAssessments = assessments.filter(a => a.current_level > 0 && a.target_level > 0);
+    const currentValues = assessments.map(a => a.current_level).filter(level => level > 0);
+    const targetValues = assessments.map(a => a.target_level).filter(level => level > 0);
+    const totalGap = completeAssessments.reduce((sum, a) => sum + a.gap, 0);
+    const avgCurrent = currentValues.length > 0
+      ? currentValues.reduce((sum, level) => sum + level, 0) / currentValues.length
       : 0;
-    const avgTarget = assessments.length > 0
-      ? assessments.reduce((sum, a) => sum + a.target_level, 0) / assessments.length
+    const avgTarget = targetValues.length > 0
+      ? targetValues.reduce((sum, level) => sum + level, 0) / targetValues.length
       : 0;
-    const gapCount = assessments.filter(a => a.gap > 0).length;
+    const gapCount = completeAssessments.filter(a => a.gap > 0).length;
 
     return {
       employeeCount: new Set(assessments.map(a => a.employee_id)).size,
@@ -196,6 +199,8 @@ export function Competency() {
           Gap: s.gap,
         }));
 
+  const formatOptionalLevelValue = (level: number) => level > 0 ? String(level) : '-';
+
   // 导出CSV
   const handleExport = () => {
     const headers = viewMode === 'team'
@@ -213,8 +218,8 @@ export function Competency() {
         ])
       : personalSkillStats.map(s => [
           s.skillName,
-          s.current,
-          s.target,
+          formatOptionalLevelValue(s.current),
+          formatOptionalLevelValue(s.target),
           s.gap,
         ]);
 

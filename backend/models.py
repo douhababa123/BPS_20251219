@@ -364,8 +364,8 @@ class CompetencyAssessmentCreate(CompetencyAssessmentBase):
 
 
 class CompetencyAssessmentUpdate(BaseModel):
-    current_level: Optional[int] = Field(None, ge=0, le=3)
-    target_level: Optional[int] = Field(None, ge=0, le=3)
+    current_level: Optional[int] = Field(None, ge=0, le=5)
+    target_level: Optional[int] = Field(None, ge=0, le=5)
     assessment_date: Optional[datetime] = None
     assessor_notes: Optional[str] = None
 

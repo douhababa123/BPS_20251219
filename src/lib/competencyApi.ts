@@ -111,7 +111,10 @@ export async function getMatrixData(assessments: AssessmentFull[]): Promise<{
   });
   
   // 计算统计数据
-  const totalGap = assessments.reduce((sum, a) => sum + a.gap, 0);
+  const currentValues = assessments.map(a => a.current_level).filter(level => level > 0);
+  const targetValues = assessments.map(a => a.target_level).filter(level => level > 0);
+  const completeAssessments = assessments.filter(a => a.current_level > 0 && a.target_level > 0);
+  const totalGap = completeAssessments.reduce((sum, a) => sum + a.gap, 0);
   
   return {
     rows,
@@ -120,14 +123,14 @@ export async function getMatrixData(assessments: AssessmentFull[]): Promise<{
       totalAssessments: assessments.length,
       totalEmployees: rows.length,
       totalSkills: columns.length,
-      avgCurrentLevel: assessments.length > 0
-        ? Math.round((assessments.reduce((sum, a) => sum + a.current_level, 0) / assessments.length) * 10) / 10
+      avgCurrentLevel: currentValues.length > 0
+        ? Math.round((currentValues.reduce((sum, level) => sum + level, 0) / currentValues.length) * 10) / 10
         : 0,
-      avgTargetLevel: assessments.length > 0
-        ? Math.round((assessments.reduce((sum, a) => sum + a.target_level, 0) / assessments.length) * 10) / 10
+      avgTargetLevel: targetValues.length > 0
+        ? Math.round((targetValues.reduce((sum, level) => sum + level, 0) / targetValues.length) * 10) / 10
         : 0,
-      avgGap: assessments.length > 0
-        ? Math.round((assessments.reduce((sum, a) => sum + a.gap, 0) / assessments.length) * 10) / 10
+      avgGap: completeAssessments.length > 0
+        ? Math.round((totalGap / completeAssessments.length) * 10) / 10
         : 0,
       totalGapScore: totalGap,
     },

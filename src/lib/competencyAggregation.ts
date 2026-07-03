@@ -89,6 +89,9 @@ export function calculateTeamModuleStats(
     totalTarget: number;
     totalGap: number;
     count: number;
+    currentCount: number;
+    targetCount: number;
+    gapCount: number;
     employees: Set<string>;
     skills: Set<number>;
   }>();
@@ -104,13 +107,25 @@ export function calculateTeamModuleStats(
       totalTarget: 0,
       totalGap: 0,
       count: 0,
+      currentCount: 0,
+      targetCount: 0,
+      gapCount: 0,
       employees: new Set<string>(),
       skills: new Set<number>(),
     };
 
-    existing.totalCurrent += assessment.current_level;
-    existing.totalTarget += assessment.target_level;
-    existing.totalGap += assessment.gap;
+    if (assessment.current_level > 0) {
+      existing.totalCurrent += assessment.current_level;
+      existing.currentCount += 1;
+    }
+    if (assessment.target_level > 0) {
+      existing.totalTarget += assessment.target_level;
+      existing.targetCount += 1;
+    }
+    if (assessment.current_level > 0 && assessment.target_level > 0) {
+      existing.totalGap += assessment.gap;
+      existing.gapCount += 1;
+    }
     existing.count += 1;
     existing.employees.add(assessment.employee_id);
     existing.skills.add(skill.id);
@@ -130,12 +145,12 @@ export function calculateTeamModuleStats(
         moduleName: moduleInfo.name,
         icon: moduleInfo.icon,
         color: moduleInfo.color,
-        avgCurrent: stats.totalCurrent / stats.count,
-        avgTarget: stats.totalTarget / stats.count,
+        avgCurrent: stats.currentCount > 0 ? stats.totalCurrent / stats.currentCount : 0,
+        avgTarget: stats.targetCount > 0 ? stats.totalTarget / stats.targetCount : 0,
         totalCurrent: stats.totalCurrent,  // 新增：总现状分数
         totalTarget: stats.totalTarget,    // 新增：总目标分数
         totalGap: stats.totalGap,
-        avgGap: stats.totalGap / stats.count,
+        avgGap: stats.gapCount > 0 ? stats.totalGap / stats.gapCount : 0,
         employeeCount: stats.employees.size,
         skillCount: stats.skills.size,
       });
@@ -173,6 +188,9 @@ export function calculateTeamSkillStats(
     totalTarget: number;
     totalGap: number;
     count: number;
+    currentCount: number;
+    targetCount: number;
+    gapCount: number;
     employees: Set<string>;
   }>();
 
@@ -183,12 +201,24 @@ export function calculateTeamSkillStats(
       totalTarget: 0,
       totalGap: 0,
       count: 0,
+      currentCount: 0,
+      targetCount: 0,
+      gapCount: 0,
       employees: new Set<string>(),
     };
 
-    existing.totalCurrent += assessment.current_level;
-    existing.totalTarget += assessment.target_level;
-    existing.totalGap += assessment.gap;
+    if (assessment.current_level > 0) {
+      existing.totalCurrent += assessment.current_level;
+      existing.currentCount += 1;
+    }
+    if (assessment.target_level > 0) {
+      existing.totalTarget += assessment.target_level;
+      existing.targetCount += 1;
+    }
+    if (assessment.current_level > 0 && assessment.target_level > 0) {
+      existing.totalGap += assessment.gap;
+      existing.gapCount += 1;
+    }
     existing.count += 1;
     existing.employees.add(assessment.employee_id);
 
@@ -210,10 +240,10 @@ export function calculateTeamSkillStats(
       moduleName: skill.module_name,
       moduleIcon: moduleInfo?.icon || '📌',
       totalGap: stats.totalGap,
-      avgGap: stats.totalGap / stats.count,
+      avgGap: stats.gapCount > 0 ? stats.totalGap / stats.gapCount : 0,
       employeeCount: stats.employees.size,
-      avgCurrent: stats.totalCurrent / stats.count,
-      avgTarget: stats.totalTarget / stats.count,
+      avgCurrent: stats.currentCount > 0 ? stats.totalCurrent / stats.currentCount : 0,
+      avgTarget: stats.targetCount > 0 ? stats.totalTarget / stats.targetCount : 0,
     });
   });
 
@@ -237,6 +267,9 @@ export function calculatePersonalModuleStats(
     totalTarget: number;
     totalGap: number;
     count: number;
+    currentCount: number;
+    targetCount: number;
+    gapCount: number;
   }>();
 
   // 聚合数据
@@ -250,11 +283,23 @@ export function calculatePersonalModuleStats(
       totalTarget: 0,
       totalGap: 0,
       count: 0,
+      currentCount: 0,
+      targetCount: 0,
+      gapCount: 0,
     };
 
-    existing.totalCurrent += assessment.current_level;
-    existing.totalTarget += assessment.target_level;
-    existing.totalGap += assessment.gap;
+    if (assessment.current_level > 0) {
+      existing.totalCurrent += assessment.current_level;
+      existing.currentCount += 1;
+    }
+    if (assessment.target_level > 0) {
+      existing.totalTarget += assessment.target_level;
+      existing.targetCount += 1;
+    }
+    if (assessment.current_level > 0 && assessment.target_level > 0) {
+      existing.totalGap += assessment.gap;
+      existing.gapCount += 1;
+    }
     existing.count += 1;
 
     moduleMap.set(moduleId, existing);
@@ -272,9 +317,9 @@ export function calculatePersonalModuleStats(
         moduleName: moduleInfo.name,
         icon: moduleInfo.icon,
         color: moduleInfo.color,
-        current: stats.totalCurrent / stats.count,
-        target: stats.totalTarget / stats.count,
-        gap: stats.totalGap / stats.count,
+        current: stats.currentCount > 0 ? stats.totalCurrent / stats.currentCount : 0,
+        target: stats.targetCount > 0 ? stats.totalTarget / stats.targetCount : 0,
+        gap: stats.gapCount > 0 ? stats.totalGap / stats.gapCount : 0,
         skillCount: stats.count,
       });
     } else {
