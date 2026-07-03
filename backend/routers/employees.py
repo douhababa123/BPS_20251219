@@ -27,7 +27,7 @@ def get_employees(
                d.name as department_name
         FROM dbo.employees e
         LEFT JOIN dbo.departments d ON e.department_id = d.id
-        WHERE 1=1
+        WHERE ISNULL(e.is_active, 1) = 1
     """
     params = []
     
