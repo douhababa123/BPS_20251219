@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Filter, Download, Loader2, Database, Maximize2, Minimize2 } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Filter, Download, Loader2, Database, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { MatrixRow, MatrixColumn, MatrixFilters, AssessmentStats } from '../lib/database.types';
 import { apiClient } from '../lib/api-client';
 
@@ -87,6 +87,7 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
   const [selectedModules, setSelectedModules] = useState<number[]>([]);
   const [allModules, setAllModules] = useState<Array<{ module_id: number; module_name: string }>>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isFullscreen) return;
@@ -169,6 +170,14 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
   }, [columns, selectedModules]);
 
   const matrixTableMinWidth = `${240 + filteredColumns.length * 88}px`;
+
+  const scrollMatrixHorizontally = (direction: 'left' | 'right') => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const distance = Math.max(container.clientWidth * 0.75, 520);
+    container.scrollLeft += direction === 'right' ? distance : -distance;
+  };
 
   // 导出CSV
   const handleExport = () => {
@@ -274,6 +283,28 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
             <span className="font-medium">筛选条件</span>
           </div>
           <div className="flex items-center gap-2">
+            {isFullscreen && (
+              <div className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => scrollMatrixHorizontally('left')}
+                  aria-label="向左移动表格"
+                  title="向左移动表格"
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollMatrixHorizontally('right')}
+                  aria-label="向右移动表格"
+                  title="向右移动表格"
+                  className="flex h-9 w-9 items-center justify-center rounded-md text-gray-700 hover:bg-gray-100"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             <button
               onClick={() => setIsFullscreen(value => !value)}
               className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -381,7 +412,7 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
             </svg>
           </div>
         )}
-        <div data-testid="matrix-scroll-container" className="w-full min-w-0 overflow-x-auto overflow-y-auto" style={isFullscreen ? {
+        <div ref={scrollContainerRef} data-testid="matrix-scroll-container" className="w-full min-w-0 overflow-x-auto overflow-y-auto" style={isFullscreen ? {
           height: '100%',
           maxHeight: 'none',
         } : { 

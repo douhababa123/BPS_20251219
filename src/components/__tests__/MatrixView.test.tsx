@@ -69,4 +69,19 @@ describe('MatrixView fullscreen mode', () => {
     expect(screen.getByTestId('matrix-table-shell')).toHaveClass('min-w-0');
     expect(screen.getByTestId('matrix-scroll-container')).toHaveClass('w-full', 'overflow-x-auto');
   });
+
+  it('moves the fullscreen matrix with explicit horizontal controls', async () => {
+    const user = userEvent.setup();
+
+    render(<MatrixView rows={rows} columns={columns} stats={stats} />);
+
+    await user.click(screen.getByRole('button', { name: /全屏查看/ }));
+
+    const scrollContainer = screen.getByTestId('matrix-scroll-container');
+    expect(scrollContainer.scrollLeft).toBe(0);
+
+    await user.click(screen.getByRole('button', { name: /向右移动表格/ }));
+
+    expect(scrollContainer.scrollLeft).toBeGreaterThan(0);
+  });
 });
