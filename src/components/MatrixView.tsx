@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Filter, Download, Loader2, Database } from 'lucide-react';
+import { Filter, Download, Loader2, Database, Maximize2, Minimize2 } from 'lucide-react';
 import type { MatrixRow, MatrixColumn, MatrixFilters, AssessmentStats } from '../lib/database.types';
 import { apiClient } from '../lib/api-client';
 
@@ -86,6 +86,26 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [selectedModules, setSelectedModules] = useState<number[]>([]);
   const [allModules, setAllModules] = useState<Array<{ module_id: number; module_name: string }>>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsFullscreen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFullscreen]);
 
   // 获取所有模块（包括没有评估数据的模块）
   useEffect(() => {
@@ -194,8 +214,16 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
   }
 
   return (
-    <div className="space-y-3">
+    <div
+      data-testid="matrix-view-root"
+      className={
+        isFullscreen
+          ? 'fixed inset-0 z-[100] flex flex-col gap-3 overflow-hidden bg-gray-50 p-3'
+          : 'space-y-3'
+      }
+    >
       {/* 统计卡片 */}
+      {!isFullscreen && (
       <div className="grid grid-cols-4 gap-3">
         <div className="bg-blue-50 rounded-lg p-4">
           <div className="flex items-center justify-between">
@@ -234,6 +262,7 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
           </div>
         </div>
       </div>
+      )}
 
       {/* 筛选栏 */}
       <div className="bg-white rounded-lg shadow p-3 space-y-3">
@@ -242,13 +271,22 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
             <Filter className="w-5 h-5" />
             <span className="font-medium">筛选条件</span>
           </div>
-          <button
-            onClick={handleExport}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            <span>导出CSV</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsFullscreen(value => !value)}
+              className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              <span>{isFullscreen ? '退出全屏' : '全屏查看'}</span>
+            </button>
+            <button
+              onClick={handleExport}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span>导出CSV</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -325,7 +363,7 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
       </div>
 
       {/* 矩阵表格 */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className={isFullscreen ? 'min-h-0 flex-1 overflow-hidden rounded-lg bg-white shadow' : 'bg-white rounded-lg shadow overflow-hidden'}>
         {/* 提示：横向滚动查看更多列 */}
         {filteredColumns.length > 10 && (
           <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-sm text-blue-700 flex items-center gap-2">
@@ -338,7 +376,10 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
             </svg>
           </div>
         )}
-        <div className="overflow-x-auto overflow-y-auto" style={{ 
+        <div className="overflow-x-auto overflow-y-auto" style={isFullscreen ? {
+          height: '100%',
+          maxHeight: 'none',
+        } : { 
           height: 'calc(100vh - 320px)',
           maxHeight: 'calc(100vh - 320px)'
         }}>
@@ -427,6 +468,7 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
       </div>
 
       {/* 图例 */}
+      {!isFullscreen && (
       <div className="bg-white rounded-lg shadow p-4">
         <div className="text-sm font-medium text-gray-700 mb-2">图例说明</div>
         <div className="flex flex-wrap gap-4 text-sm">
@@ -448,6 +490,7 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
