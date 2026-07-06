@@ -168,6 +168,8 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
     return columns.filter(col => selectedModules.includes(col.moduleId));
   }, [columns, selectedModules]);
 
+  const matrixTableMinWidth = `${240 + filteredColumns.length * 88}px`;
+
   // 导出CSV
   const handleExport = () => {
     const BOM = '\ufeff';
@@ -363,7 +365,10 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
       </div>
 
       {/* 矩阵表格 */}
-      <div className={isFullscreen ? 'min-h-0 flex-1 overflow-hidden rounded-lg bg-white shadow' : 'bg-white rounded-lg shadow overflow-hidden'}>
+      <div
+        data-testid="matrix-table-shell"
+        className={isFullscreen ? 'min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg bg-white shadow' : 'bg-white rounded-lg shadow overflow-hidden'}
+      >
         {/* 提示：横向滚动查看更多列 */}
         {filteredColumns.length > 10 && (
           <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-sm text-blue-700 flex items-center gap-2">
@@ -376,14 +381,14 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
             </svg>
           </div>
         )}
-        <div className="overflow-x-auto overflow-y-auto" style={isFullscreen ? {
+        <div data-testid="matrix-scroll-container" className="w-full min-w-0 overflow-x-auto overflow-y-auto" style={isFullscreen ? {
           height: '100%',
           maxHeight: 'none',
         } : { 
           height: 'calc(100vh - 320px)',
           maxHeight: 'calc(100vh - 320px)'
         }}>
-          <table className="min-w-full divide-y divide-gray-200">
+          <table className="min-w-full divide-y divide-gray-200" style={{ minWidth: `max(100%, ${matrixTableMinWidth})` }}>
             <thead className="bg-gray-50 sticky top-0 z-30 shadow-sm">
               <tr>
                 <th className="sticky left-0 z-40 bg-gray-50 px-4 py-1.5 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-r border-gray-200">

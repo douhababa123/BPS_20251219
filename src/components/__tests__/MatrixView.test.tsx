@@ -58,4 +58,15 @@ describe('MatrixView fullscreen mode', () => {
     expect(screen.getByTestId('matrix-view-root')).toHaveClass('fixed', 'inset-0');
     expect(screen.getByRole('button', { name: /退出全屏/ })).toBeInTheDocument();
   });
+
+  it('keeps the fullscreen matrix horizontally scrollable', async () => {
+    const user = userEvent.setup();
+
+    render(<MatrixView rows={rows} columns={columns} stats={stats} />);
+
+    await user.click(screen.getByRole('button', { name: /全屏查看/ }));
+
+    expect(screen.getByTestId('matrix-table-shell')).toHaveClass('min-w-0');
+    expect(screen.getByTestId('matrix-scroll-container')).toHaveClass('w-full', 'overflow-x-auto');
+  });
 });
