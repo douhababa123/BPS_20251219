@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getAllAssessments } from '../lib/competencyApi';
+import { getAssessmentYears } from '../lib/dashboardData';
 import {
   RadarChart,
   Radar,
@@ -36,7 +37,7 @@ type ChartType = 'module' | 'skill';
 export function Competency() {
   const [viewMode, setViewMode] = useState<ViewMode>('team');
   const [subViewMode, setSubViewMode] = useState<SubViewMode>('analysis');
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
   const [chartType, setChartType] = useState<ChartType>('module');
 
@@ -46,10 +47,15 @@ export function Competency() {
     queryFn: () => getAllAssessments(),
   });
 
+  const assessmentYears = useMemo(() => getAssessmentYears(allAssessments), [allAssessments]);
+  const effectiveYear = assessmentYears.includes(selectedYear)
+    ? selectedYear
+    : assessmentYears[0] || selectedYear;
+
   // 按年份过滤
   const assessments = useMemo(
-    () => allAssessments.filter(a => a.assessment_year === selectedYear),
-    [allAssessments, selectedYear]
+    () => allAssessments.filter(a => a.assessment_year === effectiveYear),
+    [allAssessments, effectiveYear]
   );
 
   // 从 assessments 派生技能列表（避免额外请求）
@@ -228,7 +234,7 @@ export function Competency() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `能力画像_${viewMode === 'team' ? '团队' : '个人'}_${selectedYear}.csv`;
+    link.download = `能力画像_${viewMode === 'team' ? '团队' : '个人'}_${effectiveYear}.csv`;
     link.click();
   };
 
@@ -247,11 +253,11 @@ export function Competency() {
                 <Filter className="w-4 h-4 text-blue-600" />
                 <span className="text-sm text-gray-600">评估年度</span>
                 <select
-                  value={selectedYear}
+                  value={effectiveYear}
                   onChange={(e) => setSelectedYear(Number(e.target.value))}
                   className="bg-transparent text-sm font-medium text-gray-900 focus:outline-none"
                 >
-                  {[2023, 2024, 2025].map(year => (
+                  {(assessmentYears.length > 0 ? assessmentYears : [effectiveYear]).map(year => (
                     <option key={year} value={year}>{year}</option>
                   ))}
                 </select>
