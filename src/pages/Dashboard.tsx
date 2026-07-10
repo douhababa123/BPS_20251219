@@ -179,7 +179,7 @@ export function Dashboard() {
             <BarChart data={competencyDistribution} layout="vertical">
               <CartesianGrid stroke="#e5e7eb" />
               <XAxis type="number" />
-              <YAxis dataKey="name" type="category" width={40} />
+              <YAxis dataKey="name" type="category" width={48} interval={0} />
               <Tooltip />
               <Bar dataKey="count" fill="#3B82F6" radius={[0, 8, 8, 0]} />
             </BarChart>

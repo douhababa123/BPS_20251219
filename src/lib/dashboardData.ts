@@ -59,7 +59,7 @@ export function buildCompetencyDistribution(assessments: AssessmentLike[]) {
   }));
 
   assessments.forEach(assessment => {
-    const level = Math.round(Number(assessment.current_level));
+    const level = normalizeCompetencyLevel(assessment.current_level);
     const bucket = buckets.find(item => item.level === level);
     if (bucket) {
       bucket.count += 1;
@@ -282,6 +282,12 @@ function getGap(assessment: AssessmentLike): number {
     return Number(assessment.gap) || 0;
   }
   return Number(assessment.target_level || 0) - Number(assessment.current_level || 0);
+}
+
+function normalizeCompetencyLevel(value?: number | null): number {
+  const level = Math.round(Number(value ?? 0));
+  if (!Number.isFinite(level)) return 0;
+  return Math.min(Math.max(level, 0), 4);
 }
 
 function sumBy(tasks: TaskLike[], getName: (task: TaskLike) => string) {

@@ -15,14 +15,15 @@ describe('dashboardData', () => {
       { current_level: 1 },
       { current_level: 4 },
       { current_level: 5 },
+      { current_level: null },
     ]);
 
     expect(result).toEqual([
-      { level: 0, count: 1, name: 'LV0' },
+      { level: 0, count: 2, name: 'LV0' },
       { level: 1, count: 2, name: 'LV1' },
       { level: 2, count: 0, name: 'LV2' },
       { level: 3, count: 0, name: 'LV3' },
-      { level: 4, count: 1, name: 'LV4' },
+      { level: 4, count: 2, name: 'LV4' },
     ]);
   });
 
