@@ -2,7 +2,22 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, AlertCircle, CheckCircle, Upload, Users, Zap, Filter, Target, BarChart2, GitMerge, ClipboardList } from 'lucide-react';
 import { KpiCard } from '../components/KpiCard';
-import { mockApi } from '../lib/mockApi';
+import { getAllAssessments } from '../lib/competencyApi';
+import { employeesService, tasksService } from '../services';
+import {
+  buildAbilityGapDistribution,
+  buildCompetencyDistribution,
+  buildModuleGapRanking,
+  buildPersonalGapRanking,
+  buildRadarData,
+  buildRecentActivities,
+  buildSaturationTrend,
+  buildTaskDistributions,
+  buildTopGapCounts,
+  buildUpcomingTasks,
+  buildWorkflowSummary,
+  getAssessmentYears,
+} from '../lib/dashboardData';
 import {
   RadarChart,
   Radar,
@@ -26,187 +41,68 @@ import { TOPICS } from '../lib/constants';
 import { cn } from '../lib/utils';
 
 export function Dashboard() {
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  const { data: modules } = useQuery({
-    queryKey: ['modules'],
-    queryFn: mockApi.getCompetencyModules,
+  const { data: realAssessments } = useQuery({
+    queryKey: ['dashboard-competency-assessments-full'],
+    queryFn: () => getAllAssessments(),
   });
 
-  const { data: items } = useQuery({
-    queryKey: ['items'],
-    queryFn: mockApi.getCompetencyItems,
+  const { data: employees } = useQuery({
+    queryKey: ['dashboard-employees'],
+    queryFn: () => employeesService.getAll(),
   });
 
-  const { data: users } = useQuery({
-    queryKey: ['users'],
-    queryFn: mockApi.getUsers,
+  const { data: tasks } = useQuery({
+    queryKey: ['dashboard-tasks'],
+    queryFn: () => tasksService.getTasks(),
   });
 
-  const { data: assessments } = useQuery({
-    queryKey: ['assessments', selectedYear],
-    queryFn: () => mockApi.getAssessments(selectedYear),
-  });
+  const assessmentYears = useMemo(() => getAssessmentYears(realAssessments || []), [realAssessments]);
+  const effectiveYear = assessmentYears.includes(selectedYear)
+    ? selectedYear
+    : assessmentYears[0] || selectedYear;
+  const assessments = useMemo(
+    () => (realAssessments || []).filter(assessment => assessment.assessment_year === effectiveYear),
+    [realAssessments, effectiveYear]
+  );
+  const allTasks = tasks || [];
 
-  const { data: slots } = useQuery({
-    queryKey: ['slots', '2025-01-01', '2025-02-28'],
-    queryFn: () => mockApi.getCalendarSlots('2025-01-01', '2025-02-28'),
-  });
-
-  const radarData = modules?.map(module => {
-    const moduleItems = items?.filter(i => i.moduleId === module.id) || [];
-    const moduleAssessments = assessments?.filter(a =>
-      moduleItems.some(i => i.id === a.itemId)
-    ) || [];
-
-    const avgCurrent = moduleAssessments.length > 0
-      ? moduleAssessments.reduce((sum, a) => sum + a.currentLevel, 0) / moduleAssessments.length
-      : 0;
-
-    const avgTarget = moduleAssessments.length > 0
-      ? moduleAssessments.reduce((sum, a) => sum + a.targetLevel, 0) / moduleAssessments.length
-      : 0;
-
-    return {
-      module: module.name,
-      current: Number(avgCurrent.toFixed(1)),
-      target: Number(avgTarget.toFixed(1)),
-    };
-  }) || [];
-
-  const gapData = useMemo(() => assessments
-    ?.filter(a => a.targetLevel - a.currentLevel >= 2)
-    .reduce((acc, a) => {
-      const existing = acc.find(x => x.userId === a.userId);
-      if (existing) {
-        existing.gaps += 1;
-      } else {
-        acc.push({ userId: a.userId, gaps: 1 });
-      }
-      return acc;
-    }, [] as Array<{ userId: number; gaps: number }>)
-    .sort((a, b) => b.gaps - a.gaps)
-    .slice(0, 5)
-    .map(g => ({
-      name: users?.find(u => u.id === g.userId)?.name || `User ${g.userId}`,
-      gaps: g.gaps,
-    })) || [], [assessments, users]);
-
-  const typeDistribution = slots
-    ?.reduce((acc, slot) => {
-      const existing = acc.find(x => x.name === slot.type);
-      if (existing) {
-        existing.value += slot.hours;
-      } else {
-        acc.push({ name: slot.type, value: slot.hours });
-      }
-      return acc;
-    }, [] as Array<{ name: string; value: number }>) || [];
-
-  const locationDistribution = slots
-    ?.reduce((acc, slot) => {
-      const existing = acc.find(x => x.name === slot.location);
-      if (existing) {
-        existing.value += slot.hours;
-      } else {
-        acc.push({ name: slot.location, value: slot.hours });
-      }
-      return acc;
-    }, [] as Array<{ name: string; value: number }>) || [];
-
-  const gapCount = assessments?.filter(a => a.targetLevel - a.currentLevel >= 2).length || 0;
-
-  const saturationTrend = [
-    { month: 'Jan', saturation: 72 },
-    { month: 'Feb', saturation: 75 },
-    { month: 'Mar', saturation: 78 },
-    { month: 'Apr', saturation: 81 },
-    { month: 'May', saturation: 78 },
-  ];
-
-  const competencyDistribution = assessments?.reduce((acc, a) => {
-    const level = Math.round(a.currentLevel);
-    const existing = acc.find(x => x.level === level);
-    if (existing) {
-      existing.count += 1;
-    } else {
-      acc.push({ level, count: 1, name: `L${level}` });
-    }
-    return acc;
-  }, [] as Array<{ level: number; count: number; name: string }>).sort((a, b) => a.level - b.level) || [];
-
-  const moduleGapRanking = useMemo(() => modules?.map(module => {
-    const moduleItems = items?.filter(i => i.moduleId === module.id) || [];
-    const moduleAssessments = assessments?.filter(a => moduleItems.some(i => i.id === a.itemId)) || [];
-    const gapSum = moduleAssessments.reduce((sum, a) => sum + (a.targetLevel - a.currentLevel), 0);
-    const avgGap = moduleAssessments.length ? gapSum / moduleAssessments.length : 0;
-    const gap2Plus = moduleAssessments.filter(a => a.targetLevel - a.currentLevel >= 2).length;
-    return {
-      module: module.name,
-      avgGap: Number(avgGap.toFixed(2)),
-      gap2Plus,
-      totalGap: Number(gapSum.toFixed(2)),
-    };
-  }).sort((a, b) => b.avgGap - a.avgGap) || [], [modules, items, assessments]);
-
-  const personalGapRanking = useMemo(() => {
-    if (!assessments) return [];
-    const perUser = assessments.reduce((acc, a) => {
-      const gap = a.targetLevel - a.currentLevel;
-      if (gap <= 0) return acc;
-      const existing = acc.get(a.userId) || 0;
-      acc.set(a.userId, existing + gap);
-      return acc;
-    }, new Map<number, number>());
-    return Array.from(perUser.entries())
-      .map(([userId, totalGap]) => ({
-        userId,
-        name: users?.find(u => u.id === userId)?.name || `User ${userId}`,
-        totalGap: Number(totalGap.toFixed(2)),
-      }))
-      .sort((a, b) => b.totalGap - a.totalGap)
-      .slice(0, 6);
-  }, [assessments, users]);
-
-  const abilityGapDistribution = useMemo(() => {
-    if (!assessments || !items) return [] as Array<{ name: string; module: string; totalGap: number; gap2Plus: number }>;
-
-    const map = new Map<number, { name: string; module: string; totalGap: number; gap2Plus: number }>();
-
-    assessments.forEach(assessment => {
-      const gap = assessment.targetLevel - assessment.currentLevel;
-      if (gap <= 0) return;
-      const item = items.find(i => i.id === assessment.itemId);
-      if (!item) return;
-      const moduleName = modules?.find(m => m.id === item.moduleId)?.name || '';
-      const existing = map.get(item.id) || { name: item.name, module: moduleName, totalGap: 0, gap2Plus: 0 };
-      existing.totalGap += gap;
-      if (gap >= 2) existing.gap2Plus += 1;
-      map.set(item.id, existing);
-    });
-
-    return Array.from(map.values())
-      .sort((a, b) => b.totalGap - a.totalGap)
-      .slice(0, 8);
-  }, [assessments, items, modules]);
+  const radarData = useMemo(() => buildRadarData(assessments), [assessments]);
+  const gapData = useMemo(() => buildTopGapCounts(assessments), [assessments]);
+  const competencyDistribution = useMemo(() => buildCompetencyDistribution(assessments), [assessments]);
+  const moduleGapRanking = useMemo(() => buildModuleGapRanking(assessments), [assessments]);
+  const personalGapRanking = useMemo(() => buildPersonalGapRanking(assessments), [assessments]);
+  const abilityGapDistribution = useMemo(() => buildAbilityGapDistribution(assessments), [assessments]);
+  const { typeDistribution, locationDistribution } = useMemo(() => buildTaskDistributions(allTasks), [allTasks]);
+  const workflowCounts = useMemo(() => buildWorkflowSummary(allTasks), [allTasks]);
+  const saturationTrend = useMemo(
+    () => buildSaturationTrend(allTasks, employees?.length || 0),
+    [allTasks, employees?.length]
+  );
+  const recentActivities = useMemo(() => buildRecentActivities(allTasks), [allTasks]);
+  const upcomingTasks = useMemo(() => buildUpcomingTasks(allTasks), [allTasks]);
+  const gapCount = useMemo(
+    () => new Set(assessments
+      .filter(assessment => Number(assessment.gap ?? assessment.target_level - assessment.current_level) >= 2)
+      .map(assessment => assessment.employee_id)
+    ).size,
+    [assessments]
+  );
+  const latestSaturation = saturationTrend[saturationTrend.length - 1]?.saturation || 0;
 
   const workflowSummary = useMemo(() => {
-    const pending = 3;
-    const matching = Math.max(personalGapRanking.length, 4);
-    const allocated = 5;
+    const pending = workflowCounts.pendingApproval;
+    const matching = workflowCounts.pendingApproval;
+    const allocated = workflowCounts.assigned;
     return [
       { label: '匹配中 Matching', value: matching, color: 'bg-blue-100 text-blue-700', icon: GitMerge },
       { label: '待审批 Pending', value: pending, color: 'bg-amber-100 text-amber-700', icon: ClipboardList },
       { label: '已分配 Assigned', value: allocated, color: 'bg-green-100 text-green-700', icon: CheckCircle },
     ];
-  }, [personalGapRanking.length]);
+  }, [workflowCounts.assigned, workflowCounts.pendingApproval]);
 
-  const focusMilestones = [
-    { title: '2025/10/31 技术说明', status: '进行中 In progress', progress: 45 },
-    { title: '2025/11/21 产品开发', status: '未开始 Planned', progress: 5 },
-    { title: '2025/12/15 调试改善', status: '未开始 Planned', progress: 0 },
-    { title: '2025/12/31 部署上线', status: '未开始 Planned', progress: 0 },
-  ];
+  const focusMilestones = upcomingTasks;
 
   return (
     <div className="space-y-6">
@@ -220,11 +116,11 @@ export function Dashboard() {
             <Filter className="w-4 h-4 text-blue-900" />
             <span className="text-sm text-gray-600">评估年度</span>
             <select
-              value={selectedYear}
+              value={effectiveYear}
               onChange={(event) => setSelectedYear(Number(event.target.value))}
               className="bg-transparent text-sm font-medium text-gray-900 focus:outline-none"
             >
-              {[2023, 2024, 2025].map(year => (
+              {(assessmentYears.length > 0 ? assessmentYears : [effectiveYear]).map(year => (
                 <option key={year} value={year}>{year}</option>
               ))}
             </select>
@@ -236,7 +132,7 @@ export function Dashboard() {
         <KpiCard
           title="本月平均饱和度"
           subtitle="Monthly Avg Saturation"
-          value="78%"
+          value={`${latestSaturation}%`}
           icon={TrendingUp}
           color="green"
         />
@@ -250,14 +146,14 @@ export function Dashboard() {
         <KpiCard
           title="待审批任务数"
           subtitle="Pending Tasks"
-          value="3"
+          value={workflowCounts.pendingApproval}
           icon={CheckCircle}
           color="blue"
         />
         <KpiCard
           title="团队成员数"
           subtitle="Team Members"
-          value="10"
+          value={employees?.length || 0}
           icon={Users}
           color="green"
         />
@@ -359,16 +255,16 @@ export function Dashboard() {
         <div className="col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <h3 className="text-lg font-bold text-gray-900 mb-4">最近活动 Recent Activity</h3>
           <div className="space-y-2">
-            {[
-              { type: 'import', desc: '导入2025年能力数据', time: '2小时前', icon: Upload, color: 'bg-blue-100 text-blue-600' },
-              { type: 'match', desc: '匹配任务 L24 HC Optimization', time: '5小时前', icon: Zap, color: 'bg-amber-100 text-amber-600' },
-              { type: 'assign', desc: '指派任务给 Wang Pei', time: '1天前', icon: CheckCircle, color: 'bg-green-100 text-green-600' },
-              { type: 'import', desc: '导入日历排程数据', time: '2天前', icon: Upload, color: 'bg-blue-100 text-blue-600' },
-            ].map((activity, idx) => {
-              const Icon = activity.icon;
+            {recentActivities.map((activity) => {
+              const Icon = activity.type === 'pending_approval' ? Zap : activity.type === 'completed' ? CheckCircle : Upload;
+              const color = activity.type === 'pending_approval'
+                ? 'bg-amber-100 text-amber-600'
+                : activity.type === 'completed'
+                  ? 'bg-green-100 text-green-600'
+                  : 'bg-blue-100 text-blue-600';
               return (
-                <div key={idx} className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                  <div className={cn('p-2 rounded-lg flex-shrink-0', activity.color)}>
+                <div key={activity.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors">
+                  <div className={cn('p-2 rounded-lg flex-shrink-0', color)}>
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">

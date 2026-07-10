@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { mockApi } from '../lib/mockApi';
+import { employeesService, tasksService } from '../services';
+import { buildCalendarSlotsFromTasks } from '../lib/dashboardData';
 import { TOPICS, TASK_TYPES } from '../lib/constants';
 import { cn } from '../lib/utils';
 import { Download, BarChart2, PieChart as PieChartIcon, AlertTriangle } from 'lucide-react';
@@ -18,22 +19,13 @@ import {
 } from 'recharts';
 
 export function Calendar() {
-  const [selectedUsers, setSelectedUsers] = useState<number[]>([101, 102, 104]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
-  const [currentMonth] = useState('2025-01');
+  const [currentMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [analysisPeriod, setAnalysisPeriod] = useState<'month' | 'quarter' | 'year'>('month');
-
-  const { data: users } = useQuery({
-    queryKey: ['users'],
-    queryFn: mockApi.getUsers,
-  });
-
-  const { data: slots } = useQuery({
-    queryKey: ['slots', `${currentMonth}-01`, `${currentMonth}-31`],
-    queryFn: () => mockApi.getCalendarSlots(`${currentMonth}-01`, `${currentMonth}-31`),
-  });
-
-  const filteredSlots = slots?.filter(s => selectedUsers.includes(s.userId)) || [];
 
   const getDaysInMonth = (yearMonth: string) => {
     const [year, month] = yearMonth.split('-').map(Number);
@@ -41,9 +33,28 @@ export function Calendar() {
   };
 
   const daysInMonth = getDaysInMonth(currentMonth);
+
+  const { data: users } = useQuery({
+    queryKey: ['calendar-employees'],
+    queryFn: () => employeesService.getAll(),
+  });
+
+  const { data: tasks } = useQuery({
+    queryKey: ['calendar-tasks', currentMonth],
+    queryFn: () => tasksService.getTasks({
+      start_date: `${currentMonth}-01`,
+      end_date: `${currentMonth}-${String(daysInMonth).padStart(2, '0')}`,
+    }),
+  });
+
+  const visibleUserIds = selectedUsers.length > 0
+    ? selectedUsers
+    : (users || []).slice(0, 3).map(user => user.id);
+  const slots = useMemo(() => buildCalendarSlotsFromTasks(tasks || []), [tasks]);
+  const filteredSlots = slots.filter(s => visibleUserIds.includes(s.userId));
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  const getSlotsForUserDateHalf = (userId: number, day: number, half: 'AM' | 'PM') => {
+  const getSlotsForUserDateHalf = (userId: string, day: number, half: 'AM' | 'PM') => {
     const dateStr = `${currentMonth}-${String(day).padStart(2, '0')}`;
     return filteredSlots.filter(s => s.userId === userId && s.date === dateStr && s.half === half);
   };
@@ -73,7 +84,7 @@ export function Calendar() {
     a.click();
   };
 
-  const totalWorkingHours = selectedUsers.length === 0 ? 0 : selectedUsers.length * daysInMonth * 8;
+  const totalWorkingHours = visibleUserIds.length === 0 ? 0 : visibleUserIds.length * daysInMonth * 8;
   const totalBookedHours = filteredSlots.reduce((sum, slot) => sum + slot.hours, 0);
 
   const calculateSaturation = () => {
@@ -84,7 +95,7 @@ export function Calendar() {
   const saturation = calculateSaturation();
   const saturationColor = saturation < 70 ? 'bg-green-500' : saturation <= 90 ? 'bg-amber-500' : 'bg-red-500';
 
-  const userSaturation = useMemo(() => selectedUsers.map(userId => {
+  const userSaturation = useMemo(() => visibleUserIds.map(userId => {
     const user = users?.find(u => u.id === userId);
     const bookings = filteredSlots.filter(slot => slot.userId === userId);
     const hours = bookings.reduce((sum, slot) => sum + slot.hours, 0);
@@ -97,7 +108,7 @@ export function Calendar() {
       saturation: saturationRate,
       warning,
     };
-  }), [selectedUsers, filteredSlots, users, daysInMonth]);
+  }), [visibleUserIds, filteredSlots, users, daysInMonth]);
 
   const highLoadCount = userSaturation.filter(user => user.saturation >= 90).length;
   const mediumLoadCount = userSaturation.filter(user => user.saturation >= 70 && user.saturation < 90).length;
@@ -127,7 +138,7 @@ export function Calendar() {
   }, [filteredSlots]);
 
   const weeklySaturation = useMemo(() => {
-    if (selectedUsers.length === 0) return [] as Array<{ label: string; saturation: number }>;
+    if (visibleUserIds.length === 0) return [] as Array<{ label: string; saturation: number }>;
     const buckets = new Map<number, { label: string; hours: number }>();
     filteredSlots.forEach(slot => {
       const day = Number(slot.date.split('-')[2]);
@@ -138,9 +149,9 @@ export function Calendar() {
     });
     return Array.from(buckets.values()).map(bucket => ({
       label: bucket.label,
-      saturation: Math.round((bucket.hours / (selectedUsers.length * 40)) * 100),
+      saturation: Math.round((bucket.hours / (visibleUserIds.length * 40)) * 100),
     }));
-  }, [filteredSlots, selectedUsers.length]);
+  }, [filteredSlots, visibleUserIds.length]);
 
   const conflictSlots = useMemo(() => {
     const map = new Map<string, { key: string; date: string; half: string; user: string; tasks: string[] }>();
@@ -176,7 +187,7 @@ export function Calendar() {
                     }}
                     className={cn(
                       'px-3 py-1 rounded-lg text-sm font-medium transition-colors',
-                      selectedUsers.includes(user.id)
+                      visibleUserIds.includes(user.id)
                         ? 'bg-blue-900 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     )}
@@ -297,7 +308,7 @@ export function Calendar() {
               </div>
             ))}
 
-            {users?.filter(u => selectedUsers.includes(u.id)).map(user => (
+            {users?.filter(u => visibleUserIds.includes(u.id)).map(user => (
               <>
                 {['AM', 'PM'].map(half => (
                   <div key={`${user.id}-${half}`} className="contents">
@@ -323,7 +334,7 @@ export function Calendar() {
                               <div
                                 key={slot.id}
                                 className="text-xs p-1 rounded mb-1 relative"
-                                style={{ borderLeft: `3px solid ${topic?.colorHex}` }}
+                                style={{ borderLeft: `3px solid ${topic?.colorHex || '#2563EB'}` }}
                               >
                                 <div className="font-medium">{slot.type}</div>
                                 {hasConflict && <div className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></div>}
