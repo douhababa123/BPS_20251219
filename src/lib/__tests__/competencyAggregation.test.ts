@@ -232,7 +232,31 @@ describe('calculatePersonalModuleStats', () => {
     expect(mod1.current).toBeCloseTo(2.5, 5);
     expect(mod1.target).toBeCloseTo(4.0, 5);
     expect(mod1.gap).toBeCloseTo(1.5, 5);
+    expect(mod1.totalGap).toBe(3);
     expect(mod1.skillCount).toBe(2);
+  });
+
+  it('directly totals completed GAP records when a module has an incomplete assessment', () => {
+    const assessments: AssessmentFull[] = [
+      ...mockAssessments,
+      {
+        ...baseAssessment,
+        id: 'a-incomplete',
+        employee_id: 'emp-1',
+        skill_id: 1,
+        module_id: 1,
+        current_level: 0,
+        target_level: 4,
+        gap: 4,
+      },
+    ];
+
+    const result = calculatePersonalModuleStats('emp-1', assessments, mockSkills);
+    const mod1 = result.find((module) => module.moduleId === 1)!;
+
+    expect(mod1.totalGap).toBe(3);
+    expect(mod1.gap).toBe(1.5);
+    expect(mod1.skillCount).toBe(3);
   });
 
   it('该员工无数据的模块均为 0', () => {
@@ -241,6 +265,7 @@ describe('calculatePersonalModuleStats', () => {
     const mod3 = result.find((m) => m.moduleId === 3)!;
     expect(mod3.current).toBe(0);
     expect(mod3.gap).toBe(0);
+    expect(mod3.totalGap).toBe(0);
   });
 
   it('不存在的员工返回全零模块', () => {

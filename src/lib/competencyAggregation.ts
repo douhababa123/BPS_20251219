@@ -64,6 +64,7 @@ export interface PersonalModuleStats {
   current: number;
   target: number;
   gap: number;
+  totalGap: number;
   skillCount: number;
 }
 
@@ -320,6 +321,7 @@ export function calculatePersonalModuleStats(
         current: stats.currentCount > 0 ? stats.totalCurrent / stats.currentCount : 0,
         target: stats.targetCount > 0 ? stats.totalTarget / stats.targetCount : 0,
         gap: stats.gapCount > 0 ? stats.totalGap / stats.gapCount : 0,
+        totalGap: stats.totalGap,
         skillCount: stats.count,
       });
     } else {
@@ -331,6 +333,7 @@ export function calculatePersonalModuleStats(
         current: 0,
         target: 0,
         gap: 0,
+        totalGap: 0,
         skillCount: 0,
       });
     }
