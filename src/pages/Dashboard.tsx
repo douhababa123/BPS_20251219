@@ -33,8 +33,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   Legend,
 } from 'recharts';
 import { TOPICS } from '../lib/constants';
@@ -159,20 +157,7 @@ export function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
-        <div className="col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">饱和度趋势 Saturation Trend</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={saturationTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="month" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip formatter={(value) => `${value}%`} />
-              <Line type="monotone" dataKey="saturation" stroke="#1E3A8A" strokeWidth={3} dot={{ fill: '#1E3A8A', r: 5 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
+      <div className="grid grid-cols-1 gap-6">
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <h3 className="text-lg font-bold text-gray-900 mb-4">能力等级分布 Level Distribution</h3>
           <ResponsiveContainer width="100%" height={280}>
