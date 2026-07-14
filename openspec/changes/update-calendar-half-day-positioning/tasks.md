@@ -24,6 +24,6 @@
 
 - [x] 5.1 Add failing component tests proving standalone AM/PM cards prioritize task names and retain complete hover information.
 - [x] 5.2 Hide fixed-width auxiliary content from standalone AM/PM cards while preserving FULL_DAY and connected-task detail.
-- [ ] 5.3 Run focused and full frontend tests, TypeScript checking, focused lint, production build, and strict OpenSpec validation.
-- [ ] 5.4 Verify task-name visibility and unchanged connected bands in Firefox.
+- [x] 5.3 Run focused and full frontend tests, TypeScript checking, focused lint, production build, and strict OpenSpec validation.
+- [x] 5.4 Verify task-name visibility and unchanged connected bands in Firefox.
 - [ ] 5.5 Merge to `DEV`, push, and confirm GitHub Actions and the deployed Jetson page.
