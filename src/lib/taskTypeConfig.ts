@@ -13,7 +13,7 @@ export const TASK_LOCATIONS = [
   'FCLCh',
   'FDCCh',
   'FEDNa',
-  'GPU-SU',
+  'Supplier',
   'Nan Jing',
   'Chu Zhou',
 ];
