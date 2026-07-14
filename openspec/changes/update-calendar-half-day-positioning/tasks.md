@@ -17,5 +17,5 @@
 
 ## 4. Deployment
 
-- [ ] 4.1 Merge to `DEV`, push, and confirm code-quality and Jetson deployment jobs succeed.
-- [ ] 4.2 Refresh the Jetson page in Firefox and confirm the deployed layout.
+- [x] 4.1 Merge to `DEV`, push, and confirm code-quality and Jetson deployment jobs succeed.
+- [x] 4.2 Refresh the Jetson page in Firefox and confirm the deployed layout.
