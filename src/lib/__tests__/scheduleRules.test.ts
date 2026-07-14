@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyTaskTypeChange,
+  buildCalendarTaskLayout,
   buildCompetenceHourStats,
   buildContinuousTaskSegments,
   getTaskLocationOptions,
   normalizeOptionalStatus,
   sortCalendarTasks,
   sortHourStats,
+  type ContinuousTaskSegmentMeta,
   type ScheduleTaskForContinuity,
 } from '../scheduleRules';
 
@@ -137,6 +139,72 @@ const task = (overrides: Partial<ScheduleTaskForContinuity>): ScheduleTaskForCon
 });
 
 describe('continuous task segment rules', () => {
+  it('pairs AM and PM in one lane and gives FULL_DAY an exclusive full-width lane', () => {
+    const am = task({ id: '1-am', time_slot: 'AM' });
+    const pm = task({ id: '2-pm', time_slot: 'PM' });
+    const full = task({ id: '3-full', task_name: 'Full', time_slot: 'FULL_DAY' });
+    const segments = buildContinuousTaskSegments([am, pm, full]);
+
+    expect(buildCalendarTaskLayout([am, pm, full], '2026-07-01', segments)).toEqual([
+      { task: am, row: 0, column: 'am' },
+      { task: pm, row: 0, column: 'pm' },
+      { task: full, row: 1, column: 'full' },
+    ]);
+  });
+
+  it('stacks tasks in the same half on separate lanes', () => {
+    const first = task({ id: 'am-1', task_name: 'A', time_slot: 'AM' });
+    const second = task({ id: 'am-2', task_name: 'B', time_slot: 'AM' });
+    const segments = buildContinuousTaskSegments([first, second]);
+
+    expect(buildCalendarTaskLayout([first, second], '2026-07-01', segments)
+      .map(({ row, column }) => ({ row, column }))).toEqual([
+      { row: 0, column: 'am' },
+      { row: 1, column: 'am' },
+    ]);
+  });
+
+  it('excludes fragments marked hidden by the continuous segment map', () => {
+    const visible = task({ id: 'visible', time_slot: 'AM' });
+    const hidden = task({ id: 'hidden', time_slot: 'PM' });
+    const segments = new Map([
+      ['visible|2026-07-01', { position: 'start', continuousHours: 11.5, showLabel: true, groupId: 'group' }],
+      ['hidden|2026-07-01', { position: 'start', continuousHours: 11.5, showLabel: false, groupId: 'group', hidden: true }],
+    ] satisfies Array<[string, ContinuousTaskSegmentMeta]>);
+
+    expect(buildCalendarTaskLayout([visible, hidden], '2026-07-01', segments)
+      .map(({ task: layoutTask }) => layoutTask.id)).toEqual(['visible']);
+  });
+
+  it('keeps a connected group on row zero across dates with different daily tasks', () => {
+    const connected = task({
+      id: 'connected',
+      start_date: '2026-07-01',
+      end_date: '2026-07-02',
+      time_slot: 'FULL_DAY',
+    });
+    const firstDaily = task({
+      id: 'first-daily',
+      task_name: 'First daily',
+      start_date: '2026-07-01',
+      end_date: '2026-07-01',
+    });
+    const secondDaily = task({
+      id: 'second-daily',
+      task_name: 'Second daily',
+      start_date: '2026-07-02',
+      end_date: '2026-07-02',
+    });
+    const segments = buildContinuousTaskSegments([connected, firstDaily, secondDaily]);
+
+    const firstRow = buildCalendarTaskLayout([firstDaily, connected], '2026-07-01', segments)
+      .find(({ task: layoutTask }) => layoutTask.id === 'connected')?.row;
+    const secondRow = buildCalendarTaskLayout([secondDaily, connected], '2026-07-02', segments)
+      .find(({ task: layoutTask }) => layoutTask.id === 'connected')?.row;
+
+    expect([firstRow, secondRow]).toEqual([0, 0]);
+  });
+
   it('connects a full day to the next morning as 11.5 hours', () => {
     const result = buildContinuousTaskSegments([
       task({ id: 'full', time_slot: 'FULL_DAY' }),

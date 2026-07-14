@@ -119,6 +119,54 @@ export function sortCalendarTasks<T extends { id: string; start_date?: string; t
   });
 }
 
+export type CalendarTaskColumn = 'am' | 'pm' | 'full';
+
+export interface CalendarTaskLayout<T> {
+  task: T;
+  row: number;
+  column: CalendarTaskColumn;
+}
+
+interface CalendarTaskLane<T> {
+  am?: T;
+  pm?: T;
+  full?: T;
+}
+
+export function buildCalendarTaskLayout<T extends ScheduleTaskForContinuity>(
+  tasks: T[],
+  date: string,
+  segments: Map<string, ContinuousTaskSegmentMeta>
+): CalendarTaskLayout<T>[] {
+  const lanes: CalendarTaskLane<T>[] = [];
+  const visibleTasks = sortCalendarTasks(tasks, date, segments)
+    .filter((task) => !segments.get(`${task.id}|${date}`)?.hidden);
+  const layout: CalendarTaskLayout<T>[] = [];
+
+  visibleTasks.forEach((task) => {
+    const timeSlot = task.time_slot || 'FULL_DAY';
+    if (timeSlot === 'FULL_DAY') {
+      const row = lanes.length;
+      lanes.push({ full: task });
+      layout.push({ task, row, column: 'full' });
+      return;
+    }
+
+    const column = timeSlot === 'AM' ? 'am' : 'pm';
+    let row = lanes.findIndex((lane) => !lane.full && !lane[column]);
+    if (row === -1) {
+      row = lanes.length;
+      lanes.push({});
+    }
+    lanes[row][column] = task;
+    layout.push({ task, row, column });
+  });
+
+  return layout.sort((left, right) =>
+    left.row - right.row || left.column.localeCompare(right.column)
+  );
+}
+
 interface ExpandedSlot {
   task: ScheduleTaskForContinuity;
   date: string;
