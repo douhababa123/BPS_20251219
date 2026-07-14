@@ -41,20 +41,22 @@ const getReadableTextColor = (hexColor: string) => {
   return luminance > 0.45 ? '#111827' : '#FFFFFF';
 };
 
+export interface TaskCardTask {
+  id: string;
+  task_name: string;
+  task_type: string;
+  competence?: string;
+  status?: 'planned' | 'in_progress' | 'completed' | 'cancelled'
+         | 'pending_approval' | 'rejected' | 'confirmed' | 'employee_rejected';
+  time_slot?: TimeSlot;
+  total_hours?: number;
+  employee_name?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
 interface TaskCardProps {
-  task: {
-    id: string;
-    task_name: string;
-    task_type: string;
-    competence?: string;
-    status?: 'planned' | 'in_progress' | 'completed' | 'cancelled'
-           | 'pending_approval' | 'rejected' | 'confirmed' | 'employee_rejected';
-    time_slot?: TimeSlot;
-    total_hours?: number;
-    employee_name?: string;
-    start_date?: string;
-    end_date?: string;
-  };
+  task: TaskCardTask;
   onClick?: () => void;
   className?: string;
   showEmployee?: boolean;
