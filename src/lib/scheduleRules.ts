@@ -238,7 +238,7 @@ export function buildContinuousTaskSegments(
           result.set(`${taskId}|${date}`, {
             position,
             continuousHours,
-            showLabel: taskIndex === 0,
+            showLabel: dateIndex === 0 && taskIndex === 0,
             groupId,
             hidden: taskIndex > 0,
           });

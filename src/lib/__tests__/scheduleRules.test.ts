@@ -144,7 +144,7 @@ describe('continuous task segment rules', () => {
     ]);
 
     expect(result.get('full|2026-07-01')).toMatchObject({ position: 'start', continuousHours: 11.5, showLabel: true });
-    expect(result.get('morning|2026-07-02')).toMatchObject({ position: 'end', continuousHours: 11.5, showLabel: true });
+    expect(result.get('morning|2026-07-02')).toMatchObject({ position: 'end', continuousHours: 11.5, showLabel: false });
   });
 
   it('connects afternoon to the next morning', () => {
@@ -162,8 +162,8 @@ describe('continuous task segment rules', () => {
       task({ id: 'multi', start_date: '2026-07-01', end_date: '2026-07-03', time_slot: 'FULL_DAY' }),
     ]);
     expect(result.get('multi|2026-07-01')).toMatchObject({ position: 'start', continuousHours: 24 });
-    expect(result.get('multi|2026-07-02')).toMatchObject({ position: 'middle', showLabel: true });
-    expect(result.get('multi|2026-07-03')).toMatchObject({ position: 'end', showLabel: true });
+    expect(result.get('multi|2026-07-02')).toMatchObject({ position: 'middle', showLabel: false });
+    expect(result.get('multi|2026-07-03')).toMatchObject({ position: 'end', showLabel: false });
   });
 
   it('keeps a continuous task ahead of unrelated daily tasks on every date', () => {
