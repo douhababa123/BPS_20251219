@@ -4,10 +4,10 @@ import { tasksService, employeesService, scheduleNotificationsService, taskTypes
 import { TASK_TYPES, getCompetenceConfig } from '../lib/taskTypeConfig';
 import {
   applyTaskTypeChange,
+  buildCompetenceHourStats,
   buildContinuousTaskSegments,
   getTaskLocationOptions,
   normalizeOptionalStatus,
-  sortHourStats,
 } from '../lib/scheduleRules';
 import { taskWorkflowService } from '../services/task-workflow.service';
 import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
@@ -302,20 +302,12 @@ export function Schedule() {
       statsMap.set(location, existing);
     });
 
-    return sortHourStats(Array.from(statsMap.values()));
+    return Array.from(statsMap.values());
   }, [reportableTasks]);
 
   // 能力域统计（用于图表，带hex颜色）
   const competenceStats = useMemo(() => {
-    const statsMap = new Map<string, { name: string; value: number; color: string }>();
-    reportableTasks.forEach((task: any) => {
-      const key = task.competence || 'Others';
-      const cfg = getCompetenceConfig(key);
-      const existing = statsMap.get(key) || { name: cfg.label, value: 0, color: cfg.color };
-      existing.value += task.total_hours || 0;
-      statsMap.set(key, existing);
-    });
-    return Array.from(statsMap.values());
+    return buildCompetenceHourStats(reportableTasks);
   }, [reportableTasks]);
 
   // 个人饱和度
@@ -1049,15 +1041,7 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
 
   // 个人能力域统计（带hex颜色）
   const empCompetenceStats = useMemo(() => {
-    const statsMap = new Map<string, { name: string; value: number; color: string }>();
-    empTasks.forEach((task: any) => {
-      const key = task.competence || 'Others';
-      const cfg = getCompetenceConfig(key);
-      const existing = statsMap.get(key) || { name: cfg.label, value: 0, color: cfg.color };
-      existing.value += task.total_hours || 0;
-      statsMap.set(key, existing);
-    });
-    return sortHourStats(Array.from(statsMap.values()));
+    return buildCompetenceHourStats(empTasks);
   }, [empTasks]);
 
   // 个人任务地点统计

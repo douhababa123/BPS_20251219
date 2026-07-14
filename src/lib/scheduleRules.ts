@@ -1,4 +1,4 @@
-import { TASK_LOCATIONS } from './taskTypeConfig';
+import { TASK_LOCATIONS, getCompetenceConfig } from './taskTypeConfig';
 
 export interface HourStat {
   name: string;
@@ -10,6 +10,20 @@ export function sortHourStats<T extends HourStat>(stats: T[]): T[] {
   return [...stats].sort((left, right) =>
     right.value - left.value || left.name.localeCompare(right.name, 'en')
   );
+}
+
+export function buildCompetenceHourStats(
+  tasks: Array<{ competence?: string | null; total_hours?: number | null }>
+): Array<Required<HourStat>> {
+  const stats = new Map<string, Required<HourStat>>();
+  tasks.forEach((task) => {
+    const key = task.competence || 'Others';
+    const config = getCompetenceConfig(key);
+    const current = stats.get(key) || { name: config.label, value: 0, color: config.color };
+    current.value += Number(task.total_hours) || 0;
+    stats.set(key, current);
+  });
+  return sortHourStats(Array.from(stats.values()));
 }
 
 export function getTaskLocationOptions(currentLocation = ''): string[] {

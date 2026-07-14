@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyTaskTypeChange,
+  buildCompetenceHourStats,
   buildContinuousTaskSegments,
   getTaskLocationOptions,
   normalizeOptionalStatus,
@@ -9,6 +10,17 @@ import {
 } from '../scheduleRules';
 
 describe('schedule chart and form rules', () => {
+  it('aggregates competence hours and returns the largest area first', () => {
+    expect(buildCompetenceHourStats([
+      { competence: 'TPM', total_hours: 3 },
+      { competence: 'BPS', total_hours: 8 },
+      { competence: 'TPM', total_hours: 7 },
+    ]).map(({ name, value }) => ({ name, value }))).toEqual([
+      { name: 'TPM', value: 10 },
+      { name: 'BPS', value: 8 },
+    ]);
+  });
+
   it('sorts hour statistics descending with a stable name tie-break', () => {
     expect(sortHourStats([
       { name: 'Beta', value: 4, color: '#222222' },
