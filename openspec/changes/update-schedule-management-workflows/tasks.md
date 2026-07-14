@@ -18,4 +18,4 @@
 
 ## 4. Deployment
 
-- [ ] 4.1 Merge to `DEV`, push, and confirm code-quality and Jetson deployment jobs succeed.
+- [x] 4.1 Merge to `DEV`, push, and confirm code-quality and Jetson deployment jobs succeed.
