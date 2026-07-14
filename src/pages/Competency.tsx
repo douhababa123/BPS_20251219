@@ -24,10 +24,12 @@ import {
   calculateTeamSkillStats,
   calculatePersonalModuleStats,
   calculatePersonalSkillStats,
+  calculateEmployeeModuleGapMatrix,
   getRankIcon,
   formatNumber,
   type ModuleStats,
   type PersonalModuleStats,
+  type EmployeeModuleGapMatrix,
 } from '../lib/competencyAggregation';
 
 type ViewMode = 'team' | 'personal';
@@ -131,6 +133,11 @@ export function Competency() {
         rank: index + 1,
       }));
   }, [teamModuleStats]);
+
+  const employeeModuleGapMatrix = useMemo(
+    () => calculateEmployeeModuleGapMatrix(assessments, skills),
+    [assessments, skills]
+  );
 
   // 统计卡片数据
   const statistics = useMemo(() => {
@@ -361,6 +368,7 @@ export function Competency() {
             radarData={teamRadarData}
             barData={teamBarData}
             moduleRanking={moduleRanking}
+            employeeModuleGapMatrix={employeeModuleGapMatrix}
           />
         ) : (
           <PersonalView
@@ -391,6 +399,7 @@ function TeamView({
   radarData,
   barData,
   moduleRanking,
+  employeeModuleGapMatrix,
 }: {
   subViewMode: SubViewMode;
   setSubViewMode: (mode: SubViewMode) => void;
@@ -399,6 +408,7 @@ function TeamView({
   radarData: any[];
   barData: any[];
   moduleRanking: (ModuleStats & { rank: number })[];
+  employeeModuleGapMatrix: EmployeeModuleGapMatrix;
 }) {
   return (
     <div className="space-y-4">
@@ -519,6 +529,89 @@ function TeamView({
           </div>
         </div>
       ) : subViewMode === 'ranking' ? (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-gray-900">
+                工程师模块 GAP 排名 Employee Module GAP Ranking
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                按个人总 GAP 降序，展示每位工程师在 9 个能力模块中的 GAP 总分
+              </p>
+            </div>
+            {employeeModuleGapMatrix.rows.length === 0 ? (
+              <div className="py-12 text-center text-sm text-gray-500">
+                当前年度暂无有效能力评估数据
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="min-w-max divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="sticky left-0 z-20 bg-gray-50 w-16 px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase">
+                        排名
+                      </th>
+                      <th className="sticky left-16 z-20 bg-gray-50 min-w-48 px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-200">
+                        工程师
+                      </th>
+                      {employeeModuleGapMatrix.modules.map((module) => (
+                        <th
+                          key={module.id}
+                          title={module.name}
+                          className="w-36 max-w-36 px-3 py-3 text-right text-xs font-bold text-gray-700"
+                        >
+                          <span className="block truncate">{module.icon} {module.name}</span>
+                        </th>
+                      ))}
+                      <th className="sticky right-0 z-20 bg-blue-50 min-w-28 px-4 py-3 text-right text-xs font-bold text-blue-900 uppercase border-l border-blue-200">
+                        个人总 GAP
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {employeeModuleGapMatrix.rows.map((row) => (
+                      <tr key={row.employeeId} className="hover:bg-blue-50/40">
+                        <td className="sticky left-0 z-10 bg-white w-16 px-3 py-3 text-sm">
+                          <span className="text-xl">{getRankIcon(row.rank)}</span>
+                        </td>
+                        <td className="sticky left-16 z-10 bg-white min-w-48 px-4 py-3 border-r border-gray-200">
+                          <div className="text-sm font-semibold text-gray-900">{row.employeeName}</div>
+                          <div className="text-xs text-gray-500">{row.departmentName || '—'}</div>
+                        </td>
+                        {employeeModuleGapMatrix.modules.map((module) => {
+                          const cell = row.modules[module.id];
+                          return (
+                            <td key={module.id} className="px-3 py-3 text-right text-sm text-gray-700">
+                              {cell.hasData ? formatNumber(cell.totalGap) : '—'}
+                            </td>
+                          );
+                        })}
+                        <td className="sticky right-0 z-10 bg-blue-50 px-4 py-3 text-right text-sm font-bold text-blue-900 border-l border-blue-200">
+                          {formatNumber(row.totalGap)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-100 border-t-2 border-gray-300">
+                    <tr>
+                      <td className="sticky left-0 z-20 bg-gray-100 px-3 py-3" />
+                      <td className="sticky left-16 z-20 bg-gray-100 px-4 py-3 text-sm font-bold text-gray-900 border-r border-gray-300">
+                        模块合计
+                      </td>
+                      {employeeModuleGapMatrix.modules.map((module) => (
+                        <td key={module.id} className="px-3 py-3 text-right text-sm font-bold text-red-600">
+                          {formatNumber(employeeModuleGapMatrix.moduleTotals[module.id])}
+                        </td>
+                      ))}
+                      <td className="sticky right-0 z-20 bg-blue-100 px-4 py-3 text-right text-sm font-bold text-blue-900 border-l border-blue-300">
+                        {formatNumber(employeeModuleGapMatrix.grandTotal)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <div className="mb-4">
               <h3 className="text-lg font-bold text-gray-900">
@@ -565,6 +658,7 @@ function TeamView({
               </tbody>
             </table>
           </div>
+        </div>
         </div>
       ) : (
         <TotalScoreView radarData={radarData} moduleRanking={moduleRanking} />
@@ -775,7 +869,7 @@ function PersonalView({
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {moduleSummary.map((module) => {
-                      const totalGap = module.gap * module.skillCount;
+                      const totalGap = module.totalGap;
                       const avgGap = module.gap;
                       return (
                         <tr key={module.moduleId} className="hover:bg-gray-50">
