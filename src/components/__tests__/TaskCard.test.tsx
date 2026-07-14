@@ -139,14 +139,26 @@ describe('TaskCardCompact 组件', () => {
     expect(screen.queryByText('🌆')).not.toBeInTheDocument();
   });
 
-  it('AM 任务显示 🌅 图标', () => {
-    render(<TaskCardCompact task={{ ...baseTask, time_slot: 'AM' }} />);
-    expect(screen.getByText('🌅')).toBeInTheDocument();
+  it('AM 半天任务优先显示名称并隐藏占宽的辅助信息', () => {
+    const { container } = render(
+      <TaskCardCompact task={{ ...baseTask, time_slot: 'AM', total_hours: 3.5 }} />
+    );
+    expect(screen.getByText('测试任务')).toBeInTheDocument();
+    expect(screen.queryByText('t')).not.toBeInTheDocument();
+    expect(screen.queryByText('📋')).not.toBeInTheDocument();
+    expect(screen.queryByText('🌅')).not.toBeInTheDocument();
+    expect(screen.queryByText('3.5h')).not.toBeInTheDocument();
+    expect(container.firstElementChild).toHaveAttribute('title', expect.stringContaining('时间: 上午 (3.5h)'));
   });
 
-  it('PM 任务显示 🌆 图标', () => {
-    render(<TaskCardCompact task={{ ...baseTask, time_slot: 'PM' }} />);
-    expect(screen.getByText('🌆')).toBeInTheDocument();
+  it('PM 半天任务优先显示名称并通过悬停保留完整信息', () => {
+    const { container } = render(
+      <TaskCardCompact task={{ ...baseTask, time_slot: 'PM', total_hours: 4.5 }} />
+    );
+    expect(screen.getByText('测试任务')).toBeInTheDocument();
+    expect(screen.queryByText('🌆')).not.toBeInTheDocument();
+    expect(screen.queryByText('4.5h')).not.toBeInTheDocument();
+    expect(container.firstElementChild).toHaveAttribute('title', expect.stringContaining('时间: 下午 (4.5h)'));
   });
 
   it('连续任务首段显示累计工时并连接右边缘', () => {

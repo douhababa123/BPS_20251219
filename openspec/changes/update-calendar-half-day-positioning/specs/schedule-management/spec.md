@@ -38,3 +38,10 @@ The system SHALL communicate half-day timing through task-card position inside e
 - **WHEN** a half-width card cannot display its complete label
 - **THEN** the visible label is truncated
 - **AND** hover information exposes the complete task details
+
+#### Scenario: Half-day task label priority
+- **WHEN** a standalone AM or PM task is rendered in a half-width card
+- **THEN** the visible card content prioritizes the task name across the available width
+- **AND** task type initials, status icons, time-slot icons, and hours are omitted from the visible card
+- **AND** hover information still exposes the complete task details
+- **AND** FULL_DAY and cross-date connected tasks retain their detailed visible content

@@ -19,3 +19,11 @@
 
 - [x] 4.1 Merge to `DEV`, push, and confirm code-quality and Jetson deployment jobs succeed.
 - [x] 4.2 Refresh the Jetson page in Firefox and confirm the deployed layout.
+
+## 5. Half-day label visibility follow-up
+
+- [x] 5.1 Add failing component tests proving standalone AM/PM cards prioritize task names and retain complete hover information.
+- [x] 5.2 Hide fixed-width auxiliary content from standalone AM/PM cards while preserving FULL_DAY and connected-task detail.
+- [ ] 5.3 Run focused and full frontend tests, TypeScript checking, focused lint, production build, and strict OpenSpec validation.
+- [ ] 5.4 Verify task-name visibility and unchanged connected bands in Firefox.
+- [ ] 5.5 Merge to `DEV`, push, and confirm GitHub Actions and the deployed Jetson page.

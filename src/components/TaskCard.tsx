@@ -167,6 +167,8 @@ export function TaskCardCompact({ task, onClick, segmentMeta }: TaskCardProps) {
   // 生成 tooltip 内容
   const displayHours = segmentMeta?.continuousHours ?? task.total_hours ?? 0;
   const showLabel = segmentMeta?.showLabel ?? true;
+  const isStandaloneHalfDay = timeSlot !== 'FULL_DAY'
+    && (segmentMeta?.position ?? 'single') === 'single';
   const tooltipContent = `${task.task_name}
 类型: ${task.task_type}
 能力域: ${competenceConfig.label}
@@ -194,13 +196,19 @@ export function TaskCardCompact({ task, onClick, segmentMeta }: TaskCardProps) {
         color: textColor,
       }}
       className={cn(
-        'h-[26px] px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md border group',
+        'h-[26px] py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md border group',
+        isStandaloneHalfDay ? 'px-1' : 'px-2',
         segmentClasses,
       )}
     >
-      <div className="flex items-center gap-1">
+      <div className={cn('flex items-center', !isStandaloneHalfDay && 'gap-1')}>
         {showLabel && (
-          <>
+          isStandaloneHalfDay ? (
+            <span className="truncate w-full font-medium group-hover:font-semibold">
+              {task.task_name}
+            </span>
+          ) : (
+            <>
         {/* 任务类型首字母 */}
         <span className="flex-shrink-0 font-bold text-[10px] opacity-80">{task.task_type.charAt(0)}</span>
         
@@ -225,7 +233,8 @@ export function TaskCardCompact({ task, onClick, segmentMeta }: TaskCardProps) {
             {displayHours}h
           </span>
         )}
-          </>
+            </>
+          )
         )}
       </div>
     </div>
