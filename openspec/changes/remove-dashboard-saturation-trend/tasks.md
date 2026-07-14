@@ -12,4 +12,4 @@
 
 ## 3. Deployment
 
-- [ ] 3.1 Push the verified change to `DEV` and confirm the Jetson GitHub Actions deployment succeeds.
+- [x] 3.1 Push the verified change to `DEV` and confirm the Jetson GitHub Actions deployment succeeds.
