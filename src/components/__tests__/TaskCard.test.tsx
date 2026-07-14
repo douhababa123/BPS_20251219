@@ -167,21 +167,21 @@ describe('TaskCardCompact 组件', () => {
     expect(container.firstElementChild).toHaveClass('rounded-r-none', 'border-r-0');
   });
 
-  it('连续任务中段隐藏重复文字并连接两侧', () => {
+  it('连续任务中段保持文字、工时和固定高度并连接两侧', () => {
     const { container } = render(
       <TaskCardCompact
         task={baseTask}
         segmentMeta={{
           position: 'middle',
           continuousHours: 20,
-          showLabel: false,
+          showLabel: true,
           groupId: 'continuous-b',
         }}
       />
     );
-    expect(screen.queryByText('测试任务')).not.toBeInTheDocument();
-    expect(screen.queryByText('20h')).not.toBeInTheDocument();
-    expect(container.firstElementChild).toHaveClass('rounded-none', 'border-l-0', 'border-r-0');
+    expect(screen.getByText('测试任务')).toBeInTheDocument();
+    expect(screen.getByText('20h')).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass('h-[26px]', 'rounded-none', 'border-l-0', 'border-r-0');
   });
 
   it('连续任务尾段点击行为保持有效', () => {

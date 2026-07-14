@@ -192,7 +192,7 @@ export function TaskCardCompact({ task, onClick, segmentMeta }: TaskCardProps) {
         color: textColor,
       }}
       className={cn(
-        'px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md border group min-h-[24px]',
+        'h-[26px] px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md border group',
         segmentClasses,
       )}
     >

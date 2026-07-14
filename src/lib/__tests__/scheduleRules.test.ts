@@ -5,6 +5,7 @@ import {
   buildContinuousTaskSegments,
   getTaskLocationOptions,
   normalizeOptionalStatus,
+  sortCalendarTasks,
   sortHourStats,
   type ScheduleTaskForContinuity,
 } from '../scheduleRules';
@@ -143,7 +144,7 @@ describe('continuous task segment rules', () => {
     ]);
 
     expect(result.get('full|2026-07-01')).toMatchObject({ position: 'start', continuousHours: 11.5, showLabel: true });
-    expect(result.get('morning|2026-07-02')).toMatchObject({ position: 'end', continuousHours: 11.5, showLabel: false });
+    expect(result.get('morning|2026-07-02')).toMatchObject({ position: 'end', continuousHours: 11.5, showLabel: true });
   });
 
   it('connects afternoon to the next morning', () => {
@@ -161,8 +162,19 @@ describe('continuous task segment rules', () => {
       task({ id: 'multi', start_date: '2026-07-01', end_date: '2026-07-03', time_slot: 'FULL_DAY' }),
     ]);
     expect(result.get('multi|2026-07-01')).toMatchObject({ position: 'start', continuousHours: 24 });
-    expect(result.get('multi|2026-07-02')?.position).toBe('middle');
-    expect(result.get('multi|2026-07-03')?.position).toBe('end');
+    expect(result.get('multi|2026-07-02')).toMatchObject({ position: 'middle', showLabel: true });
+    expect(result.get('multi|2026-07-03')).toMatchObject({ position: 'end', showLabel: true });
+  });
+
+  it('keeps a continuous task ahead of unrelated daily tasks on every date', () => {
+    const multi = task({ id: 'multi', start_date: '2026-07-21', end_date: '2026-07-24' });
+    const daily = task({ id: 'daily', task_name: 'Daily task', start_date: '2026-07-22', end_date: '2026-07-22' });
+    const segments = buildContinuousTaskSegments([multi, daily]);
+
+    expect(sortCalendarTasks([daily, multi], '2026-07-22', segments).map(({ id }) => id)).toEqual([
+      'multi',
+      'daily',
+    ]);
   });
 
   it('does not connect a full day to next-day afternoon across the morning gap', () => {

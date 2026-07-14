@@ -9,6 +9,7 @@ import {
   getTaskLocationOptions,
   isLeaveTaskType,
   normalizeOptionalStatus,
+  sortCalendarTasks,
 } from '../lib/scheduleRules';
 import { taskWorkflowService } from '../services/task-workflow.service';
 import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
@@ -898,7 +899,7 @@ function TeamView({
                             onQuickAdd({ employeeId: emp.id, date: dateStr });
                           }}
                         >
-                          {dayTasks.map((task: any) => (
+                          {sortCalendarTasks(dayTasks, dateStr, continuousSegments).map((task: any) => (
                             continuousSegments.get(`${task.id}|${dateStr}`)?.hidden ? null : (
                             <div key={task.id} className="task-card-compact">
                               <TaskCardCompact
@@ -940,7 +941,7 @@ function TeamView({
                           onQuickAdd({ employeeId: '', date: dateStr });
                         }}
                       >
-                        {dayTasks.map((task: any) => (
+                        {sortCalendarTasks(dayTasks, dateStr, continuousSegments).map((task: any) => (
                           continuousSegments.get(`${task.id}|${dateStr}`)?.hidden ? null : (
                           <div key={task.id} className="task-card-compact">
                             <TaskCardCompact

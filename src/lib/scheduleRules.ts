@@ -100,6 +100,25 @@ export interface ContinuousTaskSegmentMeta {
   hidden?: boolean;
 }
 
+export function sortCalendarTasks<T extends { id: string; start_date?: string; task_name?: string }>(
+  tasks: T[],
+  date: string,
+  segments: Map<string, ContinuousTaskSegmentMeta>
+): T[] {
+  return [...tasks].sort((left, right) => {
+    const leftSegment = segments.get(`${left.id}|${date}`);
+    const rightSegment = segments.get(`${right.id}|${date}`);
+    const leftContinuous = leftSegment && leftSegment.position !== 'single' ? 0 : 1;
+    const rightContinuous = rightSegment && rightSegment.position !== 'single' ? 0 : 1;
+
+    return leftContinuous - rightContinuous
+      || (leftSegment?.groupId || left.id).localeCompare(rightSegment?.groupId || right.id)
+      || (left.start_date || '').localeCompare(right.start_date || '')
+      || (left.task_name || '').localeCompare(right.task_name || '')
+      || left.id.localeCompare(right.id);
+  });
+}
+
 interface ExpandedSlot {
   task: ScheduleTaskForContinuity;
   date: string;
@@ -219,7 +238,7 @@ export function buildContinuousTaskSegments(
           result.set(`${taskId}|${date}`, {
             position,
             continuousHours,
-            showLabel: dateIndex === 0 && taskIndex === 0,
+            showLabel: taskIndex === 0,
             groupId,
             hidden: taskIndex > 0,
           });
