@@ -36,6 +36,7 @@ export function CalendarDayTasks({
       {layout.map(({ task, row, column }) => (
         <div
           key={task.id}
+          className="task-card-compact"
           data-testid={`calendar-task-${task.id}`}
           data-calendar-column={column}
           style={{

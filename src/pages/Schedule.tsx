@@ -9,14 +9,14 @@ import {
   getTaskLocationOptions,
   isLeaveTaskType,
   normalizeOptionalStatus,
-  sortCalendarTasks,
 } from '../lib/scheduleRules';
 import { taskWorkflowService } from '../services/task-workflow.service';
 import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useNewAuth } from '../contexts/NewAuthContext';
 import { TimeSlotSelector } from '../components/TimeSlotSelector';
-import { TaskCard, TaskCardCompact } from '../components/TaskCard';
+import { TaskCard } from '../components/TaskCard';
+import { CalendarDayTasks } from '../components/CalendarDayTasks';
 import { TaskDetailModal } from '../components/TaskDetailModal';
 import {
   ResponsiveContainer,
@@ -899,17 +899,12 @@ function TeamView({
                             onQuickAdd({ employeeId: emp.id, date: dateStr });
                           }}
                         >
-                          {sortCalendarTasks(dayTasks, dateStr, continuousSegments).map((task: any) => (
-                            continuousSegments.get(`${task.id}|${dateStr}`)?.hidden ? null : (
-                            <div key={task.id} className="task-card-compact">
-                              <TaskCardCompact
-                                task={task}
-                                segmentMeta={continuousSegments.get(`${task.id}|${dateStr}`)}
-                                onClick={() => setSelectedTask(task)}
-                              />
-                            </div>
-                            )
-                          ))}
+                          <CalendarDayTasks
+                            tasks={dayTasks}
+                            date={dateStr}
+                            segments={continuousSegments}
+                            onTaskClick={setSelectedTask}
+                          />
                         </td>
                       );
                     })}
@@ -941,17 +936,12 @@ function TeamView({
                           onQuickAdd({ employeeId: '', date: dateStr });
                         }}
                       >
-                        {sortCalendarTasks(dayTasks, dateStr, continuousSegments).map((task: any) => (
-                          continuousSegments.get(`${task.id}|${dateStr}`)?.hidden ? null : (
-                          <div key={task.id} className="task-card-compact">
-                            <TaskCardCompact
-                              task={task}
-                              segmentMeta={continuousSegments.get(`${task.id}|${dateStr}`)}
-                              onClick={() => setSelectedTask(task)}
-                            />
-                          </div>
-                          )
-                        ))}
+                        <CalendarDayTasks
+                          tasks={dayTasks}
+                          date={dateStr}
+                          segments={continuousSegments}
+                          onTaskClick={setSelectedTask}
+                        />
                       </td>
                     );
                   })}
