@@ -1,7 +1,14 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tasksService, employeesService, scheduleNotificationsService, taskTypesService, competencyDefinitionsService } from '../services';
-import { TASK_TYPES, TASK_LOCATIONS, getCompetenceConfig } from '../lib/taskTypeConfig';
+import { TASK_TYPES, getCompetenceConfig } from '../lib/taskTypeConfig';
+import {
+  applyTaskTypeChange,
+  buildContinuousTaskSegments,
+  getTaskLocationOptions,
+  normalizeOptionalStatus,
+  sortHourStats,
+} from '../lib/scheduleRules';
 import { taskWorkflowService } from '../services/task-workflow.service';
 import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -295,7 +302,7 @@ export function Schedule() {
       statsMap.set(location, existing);
     });
 
-    return Array.from(statsMap.values());
+    return sortHourStats(Array.from(statsMap.values()));
   }, [reportableTasks]);
 
   // 能力域统计（用于图表，带hex颜色）
@@ -814,6 +821,7 @@ function TeamView({
   const { days } = calendarData;
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const unassignedTasks = tasks.filter((task: any) => !task.assigned_employee_id);
+  const continuousSegments = useMemo(() => buildContinuousTaskSegments(tasks), [tasks]);
 
   // 判断是否为周末
   const isWeekend = (day: any) => {
@@ -898,12 +906,15 @@ function TeamView({
                           }}
                         >
                           {dayTasks.map((task: any) => (
+                            continuousSegments.get(`${task.id}|${dateStr}`)?.hidden ? null : (
                             <div key={task.id} className="task-card-compact">
                               <TaskCardCompact
                                 task={task}
+                                segmentMeta={continuousSegments.get(`${task.id}|${dateStr}`)}
                                 onClick={() => setSelectedTask(task)}
                               />
                             </div>
+                            )
                           ))}
                         </td>
                       );
@@ -937,12 +948,15 @@ function TeamView({
                         }}
                       >
                         {dayTasks.map((task: any) => (
+                          continuousSegments.get(`${task.id}|${dateStr}`)?.hidden ? null : (
                           <div key={task.id} className="task-card-compact">
                             <TaskCardCompact
                               task={task}
+                              segmentMeta={continuousSegments.get(`${task.id}|${dateStr}`)}
                               onClick={() => setSelectedTask(task)}
                             />
                           </div>
+                          )
                         ))}
                       </td>
                     );
@@ -994,23 +1008,17 @@ function TeamView({
             </div>
           </div>
           <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={competenceStats}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                label
-              >
+            <BarChart data={competenceStats}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis />
+              <Tooltip formatter={(value: any) => `${value}h`} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                 {competenceStats.map((entry: any) => (
                   <Cell key={`cell-${entry.name}`} fill={entry.color} />
                 ))}
-              </Pie>
-              <Tooltip formatter={(value: any) => `${value}h`} />
-              <Legend />
-            </PieChart>
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </div>
 
@@ -1049,7 +1057,7 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
       existing.value += task.total_hours || 0;
       statsMap.set(key, existing);
     });
-    return Array.from(statsMap.values());
+    return sortHourStats(Array.from(statsMap.values()));
   }, [empTasks]);
 
   // 个人任务地点统计
@@ -1128,23 +1136,17 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
               <h3 className="text-lg font-bold text-gray-900 mb-4">能力域工时分布 Competence Hours</h3>
               <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie
-                    data={empCompetenceStats}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    label
-                  >
+                <BarChart data={empCompetenceStats}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => `${value}h`} />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                     {empCompetenceStats.map((entry: any) => (
                       <Cell key={`cell-${entry.name}`} fill={entry.color} />
                     ))}
-                  </Pie>
-                  <Tooltip formatter={(value: any) => `${value}h`} />
-                  <Legend />
-                </PieChart>
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
 
@@ -1207,13 +1209,13 @@ function PersonalView({ personalSaturation, selectedEmployeeIds, employees, task
 }
 
 // 任务表单弹窗
-function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSuccess, onUpdate }: any) {
+export function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSuccess, onUpdate }: any) {
   const queryClient = useQueryClient();
   const { user } = useNewAuth();
   const isEditMode = !!editingTask;
   const initialCompetence = parseTaskCompetence(editingTask?.competence || '');
 
-  const [formData, setFormData] = useState({
+  const baseFormData = {
     task_name: editingTask?.task_name || '',
     task_type: editingTask?.task_type || '',
     task_location: editingTask?.task_location || '',
@@ -1224,9 +1226,17 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
     start_date: editingTask?.start_date || prefilledData?.date || '',
     end_date: editingTask?.end_date || prefilledData?.date || '',
     time_slot: (editingTask?.time_slot || 'FULL_DAY') as 'AM' | 'PM' | 'FULL_DAY',
-    status: (editingTask?.status || 'planned') as 'planned' | 'in_progress' | 'completed' | 'cancelled',
+    status: editingTask?.status || '',
     notes: editingTask?.notes || '',
-  });
+  };
+  const [formData, setFormData] = useState(
+    baseFormData.task_type === 'Leave' ? applyTaskTypeChange(baseFormData, 'Leave') : baseFormData
+  );
+  const isLeave = formData.task_type === 'Leave';
+  const taskLocationOptions = useMemo(
+    () => getTaskLocationOptions(formData.task_location),
+    [formData.task_location]
+  );
 
   const { data: taskTypes = [] } = useQuery({
     queryKey: ['schedule-task-types'],
@@ -1360,7 +1370,7 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
     e.preventDefault();
 
     // 计算工时
-    const hoursPerDay = formData.time_slot === 'FULL_DAY' ? 8 : 4;
+    const hoursPerDay = formData.time_slot === 'AM' ? 3.5 : formData.time_slot === 'PM' ? 4.5 : 8;
     const daysCount = formData.start_date && formData.end_date
       ? Math.round((new Date(formData.end_date).getTime() - new Date(formData.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
       : 1;
@@ -1382,7 +1392,7 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
       hours_per_day: hoursPerDay,
       days_count: daysCount,
       total_hours: totalHours,
-      status: formData.status,
+      status: normalizeOptionalStatus(formData.status),
       notes: formData.notes,
       source: 'manual',
     };
@@ -1416,10 +1426,11 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
             </label>
             <input
               type="text"
-              required
+              required={!isLeave}
+              disabled={isLeave}
               value={formData.task_name}
               onChange={(e) => setFormData({ ...formData, task_name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
               placeholder="输入任务名称"
             />
           </div>
@@ -1431,7 +1442,7 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
             <select
               required
               value={formData.task_type}
-              onChange={(e) => setFormData({ ...formData, task_type: e.target.value })}
+              onChange={(e) => setFormData((current) => applyTaskTypeChange(current, e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">请选择...</option>
@@ -1446,13 +1457,14 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
               任务地点 <span className="text-red-500">*</span>
             </label>
             <select
-              required
+              required={!isLeave}
+              disabled={isLeave}
               value={formData.task_location}
               onChange={(e) => setFormData({ ...formData, task_location: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
             >
               <option value="">请选择...</option>
-              {TASK_LOCATIONS.map(loc => (
+              {taskLocationOptions.map(loc => (
                 <option key={loc} value={loc}>{loc}</option>
               ))}
             </select>
@@ -1463,7 +1475,7 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
               能力域 Competence <span className="text-red-500">*</span>
             </label>
             <select
-              required
+              required={!isLeave}
               value={formData.competence_module}
               onChange={(e) => {
                 setFormData({
@@ -1473,7 +1485,8 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
                   competence: '',
                 });
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={isLeave}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
             >
               <option value="">请选择能力域...</option>
               {competenceModules.map((item) => (
@@ -1499,7 +1512,7 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
               Competence Item <span className="text-red-500">*</span>
             </label>
             <select
-              required
+              required={!isLeave}
               value={formData.competence_type}
               onChange={(e) => {
                 const competenceType = e.target.value;
@@ -1511,7 +1524,7 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
                     : '',
                 });
               }}
-              disabled={!formData.competence_module}
+              disabled={isLeave || !formData.competence_module}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
             >
               <option value="">Select competence item...</option>
@@ -1527,8 +1540,9 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
             </label>
             <select
               value={formData.assigned_employee_id}
+              disabled={isLeave}
               onChange={(e) => setFormData({ ...formData, assigned_employee_id: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
             >
               <option value="">未分配</option>
               {employees.map((emp: any) => (
@@ -1581,34 +1595,29 @@ function TaskFormModal({ employees, editingTask, prefilledData, onClose, onSucce
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              任务状态 <span className="text-red-500">*</span>
+              任务状态（可选）
             </label>
-            <div className="grid grid-cols-4 gap-2">
-              {(Object.keys(TASK_STATUS_CONFIG) as Array<'planned' | 'in_progress' | 'completed' | 'cancelled'>).map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, status })}
-                  className={cn(
-                    'px-3 py-2 rounded-lg text-sm font-medium transition-colors border text-center',
-                    formData.status === status
-                      ? TASK_STATUS_CONFIG[status].color
-                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                  )}
-                >
-                  {TASK_STATUS_CONFIG[status].label}
-                </button>
+            <select
+              value={formData.status}
+              disabled={isLeave}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+            >
+              <option value="">请选择...</option>
+              {(['planned', 'in_progress', 'completed', 'cancelled'] as const).map((status) => (
+                <option key={status} value={status}>{TASK_STATUS_CONFIG[status].label}</option>
               ))}
-            </div>
+            </select>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">备注</label>
             <textarea
               value={formData.notes}
+              disabled={isLeave}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
               placeholder="可选备注信息"
             />
           </div>

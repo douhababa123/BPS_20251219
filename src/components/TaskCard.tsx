@@ -2,6 +2,7 @@ import { getTimeSlotLabel, getTimeSlotColor } from './TimeSlotSelector';
 import { getCompetenceConfig } from '../lib/taskTypeConfig';
 import type { TimeSlot } from '../lib/database.types';
 import { cn } from '../lib/utils';
+import type { ContinuousTaskSegmentMeta } from '../lib/scheduleRules';
 
 // 任务状态配置
 const TASK_STATUS_CONFIG = {
@@ -57,6 +58,7 @@ interface TaskCardProps {
   onClick?: () => void;
   className?: string;
   showEmployee?: boolean;
+  segmentMeta?: ContinuousTaskSegmentMeta;
 }
 
 export function TaskCard({ task, onClick, className, showEmployee = false }: TaskCardProps) {
@@ -137,7 +139,7 @@ export function TaskCard({ task, onClick, className, showEmployee = false }: Tas
 }
 
 // 任务卡片紧凑版（用于日历格子中）
-export function TaskCardCompact({ task, onClick }: TaskCardProps) {
+export function TaskCardCompact({ task, onClick, segmentMeta }: TaskCardProps) {
   const timeSlot = task.time_slot || 'FULL_DAY';
   const timeSlotLabel = getTimeSlotLabel(timeSlot);
   const competenceConfig = getCompetenceConfig(task.competence);
@@ -161,25 +163,42 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
   };
 
   // 生成 tooltip 内容
+  const displayHours = segmentMeta?.continuousHours ?? task.total_hours ?? 0;
+  const showLabel = segmentMeta?.showLabel ?? true;
   const tooltipContent = `${task.task_name}
 类型: ${task.task_type}
 能力域: ${competenceConfig.label}
 状态: ${statusConfig.label}
-时间: ${timeSlotLabel} (${task.total_hours || 0}h)
+时间: ${timeSlotLabel} (${displayHours}h)
 日期: ${task.start_date} ~ ${task.end_date}`;
+
+  const segmentClasses = segmentMeta && segmentMeta.position !== 'single'
+    ? {
+        start: 'rounded-r-none border-r-0 mr-[-5px]',
+        middle: 'rounded-none border-l-0 border-r-0 mx-[-5px]',
+        end: 'rounded-l-none border-l-0 ml-[-5px]',
+      }[segmentMeta.position]
+    : '';
 
   return (
     <div
       onClick={onClick}
       title={tooltipContent}
+      data-segment-position={segmentMeta?.position || 'single'}
+      data-continuous-group={segmentMeta?.groupId}
       style={{
         backgroundColor: hexColor,
         borderColor: borderStyle,
         color: textColor,
       }}
-      className="px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md hover:scale-105 border group"
+      className={cn(
+        'px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md border group min-h-[24px]',
+        segmentClasses,
+      )}
     >
       <div className="flex items-center gap-1">
+        {showLabel && (
+          <>
         {/* 任务类型首字母 */}
         <span className="flex-shrink-0 font-bold text-[10px] opacity-80">{task.task_type.charAt(0)}</span>
         
@@ -199,10 +218,12 @@ export function TaskCardCompact({ task, onClick }: TaskCardProps) {
         )}
         
         {/* 工时 */}
-        {task.total_hours && (
+        {displayHours > 0 && (
           <span className="flex-shrink-0 text-[10px] opacity-70 font-semibold">
-            {task.total_hours}h
+            {displayHours}h
           </span>
+        )}
+          </>
         )}
       </div>
     </div>

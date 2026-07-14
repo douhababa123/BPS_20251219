@@ -135,10 +135,10 @@ describe('continuous task segment rules', () => {
   });
 
   it.each([
-    [{ assigned_employee_id: 'employee-2' }, 'different engineer'],
-    [{ task_name: 'Task B' }, 'different task name'],
-    [{ task_type: 'P' }, 'different task type'],
-  ])('does not connect a %s', (identityOverride) => {
+    { assigned_employee_id: 'employee-2' },
+    { task_name: 'Task B' },
+    { task_type: 'P' },
+  ])('does not connect when identity differs: %o', (identityOverride) => {
     const result = buildContinuousTaskSegments([
       task({ id: 'full', time_slot: 'FULL_DAY' }),
       task({ id: 'am', start_date: '2026-07-02', end_date: '2026-07-02', time_slot: 'AM', ...identityOverride }),

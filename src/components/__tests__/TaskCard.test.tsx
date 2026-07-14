@@ -148,4 +148,58 @@ describe('TaskCardCompact 组件', () => {
     render(<TaskCardCompact task={{ ...baseTask, time_slot: 'PM' }} />);
     expect(screen.getByText('🌆')).toBeInTheDocument();
   });
+
+  it('连续任务首段显示累计工时并连接右边缘', () => {
+    const { container } = render(
+      <TaskCardCompact
+        task={{ ...baseTask, total_hours: 8 }}
+        segmentMeta={{
+          position: 'start',
+          continuousHours: 11.5,
+          showLabel: true,
+          groupId: 'continuous-a',
+        }}
+      />
+    );
+    expect(screen.getByText('11.5h')).toBeInTheDocument();
+    expect(screen.getByText('测试任务')).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveAttribute('data-segment-position', 'start');
+    expect(container.firstElementChild).toHaveClass('rounded-r-none', 'border-r-0');
+  });
+
+  it('连续任务中段隐藏重复文字并连接两侧', () => {
+    const { container } = render(
+      <TaskCardCompact
+        task={baseTask}
+        segmentMeta={{
+          position: 'middle',
+          continuousHours: 20,
+          showLabel: false,
+          groupId: 'continuous-b',
+        }}
+      />
+    );
+    expect(screen.queryByText('测试任务')).not.toBeInTheDocument();
+    expect(screen.queryByText('20h')).not.toBeInTheDocument();
+    expect(container.firstElementChild).toHaveClass('rounded-none', 'border-l-0', 'border-r-0');
+  });
+
+  it('连续任务尾段点击行为保持有效', () => {
+    const onClick = vi.fn();
+    const { container } = render(
+      <TaskCardCompact
+        task={baseTask}
+        onClick={onClick}
+        segmentMeta={{
+          position: 'end',
+          continuousHours: 11.5,
+          showLabel: false,
+          groupId: 'continuous-c',
+        }}
+      />
+    );
+    fireEvent.click(container.firstElementChild!);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(container.firstElementChild).toHaveClass('rounded-l-none', 'border-l-0');
+  });
 });
