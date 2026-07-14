@@ -67,6 +67,43 @@ describe('schedule chart and form rules', () => {
     });
   });
 
+  it('recognizes the backend Leave code L', () => {
+    expect(applyTaskTypeChange({
+      task_name: 'Old',
+      task_type: 'WS',
+      task_location: 'Supplier',
+      competence: 'Module | Item',
+      competence_module: 'Module',
+      competence_type: 'Item',
+      assigned_employee_id: 'e1',
+      status: 'completed',
+      notes: 'note',
+    }, 'L')).toMatchObject({
+      task_name: 'Leave',
+      task_type: 'L',
+      task_location: 'out of office',
+      status: '',
+    });
+  });
+
+  it('recognizes Leave codes without depending on API casing', () => {
+    expect(applyTaskTypeChange({
+      task_name: 'Old',
+      task_type: 'WS',
+      task_location: 'Supplier',
+      competence: '',
+      competence_module: '',
+      competence_type: '',
+      assigned_employee_id: '',
+      status: '',
+      notes: '',
+    }, 'LEAVE')).toMatchObject({
+      task_name: 'Leave',
+      task_type: 'LEAVE',
+      task_location: 'out of office',
+    });
+  });
+
   it('clears generated Leave values when switching to another type', () => {
     expect(applyTaskTypeChange({
       task_name: 'Leave',

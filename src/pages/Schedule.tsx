@@ -7,6 +7,7 @@ import {
   buildCompetenceHourStats,
   buildContinuousTaskSegments,
   getTaskLocationOptions,
+  isLeaveTaskType,
   normalizeOptionalStatus,
 } from '../lib/scheduleRules';
 import { taskWorkflowService } from '../services/task-workflow.service';
@@ -1214,9 +1215,9 @@ export function TaskFormModal({ employees, editingTask, prefilledData, onClose, 
     notes: editingTask?.notes || '',
   };
   const [formData, setFormData] = useState(
-    baseFormData.task_type === 'Leave' ? applyTaskTypeChange(baseFormData, 'Leave') : baseFormData
+    isLeaveTaskType(baseFormData.task_type) ? applyTaskTypeChange(baseFormData, baseFormData.task_type) : baseFormData
   );
-  const isLeave = formData.task_type === 'Leave';
+  const isLeave = isLeaveTaskType(formData.task_type);
   const taskLocationOptions = useMemo(
     () => getTaskLocationOptions(formData.task_location),
     [formData.task_location]

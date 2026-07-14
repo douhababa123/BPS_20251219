@@ -46,12 +46,17 @@ export interface TaskFormRuleFields {
   notes: string;
 }
 
+export function isLeaveTaskType(taskType: string | null | undefined): boolean {
+  const normalizedTaskType = taskType?.trim().toLowerCase();
+  return normalizedTaskType === 'leave' || normalizedTaskType === 'l';
+}
+
 export function applyTaskTypeChange<T extends TaskFormRuleFields>(form: T, taskType: string): T {
-  if (taskType === 'Leave') {
+  if (isLeaveTaskType(taskType)) {
     return {
       ...form,
       task_name: 'Leave',
-      task_type: 'Leave',
+      task_type: taskType,
       task_location: 'out of office',
       competence: '',
       competence_module: '',
@@ -62,7 +67,7 @@ export function applyTaskTypeChange<T extends TaskFormRuleFields>(form: T, taskT
     };
   }
 
-  const leavingLeaveMode = form.task_type === 'Leave';
+  const leavingLeaveMode = isLeaveTaskType(form.task_type);
   return {
     ...form,
     task_type: taskType,
