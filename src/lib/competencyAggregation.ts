@@ -26,6 +26,27 @@ export interface ModuleInfo {
   color: string;
 }
 
+export interface EmployeeModuleGapCell {
+  totalGap: number;
+  hasData: boolean;
+}
+
+export interface EmployeeModuleGapRow {
+  rank: number;
+  employeeId: string;
+  employeeName: string;
+  departmentName: string | null;
+  modules: Record<number, EmployeeModuleGapCell>;
+  totalGap: number;
+}
+
+export interface EmployeeModuleGapMatrix {
+  modules: ModuleInfo[];
+  rows: EmployeeModuleGapRow[];
+  moduleTotals: Record<number, number>;
+  grandTotal: number;
+}
+
 // 模块统计
 export interface ModuleStats {
   moduleId: number;
@@ -250,6 +271,59 @@ export function calculateTeamSkillStats(
 
   // 按总Gap排序
   return result.sort((a, b) => b.totalGap - a.totalGap);
+}
+
+/**
+ * Build the employee-by-module GAP ranking matrix for an already filtered year.
+ */
+export function calculateEmployeeModuleGapMatrix(
+  assessments: AssessmentFull[],
+  skills: Skill[]
+): EmployeeModuleGapMatrix {
+  const modules = Object.values(MODULE_MAPPING).map((module) => ({ ...module }));
+  const moduleTotals: Record<number, number> = Object.fromEntries(
+    modules.map((module) => [module.id, 0])
+  );
+  const skillModuleMap = new Map(skills.map((skill) => [skill.id, skill.module_id]));
+  const employees = new Map<string, Omit<EmployeeModuleGapRow, 'rank'>>();
+
+  assessments.forEach((assessment) => {
+    let employee = employees.get(assessment.employee_id);
+    if (!employee) {
+      employee = {
+        employeeId: assessment.employee_id,
+        employeeName: assessment.employee_name,
+        departmentName: assessment.department_name || null,
+        modules: Object.fromEntries(
+          modules.map((module) => [module.id, { totalGap: 0, hasData: false }])
+        ),
+        totalGap: 0,
+      };
+      employees.set(assessment.employee_id, employee);
+    }
+
+    if (assessment.current_level <= 0 || assessment.target_level <= 0) return;
+
+    const moduleId = skillModuleMap.get(assessment.skill_id);
+    if (!moduleId || !employee.modules[moduleId]) return;
+
+    const cell = employee.modules[moduleId];
+    cell.totalGap += assessment.gap;
+    cell.hasData = true;
+    employee.totalGap += assessment.gap;
+    moduleTotals[moduleId] += assessment.gap;
+  });
+
+  const rows = Array.from(employees.values())
+    .sort((a, b) => b.totalGap - a.totalGap || a.employeeName.localeCompare(b.employeeName))
+    .map((employee, index) => ({ ...employee, rank: index + 1 }));
+
+  return {
+    modules,
+    rows,
+    moduleTotals,
+    grandTotal: rows.reduce((sum, row) => sum + row.totalGap, 0),
+  };
 }
 
 /**
