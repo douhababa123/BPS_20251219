@@ -203,6 +203,7 @@ BEGIN TRY
     END;
 
     DECLARE @constraint_name SYSNAME;
+    DECLARE @drop_constraint_sql NVARCHAR(MAX);
     DECLARE constraint_cursor CURSOR LOCAL FAST_FORWARD FOR
         SELECT cc.name
         FROM sys.check_constraints cc
@@ -216,10 +217,10 @@ BEGIN TRY
     FETCH NEXT FROM constraint_cursor INTO @constraint_name;
     WHILE @@FETCH_STATUS = 0
     BEGIN
-        EXEC(
-            'ALTER TABLE dbo.competency_assessments DROP CONSTRAINT '
-            + QUOTENAME(@constraint_name)
-        );
+        SET @drop_constraint_sql =
+            N'ALTER TABLE dbo.competency_assessments DROP CONSTRAINT '
+            + QUOTENAME(@constraint_name);
+        EXEC sp_executesql @drop_constraint_sql;
         FETCH NEXT FROM constraint_cursor INTO @constraint_name;
     END;
     CLOSE constraint_cursor;

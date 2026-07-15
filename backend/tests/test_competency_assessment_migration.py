@@ -48,6 +48,8 @@ def test_migration_is_idempotent_and_indexes_quarterly_history():
     assert "NOT EXISTS" in sql
     assert "IX_competency_history_employee_skill_changed" in sql
     assert "IX_competency_history_year_quarter" in sql
+    assert "DECLARE @drop_constraint_sql NVARCHAR(MAX)" in sql
+    assert "EXEC sp_executesql @drop_constraint_sql" in sql
 
 
 def test_verifier_collects_named_read_only_invariants():
