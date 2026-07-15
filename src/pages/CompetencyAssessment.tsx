@@ -6,14 +6,23 @@ import {
   Target, Award, Users2, BarChart3, Wrench, TrendingDown,
   Lightbulb, Zap, Gauge
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   averageAssessmentValues,
-  getMatrixData,
+  getAssessmentMatrix,
   getAllAssessments,
+  saveAssessment,
 } from '../lib/competencyApi';
 import MatrixView from '../components/MatrixView';
 import { cn } from '../lib/utils';
-import type { MatrixRow, MatrixColumn, MatrixFilters, AssessmentStats, AssessmentFull } from '../lib/database.types';
+import type {
+  AssessmentFull,
+  AssessmentSaveInput,
+  AssessmentStats,
+  MatrixColumn,
+  MatrixFilters,
+  MatrixRow,
+} from '../lib/database.types';
 
 // 能力级别定义
 const levelDescriptions = [
@@ -69,12 +78,11 @@ export function CompetencyAssessment() {
     try {
       // 只加载一次评估数据，避免重复调用
       console.log('  🔄 加载评估数据...');
-      const assessmentData = await getAllAssessments();
+      const [assessmentData, matrix] = await Promise.all([
+        getAllAssessments(),
+        getAssessmentMatrix(),
+      ]);
       console.log(`  ✅ 获取 ${assessmentData.length} 条评估数据`);
-      
-      // 使用加载的数据构建矩阵
-      console.log('  🔄 构建矩阵数据...');
-      const matrix = await getMatrixData(assessmentData);
       console.log(`  ✅ 矩阵构建完成`);
       
       console.log('✅ CompetencyAssessment: 数据加载成功', {
@@ -162,6 +170,15 @@ export function CompetencyAssessment() {
     loadData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleSaveAssessment = async (
+    employeeId: string,
+    skillId: number,
+    input: AssessmentSaveInput,
+  ) => {
+    await saveAssessment(employeeId, skillId, input);
+    await loadData();
+  };
+
   // 卡片展开/收起
   const toggleCardExpansion = (employeeId: string) => {
     const newExpanded = new Set(expandedCards);
@@ -220,7 +237,7 @@ export function CompetencyAssessment() {
   };
 
   const getModuleIcon = (module: string) => {
-    const iconMap: Record<string, { icon: any; color: string; bgColor: string }> = {
+    const iconMap: Record<string, { icon: LucideIcon; color: string; bgColor: string }> = {
       'TPM基础': { icon: Wrench, color: 'text-blue-600', bgColor: 'bg-blue-100' },
       'BPS elements': { icon: Target, color: 'text-purple-600', bgColor: 'bg-purple-100' },
       'Investment efficiency_PGL': { icon: BarChart3, color: 'text-green-600', bgColor: 'bg-green-100' },
@@ -464,6 +481,7 @@ export function CompetencyAssessment() {
             rows={matrixData.rows}
             columns={matrixData.columns}
             stats={matrixData.stats}
+            onSaveAssessment={handleSaveAssessment}
           />
         )}
 

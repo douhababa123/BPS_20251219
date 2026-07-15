@@ -1,18 +1,28 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Filter, Download, Loader2, Database, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { MatrixRow, MatrixColumn, MatrixFilters, AssessmentStats } from '../lib/database.types';
+import type {
+  AssessmentSaveInput,
+  MatrixRow,
+  MatrixColumn,
+  MatrixFilters,
+  AssessmentStats,
+} from '../lib/database.types';
 import { apiClient } from '../lib/api-client';
+import AssessmentEditDialog from './AssessmentEditDialog';
 
 interface MatrixViewProps {
   rows: MatrixRow[];
   columns: MatrixColumn[];
   stats: AssessmentStats;
   isLoading?: boolean;
+  onSaveAssessment?: (
+    employeeId: string,
+    skillId: number,
+    input: AssessmentSaveInput,
+  ) => Promise<void>;
 }
 
-const formatLevel = (level: number): string => level > 0 ? String(level) : '-';
-const hasIncompleteLevel = (currentLevel: number, targetLevel: number): boolean =>
-  currentLevel <= 0 || targetLevel <= 0;
+const formatLevel = (level: number): string => String(level);
 
 // 根据技能名称返回对应的图标（41个不同的图标）
 const getSkillIcon = (skillName: string): string => {
@@ -79,7 +89,13 @@ const getSkillIcon = (skillName: string): string => {
   return iconMap[skillName] || '📌';
 };
 
-export default function MatrixView({ rows, columns, stats, isLoading = false }: MatrixViewProps) {
+export default function MatrixView({
+  rows,
+  columns,
+  stats,
+  isLoading = false,
+  onSaveAssessment,
+}: MatrixViewProps) {
   const [filters] = useState<MatrixFilters>({
     year: new Date().getFullYear(),
   });
@@ -87,7 +103,17 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
   const [selectedModules, setSelectedModules] = useState<number[]>([]);
   const [allModules, setAllModules] = useState<Array<{ module_id: number; module_name: string }>>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [editingCell, setEditingCell] = useState<{
+    row: MatrixRow;
+    column: MatrixColumn;
+  } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const editTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  const closeEditor = () => {
+    setEditingCell(null);
+    window.setTimeout(() => editTriggerRef.current?.focus(), 0);
+  };
 
   useEffect(() => {
     if (!isFullscreen) return;
@@ -457,41 +483,51 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
                   </td>
                   {filteredColumns.map(col => {
                     const skill = row.skills[col.skillId];
-                    
-                    if (!skill) {
-                      return (
-                        <td key={col.skillId} className="px-3 py-3 text-center text-gray-300 border-r border-gray-200">
-                          -
-                        </td>
-                      );
-                    }
-
-                    const gap = skill.gap;
-                    const incomplete = hasIncompleteLevel(skill.currentLevel, skill.targetLevel);
-                    const bgColor = incomplete
+                    const positiveGap = Boolean(skill && skill.gap > 0);
+                    const bgColor = !skill
                       ? 'bg-gray-50'
-                      : gap === 0 
-                      ? 'bg-green-50' 
-                      : gap === 1 
-                      ? 'bg-yellow-50' 
-                      : 'bg-red-50';
-                    const textColor = incomplete
+                      : positiveGap
+                        ? 'bg-red-50'
+                        : 'bg-green-50';
+                    const textColor = !skill
                       ? 'text-gray-500'
-                      : gap === 0 
-                      ? 'text-green-700' 
-                      : gap === 1 
-                      ? 'text-yellow-700' 
-                      : 'text-red-700';
-
-                    return (
-                      <td key={col.skillId} className={`px-3 py-3 text-center border-r border-gray-200 ${bgColor}`}>
+                      : positiveGap
+                        ? 'text-red-700'
+                        : 'text-green-700';
+                    const content = skill ? (
+                      <>
                         <div className={`text-sm font-medium ${textColor}`}>
                           {formatLevel(skill.currentLevel)}/{formatLevel(skill.targetLevel)}
                         </div>
-                        {!incomplete && gap > 0 && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            Gap: {gap}
+                        {positiveGap && (
+                          <div className="mt-1 text-xs font-medium text-red-600">
+                            GAP {skill.gap}
                           </div>
+                        )}
+                      </>
+                    ) : (
+                      <span className={row.canEdit ? 'text-xs text-blue-600' : 'text-gray-300'}>
+                        {row.canEdit ? '点击录入' : '-'}
+                      </span>
+                    );
+                    const editable = row.canEdit && Boolean(onSaveAssessment);
+
+                    return (
+                      <td key={col.skillId} className={`text-center border-r border-gray-200 ${bgColor}`}>
+                        {editable ? (
+                          <button
+                            type="button"
+                            aria-label={`${row.employeeName} ${col.skillName} ${skill ? '编辑能力评估' : '录入能力评估'}`}
+                            onClick={event => {
+                              editTriggerRef.current = event.currentTarget;
+                              setEditingCell({ row, column: col });
+                            }}
+                            className="h-full min-h-14 w-full px-3 py-3 transition-shadow hover:ring-2 hover:ring-inset hover:ring-blue-400 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                          >
+                            {content}
+                          </button>
+                        ) : (
+                          <div className="px-3 py-3">{content}</div>
                         )}
                       </td>
                     );
@@ -510,15 +546,11 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
         <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
-            <span className="text-gray-600">Gap = 0（已达标）</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-yellow-50 border border-yellow-200 rounded"></div>
-            <span className="text-gray-600">Gap = 1（接近目标）</span>
+            <span className="text-gray-600">目标 = 现状（已达标）</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-red-50 border border-red-200 rounded"></div>
-            <span className="text-gray-600">Gap ≥ 2（需重点提升）</span>
+            <span className="text-gray-600">目标 &gt; 现状（存在 GAP）</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div>
@@ -526,6 +558,27 @@ export default function MatrixView({ rows, columns, stats, isLoading = false }: 
           </div>
         </div>
       </div>
+      )}
+      {editingCell && onSaveAssessment && (
+        <AssessmentEditDialog
+          employeeName={editingCell.row.employeeName}
+          skillName={editingCell.column.skillName}
+          initial={editingCell.row.skills[editingCell.column.skillId]
+            ? {
+                current_level: editingCell.row.skills[editingCell.column.skillId].currentLevel,
+                target_level: editingCell.row.skills[editingCell.column.skillId].targetLevel,
+              }
+            : undefined}
+          onCancel={closeEditor}
+          onSave={async input => {
+            await onSaveAssessment(
+              editingCell.row.employeeId,
+              editingCell.column.skillId,
+              input,
+            );
+            closeEditor();
+          }}
+        />
       )}
     </div>
   );

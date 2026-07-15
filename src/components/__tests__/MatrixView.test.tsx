@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import MatrixView from '../MatrixView';
 
@@ -84,5 +84,101 @@ describe('MatrixView fullscreen mode', () => {
     await user.click(screen.getByRole('button', { name: /向右移动表格/ }));
 
     expect(scrollContainer.scrollLeft).toBeGreaterThan(0);
+  });
+});
+
+describe('MatrixView competency editing', () => {
+  it('opens an authorized assessment cell with the keyboard', async () => {
+    const user = userEvent.setup();
+    const onSaveAssessment = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <MatrixView
+        rows={[{ ...rows[0], canEdit: true }]}
+        columns={columns}
+        stats={stats}
+        onSaveAssessment={onSaveAssessment}
+      />,
+    );
+
+    const cell = screen.getByRole('button', {
+      name: /Gu Xuan.*WAS.*编辑能力评估/,
+    });
+    cell.focus();
+    await user.keyboard('{Enter}');
+
+    const dialog = screen.getByRole('dialog', { name: '编辑能力评估' });
+    expect(within(dialog).getByText('Gu Xuan')).toBeInTheDocument();
+    expect(within(dialog).getByText('WAS')).toBeInTheDocument();
+  });
+
+  it('allows an authorized user to enter a missing assessment', async () => {
+    render(
+      <MatrixView
+        rows={[{ ...rows[0], canEdit: true, skills: {} }]}
+        columns={columns}
+        stats={{ ...stats, totalAssessments: 0 }}
+        onSaveAssessment={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.getByRole('button', {
+      name: /Gu Xuan.*WAS.*录入能力评估/,
+    })).toHaveTextContent('点击录入');
+    await screen.findByRole('button', { name: 'BPS elements' });
+  });
+
+  it('keeps another employee assessment read-only', async () => {
+    render(
+      <MatrixView
+        rows={rows}
+        columns={columns}
+        stats={stats}
+        onSaveAssessment={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /编辑能力评估/ })).not.toBeInTheDocument();
+    expect(screen.getByText('3/4')).toBeInTheDocument();
+    await screen.findByRole('button', { name: 'BPS elements' });
+  });
+
+  it('uses green only for equality and red for every positive gap', async () => {
+    const colorRows = [
+      {
+        ...rows[0],
+        employeeId: 'e0',
+        employeeName: 'Equal',
+        skills: { 1: { skillId: 1, currentLevel: 0, targetLevel: 0, gap: 0 } },
+      },
+      {
+        ...rows[0],
+        employeeId: 'e1',
+        employeeName: 'Small',
+        skills: { 1: { skillId: 1, currentLevel: 2, targetLevel: 3, gap: 1 } },
+      },
+      {
+        ...rows[0],
+        employeeId: 'e2',
+        employeeName: 'Large',
+        skills: { 1: { skillId: 1, currentLevel: 1, targetLevel: 5, gap: 4 } },
+      },
+    ];
+
+    render(
+      <MatrixView
+        rows={colorRows}
+        columns={columns}
+        stats={{ ...stats, totalEmployees: 3, totalAssessments: 3 }}
+        onSaveAssessment={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(screen.getByText('0/0').closest('td')).toHaveClass('bg-green-50');
+    expect(screen.getByText('GAP 1').closest('td')).toHaveClass('bg-red-50');
+    expect(screen.getByText('GAP 4').closest('td')).toHaveClass('bg-red-50');
+    expect(screen.queryByText('GAP 0')).not.toBeInTheDocument();
+    expect(document.querySelector('.bg-yellow-50')).not.toBeInTheDocument();
+    await screen.findByRole('button', { name: 'BPS elements' });
   });
 });
