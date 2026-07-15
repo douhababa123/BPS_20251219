@@ -61,6 +61,7 @@ def test_deploy_is_gated_by_offline_tests_and_build():
     assert "npm test" in workflow
     assert "grep -L" in workflow
     assert "requests([ ,]|$)" in workflow
+    assert "db\\.get_cursor" in workflow
     assert "needs.test.result == 'success'" in workflow
     assert "needs.test.result == 'failure'" not in workflow
     assert "构建失败不阻止部署" not in workflow
