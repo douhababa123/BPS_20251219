@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from verify_competency_assessment_history_migration import collect_checks
 
 
-MIGRATION_PATH = Path("backend/migrations/005_competency_assessment_history.sql")
+MIGRATION_PATH = Path(__file__).resolve().parents[1] / "migrations" / "005_competency_assessment_history.sql"
 
 
 def migration_sql() -> str:
