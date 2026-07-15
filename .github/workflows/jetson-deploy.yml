@@ -74,7 +74,19 @@ jobs:
           cd backend
           # 排除需要已启动 API/真实数据库的 requests 集成测试；这些在部署后健康检查中验证。
           UNIT_TESTS=$(grep -L -E 'requests([ ,]|$)' tests/test_*.py)
-          pytest $UNIT_TESTS -v --cov=. --cov-report=xml
+          set +e
+          pytest $UNIT_TESTS -v --cov=. --cov-report=xml 2>&1 | tee pytest-output.log
+          TEST_STATUS=${PIPESTATUS[0]}
+          set -e
+          if [ "$TEST_STATUS" -ne 0 ]; then
+            # Keep failures diagnosable from the public workflow annotation.
+            FAILURE_TAIL=$(tail -n 80 pytest-output.log)
+            FAILURE_TAIL=${FAILURE_TAIL//'%'/'%25'}
+            FAILURE_TAIL=${FAILURE_TAIL//$'\r'/'%0D'}
+            FAILURE_TAIL=${FAILURE_TAIL//$'\n'/'%0A'}
+            echo "::error title=Backend tests failed::$FAILURE_TAIL"
+            exit "$TEST_STATUS"
+          fi
       
       - name: 上传测试覆盖率
         uses: codecov/codecov-action@v3
