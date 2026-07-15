@@ -26,11 +26,11 @@ import type {
 
 // 能力级别定义
 const levelDescriptions = [
+  { level: 0, name: 'Starting point', description: '当前尚未具备该项能力' },
   { level: 1, name: 'Know it', description: '了解概念，知道基础理论' },
   { level: 2, name: 'Do it', description: '能够执行，独立完成任务' },
   { level: 3, name: 'Lead it', description: '能够领导，指导他人工作' },
   { level: 4, name: 'Shape it', description: '能够塑造，优化和创新流程' },
-  { level: 5, name: 'Master', description: '大师级别，行业标杆水平' },
 ];
 
 // 汇总数据类型
@@ -220,14 +220,13 @@ export function CompetencyAssessment() {
   // 辅助函数
   const getGapColor = (gap: number) => {
     if (gap === 0) return 'text-green-600 bg-green-100';
-    if (gap === 1) return 'text-amber-600 bg-amber-100';
     return 'text-red-600 bg-red-100';
   };
 
-  const formatLevel = (level: number) => level > 0 ? `L${level}` : '-';
-  const formatLevelValue = (level: number) => level > 0 ? String(level) : '-';
+  const formatLevel = (level: number) => Number.isFinite(level) ? `L${level}` : '-';
+  const formatLevelValue = (level: number) => Number.isFinite(level) ? String(level) : '-';
   const isIncompleteAssessment = (assessment: AssessmentFull) =>
-    assessment.current_level <= 0 || assessment.target_level <= 0;
+    !Number.isFinite(assessment.current_level) || !Number.isFinite(assessment.target_level);
 
   const getLevelIcon = (level: number) => {
     if (level >= 4) return '🏆';
@@ -517,14 +516,14 @@ export function CompetencyAssessment() {
                         <p className="text-[10px] text-gray-600 mb-0.5">当前</p>
                         <div className="flex items-baseline gap-1">
                           <span className="text-xl font-bold text-blue-600">{summary.avgCurrent}</span>
-                          <span className="text-xs text-gray-500">/5</span>
+                          <span className="text-xs text-gray-500">/4</span>
                         </div>
                       </div>
                       <div className="bg-white rounded-lg p-2.5">
                         <p className="text-[10px] text-gray-600 mb-0.5">目标</p>
                         <div className="flex items-baseline gap-1">
                           <span className="text-xl font-bold text-green-600">{summary.avgTarget}</span>
-                          <span className="text-xs text-gray-500">/5</span>
+                          <span className="text-xs text-gray-500">/4</span>
                         </div>
                       </div>
                       <div className="bg-white rounded-lg p-2.5">
@@ -532,13 +531,13 @@ export function CompetencyAssessment() {
                         <div className="flex items-baseline gap-1">
                           <span className={cn(
                             'text-xl font-bold',
-                            summary.avgGap > 1.5 ? 'text-red-600' : summary.avgGap > 0.5 ? 'text-amber-600' : 'text-green-600'
+                            summary.avgGap > 0 ? 'text-red-600' : 'text-green-600'
                           )}>
                             {summary.avgGap}
                           </span>
                           <TrendingUp className={cn(
                             'w-3.5 h-3.5',
-                            summary.avgGap > 1.5 ? 'text-red-500' : summary.avgGap > 0.5 ? 'text-amber-500' : 'text-green-500'
+                            summary.avgGap > 0 ? 'text-red-500' : 'text-green-500'
                           )} />
                         </div>
                       </div>
@@ -555,9 +554,9 @@ export function CompetencyAssessment() {
                       {summary.moduleDetails.map((module) => {
                         const moduleIcon = getModuleIcon(module.moduleName);
                         const IconComponent = moduleIcon.icon;
-                        const gapPercentage = (module.avgGap / 5) * 100;
-                        const currentPercentage = (module.avgCurrent / 5) * 100;
-                        const targetPercentage = (module.avgTarget / 5) * 100;
+                        const gapPercentage = (module.avgGap / 4) * 100;
+                        const currentPercentage = (module.avgCurrent / 4) * 100;
+                        const targetPercentage = (module.avgTarget / 4) * 100;
                         
                         return (
                           <div key={module.moduleId} className="space-y-1.5">
@@ -596,7 +595,7 @@ export function CompetencyAssessment() {
                               <div 
                                 className={cn(
                                   'absolute top-0 h-full rounded-full transition-all',
-                                  module.avgGap > 1.5 ? 'bg-red-300' : module.avgGap > 0.5 ? 'bg-amber-300' : 'bg-green-300'
+                                  module.avgGap > 0 ? 'bg-red-300' : 'bg-green-300'
                                 )}
                                 style={{ 
                                   left: `${currentPercentage}%`, 
@@ -626,7 +625,7 @@ export function CompetencyAssessment() {
                                 <div className="text-center">
                                   <p className="text-xs text-gray-600">现状</p>
                                   <div className="flex items-center gap-1">
-                                    {[1, 2, 3, 4, 5].map((level) => (
+                                    {[1, 2, 3, 4].map((level) => (
                                       <div
                                         key={level}
                                         className={cn(
@@ -641,7 +640,7 @@ export function CompetencyAssessment() {
                                 <div className="text-center">
                                   <p className="text-xs text-gray-600">目标</p>
                                   <div className="flex items-center gap-1">
-                                    {[1, 2, 3, 4, 5].map((level) => (
+                                    {[1, 2, 3, 4].map((level) => (
                                       <div
                                         key={level}
                                         className={cn(
@@ -751,10 +750,18 @@ export function CompetencyAssessment() {
             
             <div className="bg-white rounded-xl p-6 border border-gray-100">
               <div className="flex items-center justify-between mb-2">
-                <TrendingUp className="w-10 h-10 text-amber-600" />
+                <TrendingUp className={cn(
+                  'w-10 h-10',
+                  matrixData.stats.avgGap > 0 ? 'text-red-600' : 'text-green-600',
+                )} />
                 <span className="text-xs text-gray-500">Gap</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{matrixData.stats.avgGap}</p>
+              <p className={cn(
+                'text-2xl font-bold',
+                matrixData.stats.avgGap > 0 ? 'text-red-600' : 'text-green-600',
+              )}>
+                {matrixData.stats.avgGap}
+              </p>
               <p className="text-sm text-gray-600 mt-1">平均能力差距</p>
             </div>
             

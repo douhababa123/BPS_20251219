@@ -161,7 +161,7 @@ describe('MatrixView competency editing', () => {
         ...rows[0],
         employeeId: 'e2',
         employeeName: 'Large',
-        skills: { 1: { skillId: 1, currentLevel: 1, targetLevel: 5, gap: 4 } },
+        skills: { 1: { skillId: 1, currentLevel: 1, targetLevel: 4, gap: 3 } },
       },
     ];
 
@@ -176,7 +176,7 @@ describe('MatrixView competency editing', () => {
 
     expect(screen.getByText('0/0').closest('td')).toHaveClass('bg-green-50');
     expect(screen.getByText('GAP 1').closest('td')).toHaveClass('bg-red-50');
-    expect(screen.getByText('GAP 4').closest('td')).toHaveClass('bg-red-50');
+    expect(screen.getByText('GAP 3').closest('td')).toHaveClass('bg-red-50');
     expect(screen.queryByText('GAP 0')).not.toBeInTheDocument();
     expect(document.querySelector('.bg-yellow-50')).not.toBeInTheDocument();
     await screen.findByRole('button', { name: 'BPS elements' });
