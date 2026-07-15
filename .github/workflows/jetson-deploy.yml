@@ -72,7 +72,7 @@ jobs:
         run: |
           cd backend
           # 排除需要已启动 API/真实数据库的 requests 集成测试；这些在部署后健康检查中验证。
-          UNIT_TESTS=$(grep -L -E '^(import requests|from requests)' tests/test_*.py)
+          UNIT_TESTS=$(grep -L -E 'requests([ ,]|$)' tests/test_*.py)
           pytest $UNIT_TESTS -v --cov=. --cov-report=xml
       
       - name: 上传测试覆盖率
