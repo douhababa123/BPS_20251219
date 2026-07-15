@@ -21,9 +21,11 @@ from models import (
 from database import get_db
 from .auth import get_current_user
 from competency_assessment_history import (
+    build_gap_trend,
     build_matrix_payload,
     resolve_employee_scope,
     save_latest_assessment,
+    validate_gap_trend_scope,
 )
 
 logger = logging.getLogger(__name__)
@@ -329,6 +331,26 @@ def get_assessment_history(
         }
         for row in cursor.fetchall()
     ]
+
+
+@router.get("/gap-trend")
+def get_gap_trend(
+    year: int = Query(..., ge=2000, le=2100),
+    module_id: Optional[int] = Query(None, ge=1, le=9),
+    skill_id: Optional[int] = Query(None, ge=1),
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return aggregate quarter-end GAP snapshots for the selected year."""
+
+    del current_user
+    validate_gap_trend_scope(cursor, module_id, skill_id)
+    return {
+        "year": year,
+        "moduleId": module_id,
+        "skillId": skill_id,
+        "quarters": build_gap_trend(cursor, year, module_id, skill_id),
+    }
 
 
 @router.get("/{assessment_id}", response_model=CompetencyAssessment)

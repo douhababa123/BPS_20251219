@@ -160,6 +160,91 @@ def save_latest_assessment(
     return assessment_id
 
 
+def validate_gap_trend_scope(cursor, module_id=None, skill_id=None) -> None:
+    """Validate active module/skill filters and their relationship."""
+
+    if module_id is not None:
+        cursor.execute(
+            """SELECT TOP 1 module_id FROM dbo.skills
+               WHERE module_id = ? AND ISNULL(is_active, 1) = 1""",
+            module_id,
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=422, detail="能力模块不存在或未启用")
+
+    if skill_id is not None:
+        cursor.execute(
+            """SELECT module_id FROM dbo.skills
+               WHERE id = ? AND ISNULL(is_active, 1) = 1""",
+            skill_id,
+        )
+        skill = cursor.fetchone()
+        if not skill:
+            raise HTTPException(status_code=422, detail="技能不存在或未启用")
+        if module_id is not None and int(skill[0]) != module_id:
+            raise HTTPException(status_code=422, detail="技能不属于所选能力模块")
+
+
+def build_gap_trend(cursor, year: int, module_id=None, skill_id=None) -> List[Dict[str, Any]]:
+    """Build four quarter-end GAP snapshots with cross-year carry-forward."""
+
+    filters = []
+    params = [year, year, year, year]
+    if module_id is not None:
+        filters.append("s.module_id = ?")
+        params.append(module_id)
+    if skill_id is not None:
+        filters.append("s.id = ?")
+        params.append(skill_id)
+    filter_sql = "".join(f" AND {item}" for item in filters)
+
+    cursor.execute(
+        f"""
+        WITH quarters AS (
+            SELECT 1 AS quarter_number, DATEFROMPARTS(?, 3, 31) AS quarter_end
+            UNION ALL SELECT 2, DATEFROMPARTS(?, 6, 30)
+            UNION ALL SELECT 3, DATEFROMPARTS(?, 9, 30)
+            UNION ALL SELECT 4, DATEFROMPARTS(?, 12, 31)
+        )
+        SELECT
+            q.quarter_number,
+            ISNULL(t.total_gap, 0) AS total_gap,
+            ISNULL(t.data_count, 0) AS data_count
+        FROM quarters q
+        OUTER APPLY (
+            SELECT
+                SUM(latest.gap) AS total_gap,
+                COUNT(latest.gap) AS data_count
+            FROM dbo.employees e
+            CROSS JOIN dbo.skills s
+            OUTER APPLY (
+                SELECT TOP 1 h.target_level - h.current_level AS gap
+                FROM dbo.competency_assessment_history h
+                WHERE h.employee_id = e.id
+                  AND h.skill_id = s.id
+                  AND h.changed_at < DATEADD(day, 1, q.quarter_end)
+                ORDER BY h.changed_at DESC, h.id DESC
+            ) latest
+            WHERE ISNULL(e.is_active, 1) = 1
+              AND ISNULL(s.is_active, 1) = 1
+              {filter_sql}
+        ) t
+        ORDER BY q.quarter_number
+        """,
+        params,
+    )
+
+    return [
+        {
+            "quarter": int(row[0]),
+            "label": f"Q{int(row[0])}",
+            "totalGap": int(row[1] or 0),
+            "hasData": int(row[2] or 0) > 0,
+        }
+        for row in cursor.fetchall()
+    ]
+
+
 def build_matrix_payload(
     employees: Sequence,
     skills: Sequence,
