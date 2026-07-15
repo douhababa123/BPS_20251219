@@ -53,3 +53,14 @@ def test_jetson_runs_migration_after_build_and_before_start():
 
     assert build < migration < start
     assert "docker compose run --rm --no-deps backend" in workflow
+
+
+def test_deploy_is_gated_by_offline_tests_and_build():
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert "npm test" in workflow
+    assert "grep -L" in workflow
+    assert "needs.test.result == 'success'" in workflow
+    assert "needs.test.result == 'failure'" not in workflow
+    assert "构建失败不阻止部署" not in workflow
+    assert "测试失败不阻止部署" not in workflow

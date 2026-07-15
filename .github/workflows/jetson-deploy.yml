@@ -37,6 +37,9 @@ jobs:
       
       - name: TypeScript 类型检查
         run: npm run typecheck
+
+      - name: 前端单元测试
+        run: npm test
       
       - name: ESLint 代码检查
         run: npm run lint
@@ -44,7 +47,6 @@ jobs:
       
       - name: 前端构建测试
         run: npm run build
-        continue-on-error: true  # 构建失败不阻止部署
 
       # 后端检查
       - name: 设置 Python
@@ -69,8 +71,9 @@ jobs:
       - name: 运行后端测试
         run: |
           cd backend
-          pytest tests/ -v --cov=. --cov-report=xml
-        continue-on-error: true  # 测试失败不阻止部署（可根据需要调整）
+          # 排除需要已启动 API/真实数据库的 requests 集成测试；这些在部署后健康检查中验证。
+          UNIT_TESTS=$(grep -L -E '^(import requests|from requests)' tests/test_*.py)
+          pytest $UNIT_TESTS -v --cov=. --cov-report=xml
       
       - name: 上传测试覆盖率
         uses: codecov/codecov-action@v3
@@ -85,7 +88,7 @@ jobs:
     name: 部署到 Jetson
     runs-on: [self-hosted, linux, arm64]
     needs: test
-    if: github.event_name == 'push' && (needs.test.result == 'success' || needs.test.result == 'failure')
+    if: github.event_name == 'push' && needs.test.result == 'success'
     
     steps:
       - name: 拉取 Docker 基础镜像（带重试）
