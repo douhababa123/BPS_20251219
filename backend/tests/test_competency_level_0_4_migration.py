@@ -42,6 +42,8 @@ def test_runner_requires_an_explicit_migration_path():
     assert "len(sys.argv) != 2" in source
     assert "Path(sys.argv[1])" in source
     assert "001_add_role_to_users.sql" not in source
+    assert "settings.db_driver" in source
+    assert "ODBC Driver 17 for SQL Server" not in source
 
 
 def test_jetson_runs_migration_after_build_and_before_start():

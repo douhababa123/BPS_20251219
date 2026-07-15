@@ -22,7 +22,7 @@ def run_migration(sql_file_path):
     
     # 连接数据库
     connection_string = (
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"DRIVER={{{settings.db_driver}}};"
         f"SERVER={settings.db_server};"
         f"DATABASE={settings.db_database};"
         f"UID={settings.db_username};"
