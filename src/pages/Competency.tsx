@@ -2,23 +2,10 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getAllAssessments, getAssessmentMatrix } from '../lib/competencyApi';
 import { TeamGapAnalysis } from '../components/competency/TeamGapAnalysis';
+import { TotalScoreView } from '../components/competency/TotalScoreView';
+import { PersonalGapAnalysis } from '../components/competency/PersonalGapAnalysis';
 import { getAssessmentYears } from '../lib/dashboardData';
-import {
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  ResponsiveContainer,
-  Legend,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-} from 'recharts';
-import { Filter, RefreshCw, Download, TrendingUp, Users, Award, Target } from 'lucide-react';
+import { Award, Download, Filter, RefreshCw, Target, TrendingUp, Users } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
   calculateTeamModuleStats,
@@ -36,8 +23,6 @@ import {
 type ViewMode = 'team' | 'personal';
 type SubViewMode = 'analysis' | 'total-score';
 type ChartType = 'module' | 'skill';
-type RadarDatum = { module: string } & Record<string, string | number>;
-type GapBarDatum = { name: string; Gap: number };
 type EmployeeOption = {
   id: string;
   name: string;
@@ -159,16 +144,6 @@ export function Competency() {
     [selectedEmployee, assessments, skills]
   );
 
-  // 模块排名（按总Gap排序 - 显示所有9个模块）
-  const moduleRanking = useMemo(() => {
-    return [...teamModuleStats]
-      .sort((a, b) => b.totalGap - a.totalGap)
-      .map((module, index) => ({
-        ...module,
-        rank: index + 1,
-      }));
-  }, [teamModuleStats]);
-
   const employeeModuleGapMatrix = useMemo(
     () => calculateEmployeeModuleGapSummary(
       assessments,
@@ -205,41 +180,7 @@ export function Competency() {
     };
   }, [assessments, employees.length, skills.length]);
 
-  // 准备团队雷达图数据（9大模块 - 确保显示所有模块）
-  const teamRadarData = teamModuleStats.map(m => ({
-    module: m.moduleName.length > 25 ? m.moduleName.substring(0, 25) + '...' : m.moduleName,
-    现状: Number(formatNumber(m.avgCurrent)),
-    目标: Number(formatNumber(m.avgTarget)),
-  }));
-
-  // 准备个人雷达图数据（显示所有数据）
-  const personalRadarData = chartType === 'module'
-    ? personalModuleStats.map(m => ({
-        module: m.moduleName.length > 25 ? m.moduleName.substring(0, 25) + '...' : m.moduleName,
-        现状: Number(formatNumber(m.current)),
-        目标: Number(formatNumber(m.target)),
-      }))
-    : personalSkillStats.map(s => ({
-        module: s.skillName.length > 20 ? s.skillName.substring(0, 20) + '...' : s.skillName,
-        现状: s.current,
-        目标: s.target,
-      }));
-
-  // 准备柱状图数据（显示所有模块和技能）
-  const personalBarData = chartType === 'module'
-    ? [...personalModuleStats]
-        .sort((a, b) => b.gap - a.gap)
-        .map(m => ({
-          name: m.moduleName.length > 18 ? m.moduleName.substring(0, 18) + '...' : m.moduleName,
-          Gap: Number(formatNumber(m.gap)),
-        }))
-    : personalSkillStats
-        .map(s => ({
-          name: s.skillName.length > 20 ? s.skillName.substring(0, 20) + '...' : s.skillName,
-          Gap: s.gap,
-        }));
-
-  const formatOptionalLevelValue = (level: number) => level > 0 ? String(level) : '-';
+  const formatOptionalLevelValue = (level: number) => String(level);
 
   // 导出CSV
   const handleExport = () => {
@@ -400,8 +341,6 @@ export function Competency() {
             }))}
             moduleStats={teamModuleStats}
             skillStats={teamSkillStats}
-            radarData={teamRadarData}
-            moduleRanking={moduleRanking}
             summary={employeeModuleGapMatrix}
           />
         ) : (
@@ -413,8 +352,6 @@ export function Competency() {
             employees={employees}
             selectedEmployee={selectedEmployee}
             setSelectedEmployee={setSelectedEmployee}
-            radarData={personalRadarData}
-            barData={personalBarData}
             moduleStats={personalModuleStats}
             skillStats={personalSkillStats}
           />
@@ -433,8 +370,6 @@ function CompetencyTeamView({
   employees,
   moduleStats,
   skillStats,
-  radarData,
-  moduleRanking,
   summary,
 }: {
   subViewMode: SubViewMode;
@@ -445,8 +380,6 @@ function CompetencyTeamView({
   employees: Parameters<typeof calculateEmployeeModuleGapSummary>[2];
   moduleStats: ModuleStats[];
   skillStats: ReturnType<typeof calculateTeamSkillStats>;
-  radarData: RadarDatum[];
-  moduleRanking: (ModuleStats & { rank: number })[];
   summary: EmployeeModuleGapMatrix;
 }) {
   return (
@@ -470,23 +403,18 @@ function CompetencyTeamView({
           summary={summary}
         />
       ) : (
-        <TotalScoreView radarData={radarData} moduleRanking={moduleRanking} />
+        <TotalScoreView moduleStats={moduleStats} />
       )}
     </div>
   );
 }
 
-// 个人视图组件
 function PersonalView({
-  subViewMode,
-  setSubViewMode,
   chartType,
   setChartType,
   employees,
   selectedEmployee,
   setSelectedEmployee,
-  radarData,
-  barData,
   moduleStats,
   skillStats,
 }: {
@@ -497,463 +425,46 @@ function PersonalView({
   employees: EmployeeOption[];
   selectedEmployee: string | null;
   setSelectedEmployee: (id: string | null) => void;
-  radarData: RadarDatum[];
-  barData: GapBarDatum[];
   moduleStats: PersonalModuleStats[];
   skillStats: PersonalSkillStats[];
 }) {
-  const selectedEmployeeInfo = employees.find(e => e.id === selectedEmployee);
-  const moduleSummary = [...moduleStats].sort(
-    (a, b) => b.gap * b.skillCount - a.gap * a.skillCount
-  );
+  const selectedEmployeeInfo = employees.find((employee) => employee.id === selectedEmployee);
 
   return (
     <div className="space-y-4">
-      {/* 工程师选择 */}
       <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
         <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-gray-700">选择工程师：</label>
+          <label htmlFor="competency-employee" className="text-sm font-medium text-gray-700">选择工程师：</label>
           <select
+            id="competency-employee"
             value={selectedEmployee || ''}
-            onChange={(e) => setSelectedEmployee(e.target.value || null)}
+            onChange={(event) => setSelectedEmployee(event.target.value || null)}
             className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">请选择...</option>
-            {employees.map(emp => (
-              <option key={emp.id} value={emp.id}>
-                {emp.name} - {emp.departments?.name || '无部门'}
+            {employees.map((employee) => (
+              <option key={employee.id} value={employee.id}>
+                {employee.name} - {employee.departments?.name || '无部门'}
               </option>
             ))}
           </select>
         </div>
       </div>
 
-      {selectedEmployee ? (
-        <>
-          {/* 二级Tab */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setSubViewMode('analysis')}
-              className={cn(
-                'px-4 py-2 rounded-lg font-medium transition-colors',
-                subViewMode === 'analysis'
-                  ? 'bg-white text-blue-600 border-2 border-blue-600'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
-              )}
-            >
-              差距分析 Gap Analysis
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              {/* 个人雷达图 */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">
-                      {selectedEmployeeInfo?.name} - 能力雷达图
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {chartType === 'module' ? '显示9大模块' : `显示全部${skillStats.length}个技能`}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setChartType('module')}
-                      className={cn(
-                        'px-3 py-1 rounded text-sm font-medium transition-colors',
-                        chartType === 'module'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      )}
-                    >
-                      9大模块
-                    </button>
-                    <button
-                      onClick={() => setChartType('skill')}
-                      className={cn(
-                        'px-3 py-1 rounded text-sm font-medium transition-colors',
-                        chartType === 'skill'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      )}
-                    >
-                      全部技能
-                    </button>
-                  </div>
-                </div>
-                <ResponsiveContainer width="100%" height={450}>
-                  <RadarChart data={radarData}>
-                    <PolarGrid stroke="#e5e7eb" />
-                    <PolarAngleAxis 
-                      dataKey="module" 
-                      tick={{ fontSize: chartType === 'skill' ? 8 : 10, fill: '#374151' }}
-                      tickLine={false}
-                    />
-                    <PolarRadiusAxis angle={90} domain={[0, 5]} tick={{ fontSize: 9 }} />
-                    <Radar name="现状" dataKey="现状" stroke="#2563EB" fill="#2563EB" fillOpacity={0.3} strokeWidth={2} />
-                    <Radar name="目标" dataKey="目标" stroke="#F97316" fill="#F97316" fillOpacity={0.2} strokeWidth={2} />
-                    <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* 个人差距柱状图 */}
-              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">差距分布</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {chartType === 'module' ? '显示9个模块' : `显示全部${skillStats.length}个技能`}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setChartType('module')}
-                      className={cn(
-                        'px-3 py-1 rounded text-sm font-medium transition-colors',
-                        chartType === 'module'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      )}
-                    >
-                      模块级(9个)
-                    </button>
-                    <button
-                      onClick={() => setChartType('skill')}
-                      className={cn(
-                        'px-3 py-1 rounded text-sm font-medium transition-colors',
-                        chartType === 'skill'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      )}
-                    >
-                      技能级({skillStats.length}个)
-                    </button>
-                  </div>
-                </div>
-                <ResponsiveContainer width="100%" height={450}>
-                  <BarChart data={barData} margin={{ bottom: 80, left: 10, right: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis 
-                      dataKey="name" 
-                      tick={{ fontSize: chartType === 'skill' ? 8 : 9, fill: '#374151' }}
-                      angle={-45} 
-                      textAnchor="end" 
-                      height={100}
-                      interval={0}
-                    />
-                    <YAxis domain={[0, 5]} tick={{ fontSize: 10 }} />
-                    <Tooltip 
-                      contentStyle={{ fontSize: '12px', borderRadius: '8px' }}
-                      cursor={{ fill: 'rgba(239, 68, 68, 0.1)' }}
-                    />
-                    <Bar dataKey="Gap" fill="#EF4444" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* 模块 GAP 汇总表（需求3：个人视图模块 GAP 总分） */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <div className="mb-4">
-                <h3 className="text-lg font-bold text-gray-900">
-                  模块能力汇总 Module Summary
-                </h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  显示每个模块的总 GAP 分数
-                </p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">模块</th>
-                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">总 GAP</th>
-                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">平均 GAP</th>
-                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">技能数量</th>
-                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">状态</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {moduleSummary.map((module) => {
-                      const totalGap = module.totalGap;
-                      const avgGap = module.gap;
-                      return (
-                        <tr key={module.moduleId} className="hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl">{module.icon}</span>
-                              <span className="text-sm font-medium text-gray-900">{module.moduleName}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className={cn(
-                              'text-sm font-bold',
-                              totalGap > 10 ? 'text-red-600' : totalGap > 5 ? 'text-orange-600' : 'text-green-600'
-                            )}>
-                              {formatNumber(totalGap)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm text-gray-700">
-                            {formatNumber(avgGap)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-sm text-gray-700">
-                            {module.skillCount}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {totalGap === 0 ? (
-                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
-                                ✓ 已达标
-                              </span>
-                            ) : totalGap < 5 ? (
-                              <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">
-                                ⚠ 轻微差距
-                              </span>
-                            ) : (
-                              <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
-                                ⚡ 需提升
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* 提升建议 */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">
-                提升建议 Recommendations（Top 10）
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                {skillStats.slice(0, 10).filter(s => s.gap > 0).map((skill, index) => (
-                  <div key={skill.skillId} className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-gray-900">{index + 1}. {skill.skillName}</p>
-                        <p className="text-xs text-gray-500 mt-1">{skill.moduleName}</p>
-                      </div>
-                      <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 text-sm font-semibold rounded">
-                        Gap: {skill.gap}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
-                      <span>现状 L{skill.current}</span>
-                      <span>→</span>
-                      <span>目标 L{skill.target}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </>
+      {selectedEmployee && selectedEmployeeInfo ? (
+        <PersonalGapAnalysis
+          employeeName={selectedEmployeeInfo.name}
+          chartType={chartType}
+          setChartType={setChartType}
+          moduleStats={moduleStats}
+          skillStats={skillStats}
+        />
       ) : (
         <div className="bg-white rounded-2xl p-12 text-center">
           <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-600">请选择工程师查看详细能力画像</p>
         </div>
       )}
-    </div>
-  );
-}
-
-// 总分视图组件
-function TotalScoreView({
-  radarData,
-  moduleRanking,
-}: {
-  radarData: RadarDatum[];
-  moduleRanking: (ModuleStats & { rank: number })[];
-}) {
-  // 准备柱状图数据：每个模块的目标总分 vs 实际总分
-  const barChartData = moduleRanking.map(module => ({
-    name: module.moduleName,
-    icon: module.icon,
-    目标总分: module.totalTarget,
-    实际总分: module.totalCurrent,
-    差距: module.totalTarget - module.totalCurrent,
-  }));
-
-  // 计算总计
-  const totalStats = {
-    totalTarget: moduleRanking.reduce((sum, m) => sum + m.totalTarget, 0),
-    totalCurrent: moduleRanking.reduce((sum, m) => sum + m.totalCurrent, 0),
-    totalGap: moduleRanking.reduce((sum, m) => sum + m.totalGap, 0),
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* 总分统计卡片 */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-blue-600 text-sm font-medium">总目标分数</div>
-              <div className="text-3xl font-bold text-blue-900 mt-2">{formatNumber(totalStats.totalTarget)}</div>
-              <div className="text-xs text-blue-600 mt-1">Target Total Score</div>
-            </div>
-            <Target className="w-10 h-10 text-blue-400" />
-          </div>
-        </div>
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-green-600 text-sm font-medium">总实际分数</div>
-              <div className="text-3xl font-bold text-green-900 mt-2">{formatNumber(totalStats.totalCurrent)}</div>
-              <div className="text-xs text-green-600 mt-1">Current Total Score</div>
-            </div>
-            <Award className="w-10 h-10 text-green-400" />
-          </div>
-        </div>
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-purple-600 text-sm font-medium">总差距</div>
-              <div className="text-3xl font-bold text-purple-900 mt-2">{formatNumber(totalStats.totalGap)}</div>
-              <div className="text-xs text-purple-600 mt-1">Total Gap</div>
-            </div>
-            <TrendingUp className="w-10 h-10 text-purple-400" />
-          </div>
-        </div>
-      </div>
-
-      {/* 雷达图 + 柱状图并排显示 */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* 雷达图 */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">
-            团队9大模块雷达图 Team Module Radar
-          </h3>
-          <ResponsiveContainer width="100%" height={450}>
-            <RadarChart data={radarData}>
-              <PolarGrid stroke="#e5e7eb" />
-              <PolarAngleAxis 
-                dataKey="module" 
-                tick={{ fontSize: 10, fill: '#374151' }} 
-                tickLine={false}
-              />
-              <PolarRadiusAxis angle={90} domain={[0, 5]} tick={{ fontSize: 9 }} />
-              <Radar name="现状" dataKey="现状" stroke="#2563EB" fill="#2563EB" fillOpacity={0.3} strokeWidth={2} />
-              <Radar name="目标" dataKey="目标" stroke="#F97316" fill="#F97316" fillOpacity={0.2} strokeWidth={2} />
-              <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* 柱状图：目标总分 vs 实际总分 */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">
-            模块总分对比 Module Total Score Comparison
-          </h3>
-          <ResponsiveContainer width="100%" height={450}>
-            <BarChart data={barChartData} margin={{ bottom: 80, left: 10, right: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis 
-                dataKey="name" 
-                tick={{ fontSize: 9, fill: '#374151' }} 
-                angle={-45} 
-                textAnchor="end" 
-                height={100}
-                interval={0}
-              />
-              <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip 
-                contentStyle={{ fontSize: '12px', borderRadius: '8px' }}
-                cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }}
-              />
-              <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
-              <Bar dataKey="目标总分" fill="#F97316" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="实际总分" fill="#2563EB" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* 详细数据表格 */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">
-          模块总分详情 Module Total Score Details
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">模块名称</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">目标总分</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">实际总分</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">差距</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">完成率</th>
-                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">评估人数</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {moduleRanking.map((module) => {
-                const completionRate = module.totalTarget > 0 
-                  ? (module.totalCurrent / module.totalTarget * 100).toFixed(1) 
-                  : '0.0';
-                return (
-                  <tr key={module.moduleId} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">{module.icon}</span>
-                        <span className="text-sm font-medium text-gray-900">{module.moduleName}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-orange-600">
-                      {formatNumber(module.totalTarget)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-blue-600">
-                      {formatNumber(module.totalCurrent)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-purple-600">
-                      {formatNumber(module.totalGap)}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className={cn(
-                        'text-sm font-bold',
-                        parseFloat(completionRate) >= 90 ? 'text-green-600' :
-                        parseFloat(completionRate) >= 70 ? 'text-yellow-600' :
-                        'text-red-600'
-                      )}>
-                        {completionRate}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-700">
-                      {module.employeeCount}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot className="bg-gray-100">
-              <tr>
-                <td className="px-4 py-3 text-sm font-bold text-gray-900">总计</td>
-                <td className="px-4 py-3 text-right text-sm font-bold text-orange-600">
-                  {formatNumber(totalStats.totalTarget)}
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
-                  {formatNumber(totalStats.totalCurrent)}
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                  {formatNumber(totalStats.totalGap)}
-                </td>
-                <td className="px-4 py-3 text-right text-sm font-bold text-gray-900">
-                  {(totalStats.totalTarget > 0 
-                    ? (totalStats.totalCurrent / totalStats.totalTarget * 100).toFixed(1) 
-                    : '0.0')}%
-                </td>
-                <td className="px-4 py-3"></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
