@@ -36,6 +36,6 @@
 
 - [x] 6.1 Run focused frontend/backend tests, full relevant suites, typecheck and production build.
 - [x] 6.2 Validate OpenSpec and record implementation evidence.
-- [ ] 6.3 Push DEV to trigger the existing GitHub Actions Jetson deployment.
-- [ ] 6.4 Verify Actions, Jetson health, 0–4 editing and competency profile behavior in Firefox.
+- [x] 6.3 Push DEV to trigger the existing GitHub Actions Jetson deployment.
+- [x] 6.4 Verify Actions, Jetson health, 0–4 editing and competency profile behavior in Firefox.
 
