@@ -47,11 +47,11 @@ class TestCompetencyAssessments:
             assert isinstance(item['target_level'], int), "target_level应该是整数"
             assert isinstance(item['gap'], int), "gap应该是整数"
             
-            # 验证级别值的合理性（0-5的范围）
-            assert 0 <= item['current_level'] <= 5, \
-                f"current_level应该在0-5之间，实际: {item['current_level']}"
-            assert 0 <= item['target_level'] <= 5, \
-                f"target_level应该在0-5之间，实际: {item['target_level']}"
+            # 验证级别值的合理性（0-4的范围）
+            assert 0 <= item['current_level'] <= 4, \
+                f"current_level应该在0-4之间，实际: {item['current_level']}"
+            assert 0 <= item['target_level'] <= 4, \
+                f"target_level应该在0-4之间，实际: {item['target_level']}"
             
             # 验证gap的计算准确性
             expected_gap = item['target_level'] - item['current_level']
@@ -61,8 +61,8 @@ class TestCompetencyAssessments:
         print(f"✅ 数据完整性验证通过，检查了{len(data)}条记录")
     
     
-    def test_level_validation_allows_high_values(self, api_base_url, db_cursor):
-        """测试验证规则允许高级别值（修复后应该支持level=4和5）"""
+    def test_level_validation_allows_level_four(self, api_base_url, db_cursor):
+        """测试验证规则支持最高级别4"""
         # 查找current_level或target_level >= 4的记录
         db_cursor.execute("""
             SELECT COUNT(*) 
@@ -77,7 +77,7 @@ class TestCompetencyAssessments:
             # API应该能正常返回这些记录
             response = requests.get(f"{api_base_url}/competency-assessments/")
             assert response.status_code == 200, \
-                "API应该能处理高级别值（4和5）的记录"
+                "API应该能处理最高级别4的记录"
             
             data = response.json()
             api_high_level_count = sum(

@@ -23,7 +23,8 @@ describe('AssessmentEditDialog', () => {
     const optionValues = within(target)
       .getAllByRole('option')
       .map(option => (option as HTMLOptionElement).value);
-    expect(optionValues).toEqual(['', '3', '4', '5']);
+    expect(optionValues).toEqual(['', '3', '4']);
+    expect(screen.queryByRole('option', { name: '5' })).not.toBeInTheDocument();
   });
 
   it('clears an invalid target when current is raised', async () => {

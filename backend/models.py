@@ -353,10 +353,16 @@ class CompetencyAssessmentBase(BaseModel):
     """能力评估基础模型"""
     employee_id: UUID
     skill_id: int
-    current_level: int = Field(..., ge=0, le=5)
-    target_level: int = Field(..., ge=0, le=5)
+    current_level: int = Field(..., ge=0, le=4)
+    target_level: int = Field(..., ge=0, le=4)
     assessment_date: Optional[datetime] = None
     assessor_notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if self.target_level < self.current_level:
+            raise ValueError("目标能力必须大于或等于能力现状")
+        return self
 
 
 class CompetencyAssessmentCreate(CompetencyAssessmentBase):
@@ -364,10 +370,20 @@ class CompetencyAssessmentCreate(CompetencyAssessmentBase):
 
 
 class CompetencyAssessmentUpdate(BaseModel):
-    current_level: Optional[int] = Field(None, ge=0, le=5)
-    target_level: Optional[int] = Field(None, ge=0, le=5)
+    current_level: Optional[int] = Field(None, ge=0, le=4)
+    target_level: Optional[int] = Field(None, ge=0, le=4)
     assessment_date: Optional[datetime] = None
     assessor_notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_submitted_pair(self):
+        if (
+            self.current_level is not None
+            and self.target_level is not None
+            and self.target_level < self.current_level
+        ):
+            raise ValueError("目标能力必须大于或等于能力现状")
+        return self
 
 
 class CompetencyAssessment(CompetencyAssessmentBase):
@@ -383,8 +399,8 @@ class CompetencyAssessment(CompetencyAssessmentBase):
 class CompetencyAssessmentSave(BaseModel):
     """Payload for an authorized matrix save."""
 
-    current_level: int = Field(..., ge=0, le=5)
-    target_level: int = Field(..., ge=0, le=5)
+    current_level: int = Field(..., ge=0, le=4)
+    target_level: int = Field(..., ge=0, le=4)
     notes: Optional[str] = Field(None, max_length=2000)
 
     @model_validator(mode="after")

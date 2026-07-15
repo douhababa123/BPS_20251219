@@ -37,6 +37,11 @@ def test_save_model_accepts_zero():
     assert value.target_level == 0
 
 
+def test_save_model_rejects_level_five():
+    with pytest.raises(ValidationError):
+        CompetencyAssessmentSave(current_level=4, target_level=5)
+
+
 def test_normal_user_cannot_access_other_employee():
     cursor = MagicMock()
     cursor.fetchone.return_value = (str(uuid4()), "other@bosch.com")

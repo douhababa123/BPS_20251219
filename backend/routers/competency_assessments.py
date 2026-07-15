@@ -407,6 +407,22 @@ def update_competency_assessment(
     """更新能力评估"""
     # 检查是否存在
     existing = get_competency_assessment(assessment_id, cursor)
+
+    next_current = (
+        assessment.current_level
+        if assessment.current_level is not None
+        else existing.current_level
+    )
+    next_target = (
+        assessment.target_level
+        if assessment.target_level is not None
+        else existing.target_level
+    )
+    if next_target < next_current:
+        raise HTTPException(
+            status_code=422,
+            detail="目标能力必须大于或等于能力现状",
+        )
     
     # 构建更新字段
     update_fields = []

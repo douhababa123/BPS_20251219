@@ -2,7 +2,7 @@
 能力评估管理 API
 """
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from datetime import date
 from uuid import UUID
@@ -17,19 +17,35 @@ router = APIRouter()
 class CompetencyAssessmentCreate(BaseModel):
     employee_id: str
     skill_id: int
-    current_level: int
-    target_level: int
+    current_level: int = Field(..., ge=0, le=4)
+    target_level: int = Field(..., ge=0, le=4)
     assessment_year: Optional[int] = None
     assessment_date: Optional[date] = None
     notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if self.target_level < self.current_level:
+            raise ValueError("目标能力必须大于或等于能力现状")
+        return self
 
 
 class CompetencyAssessmentUpdate(BaseModel):
-    current_level: Optional[int] = None
-    target_level: Optional[int] = None
+    current_level: Optional[int] = Field(None, ge=0, le=4)
+    target_level: Optional[int] = Field(None, ge=0, le=4)
     assessment_year: Optional[int] = None
     assessment_date: Optional[date] = None
     notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_submitted_pair(self):
+        if (
+            self.current_level is not None
+            and self.target_level is not None
+            and self.target_level < self.current_level
+        ):
+            raise ValueError("目标能力必须大于或等于能力现状")
+        return self
 
 
 class CompetencyAssessmentResponse(BaseModel):
@@ -182,9 +198,29 @@ def update_assessment(
     try:
         with db.get_cursor() as cursor:
             # 检查评估是否存在
-            cursor.execute("SELECT id FROM competency_assessments WHERE id = ?", (assessment_id,))
-            if not cursor.fetchone():
+            cursor.execute(
+                "SELECT id, current_level, target_level FROM competency_assessments WHERE id = ?",
+                (assessment_id,),
+            )
+            existing = cursor.fetchone()
+            if not existing:
                 raise HTTPException(status_code=404, detail="Assessment not found")
+
+            next_current = (
+                assessment.current_level
+                if assessment.current_level is not None
+                else existing.current_level
+            )
+            next_target = (
+                assessment.target_level
+                if assessment.target_level is not None
+                else existing.target_level
+            )
+            if next_target < next_current:
+                raise HTTPException(
+                    status_code=422,
+                    detail="目标能力必须大于或等于能力现状",
+                )
             
             # 构建更新 SQL
             update_fields = []

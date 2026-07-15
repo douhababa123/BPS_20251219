@@ -12,6 +12,7 @@ interface AssessmentEditDialogProps {
 }
 
 type LevelValue = number | '';
+const LEVELS = [0, 1, 2, 3, 4] as const;
 
 export default function AssessmentEditDialog({
   employeeName,
@@ -34,7 +35,7 @@ export default function AssessmentEditDialog({
   const targetOptions = useMemo(
     () => current === ''
       ? []
-      : Array.from({ length: 6 - current }, (_, index) => current + index),
+      : LEVELS.filter(level => level >= current),
     [current],
   );
 
@@ -57,6 +58,8 @@ export default function AssessmentEditDialog({
   const canSave = typeof current === 'number'
     && typeof target === 'number'
     && target >= current
+    && current <= 4
+    && target <= 4
     && !isSaving;
 
   const submit = async (event: React.FormEvent) => {
@@ -124,7 +127,7 @@ export default function AssessmentEditDialog({
                   className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100"
                 >
                   <option value="">请选择</option>
-                  {[0, 1, 2, 3, 4, 5].map(level => (
+                  {LEVELS.map(level => (
                     <option key={level} value={level}>{level}</option>
                   ))}
                 </select>
