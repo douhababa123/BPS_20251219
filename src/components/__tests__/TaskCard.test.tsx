@@ -94,14 +94,62 @@ describe('TaskCard 组件', () => {
 });
 
 describe('TaskCardCompact 组件', () => {
+  it('wraps the complete task name and renders metadata below it', () => {
+    const { container } = render(
+      <TaskCardCompact
+        task={{
+          ...baseTask,
+          task_name: 'Complete long task name that must remain visible',
+          time_slot: 'AM',
+          total_hours: 3.5,
+        }}
+      />
+    );
+
+    expect(screen.getByText('Complete long task name that must remain visible'))
+      .toHaveClass('whitespace-normal', 'break-words');
+    expect(screen.getByTestId('task-card-metadata')).toHaveTextContent('3.5h');
+    expect(container.firstElementChild).not.toHaveClass('h-[26px]');
+  });
+
+  it('reports the first connected fragment height and applies the shared height', () => {
+    const onHeight = vi.fn();
+    const segment = {
+      position: 'start' as const,
+      continuousHours: 32,
+      showLabel: true,
+      groupId: 'group-a',
+    };
+    const { container, rerender } = render(
+      <TaskCardCompact
+        task={baseTask}
+        segmentMeta={segment}
+        onContinuousHeightChange={onHeight}
+      />
+    );
+    const content = container.querySelector('[data-task-card-content]') as HTMLElement;
+    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({ height: 58 } as DOMRect);
+    fireEvent(window, new Event('resize'));
+    expect(onHeight).toHaveBeenCalledWith('group-a', 68);
+
+    rerender(
+      <TaskCardCompact
+        task={baseTask}
+        segmentMeta={{ ...segment, position: 'middle', showLabel: false }}
+        continuousHeight={68}
+      />
+    );
+    expect(container.firstElementChild).toHaveStyle({ height: '68px' });
+  });
+
   it('渲染任务名称', () => {
     render(<TaskCardCompact task={baseTask} />);
     expect(screen.getByText('测试任务')).toBeInTheDocument();
   });
 
-  it('渲染任务类型首字母', () => {
+  it('在名称下方渲染状态辅助信息', () => {
     render(<TaskCardCompact task={baseTask} />);
-    expect(screen.getByText('t')).toBeInTheDocument();
+    expect(screen.getByTestId('task-card-metadata')).toHaveTextContent('计划中');
   });
 
   it('浅色能力域背景使用黑色文字', () => {
@@ -173,9 +221,10 @@ describe('TaskCardCompact 组件', () => {
         }}
       />
     );
-    expect(screen.getByText('11.5h')).toBeInTheDocument();
+    expect(screen.getByTestId('task-card-metadata')).toHaveTextContent('11.5h');
     expect(screen.getByText('测试任务')).toBeInTheDocument();
     expect(container.firstElementChild).toHaveAttribute('data-segment-position', 'start');
+    expect(container.firstElementChild).toHaveStyle({ width: 'calc(100% + 5px)' });
     expect(container.firstElementChild).toHaveClass('rounded-r-none', 'border-r-0');
   });
 
@@ -183,6 +232,7 @@ describe('TaskCardCompact 组件', () => {
     const { container } = render(
       <TaskCardCompact
         task={baseTask}
+        continuousHeight={72}
         segmentMeta={{
           position: 'middle',
           continuousHours: 20,
@@ -193,7 +243,11 @@ describe('TaskCardCompact 组件', () => {
     );
     expect(screen.queryByText('测试任务')).not.toBeInTheDocument();
     expect(screen.queryByText('20h')).not.toBeInTheDocument();
-    expect(container.firstElementChild).toHaveClass('h-[26px]', 'rounded-none', 'border-l-0', 'border-r-0');
+    expect(container.firstElementChild).toHaveStyle({
+      height: '72px',
+      width: 'calc(100% + 10px)',
+    });
+    expect(container.firstElementChild).toHaveClass('rounded-none', 'border-l-0', 'border-r-0');
   });
 
   it('连续任务尾段点击行为保持有效', () => {

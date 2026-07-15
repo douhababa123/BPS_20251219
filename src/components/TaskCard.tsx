@@ -1,3 +1,4 @@
+import { useCallback, useLayoutEffect, useRef } from 'react';
 import { getTimeSlotLabel, getTimeSlotColor } from './TimeSlotSelector';
 import { getCompetenceConfig } from '../lib/taskTypeConfig';
 import type { TimeSlot } from '../lib/database.types';
@@ -61,6 +62,8 @@ interface TaskCardProps {
   className?: string;
   showEmployee?: boolean;
   segmentMeta?: ContinuousTaskSegmentMeta;
+  continuousHeight?: number;
+  onContinuousHeightChange?: (groupId: string, height: number) => void;
 }
 
 export function TaskCard({ task, onClick, className, showEmployee = false }: TaskCardProps) {
@@ -141,7 +144,13 @@ export function TaskCard({ task, onClick, className, showEmployee = false }: Tas
 }
 
 // 任务卡片紧凑版（用于日历格子中）
-export function TaskCardCompact({ task, onClick, segmentMeta }: TaskCardProps) {
+export function TaskCardCompact({
+  task,
+  onClick,
+  segmentMeta,
+  continuousHeight,
+  onContinuousHeightChange,
+}: TaskCardProps) {
   const timeSlot = task.time_slot || 'FULL_DAY';
   const timeSlotLabel = getTimeSlotLabel(timeSlot);
   const competenceConfig = getCompetenceConfig(task.competence);
@@ -152,23 +161,11 @@ export function TaskCardCompact({ task, onClick, segmentMeta }: TaskCardProps) {
   const borderStyle = hexColor === '#808080' ? '#666666' : hexColor;
   const textColor = getReadableTextColor(hexColor);
 
-  // 根据时间槽显示不同的标记
-  const getTimeIcon = () => {
-    switch (timeSlot) {
-      case 'AM':
-        return '🌅'; // 上午
-      case 'PM':
-        return '🌆'; // 下午
-      default:
-        return null; // 全天不显示额外图标
-    }
-  };
-
   // 生成 tooltip 内容
   const displayHours = segmentMeta?.continuousHours ?? task.total_hours ?? 0;
   const showLabel = segmentMeta?.showLabel ?? true;
-  const isStandaloneHalfDay = timeSlot !== 'FULL_DAY'
-    && (segmentMeta?.position ?? 'single') === 'single';
+  const isConnected = !!segmentMeta && segmentMeta.position !== 'single';
+  const contentRef = useRef<HTMLDivElement>(null);
   const tooltipContent = `${task.task_name}
 类型: ${task.task_type}
 能力域: ${competenceConfig.label}
@@ -176,13 +173,39 @@ export function TaskCardCompact({ task, onClick, segmentMeta }: TaskCardProps) {
 时间: ${timeSlotLabel} (${displayHours}h)
 日期: ${task.start_date} ~ ${task.end_date}`;
 
+  const reportNaturalHeight = useCallback(() => {
+    if (!isConnected || !segmentMeta?.showLabel || !contentRef.current || !onContinuousHeightChange) {
+      return;
+    }
+    const contentHeight = Math.ceil(contentRef.current.getBoundingClientRect().height);
+    onContinuousHeightChange(segmentMeta.groupId, Math.max(26, contentHeight + 10));
+  }, [isConnected, onContinuousHeightChange, segmentMeta]);
+
+  useLayoutEffect(() => {
+    reportNaturalHeight();
+    window.addEventListener('resize', reportNaturalHeight);
+    const observer = contentRef.current && typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(reportNaturalHeight)
+      : null;
+    if (contentRef.current) observer?.observe(contentRef.current);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', reportNaturalHeight);
+    };
+  }, [reportNaturalHeight]);
+
   const segmentClasses = segmentMeta && segmentMeta.position !== 'single'
     ? {
-        start: 'rounded-r-none border-r-0 mr-[-5px]',
-        middle: 'rounded-none border-l-0 border-r-0 mx-[-5px]',
+        start: 'rounded-r-none border-r-0',
+        middle: 'rounded-none border-l-0 border-r-0 ml-[-5px]',
         end: 'rounded-l-none border-l-0 ml-[-5px]',
       }[segmentMeta.position]
     : '';
+  const connectedWidth = segmentMeta && segmentMeta.position !== 'single'
+    ? segmentMeta.position === 'middle'
+      ? 'calc(100% + 10px)'
+      : 'calc(100% + 5px)'
+    : undefined;
 
   return (
     <div
@@ -194,49 +217,30 @@ export function TaskCardCompact({ task, onClick, segmentMeta }: TaskCardProps) {
         backgroundColor: hexColor,
         borderColor: borderStyle,
         color: textColor,
+        height: isConnected && continuousHeight ? continuousHeight : undefined,
+        minHeight: 26,
+        width: connectedWidth,
       }}
       className={cn(
-        'h-[26px] py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md border group',
-        isStandaloneHalfDay ? 'px-1' : 'px-2',
+        'w-full box-border px-2 py-1 mb-1 rounded text-xs cursor-pointer transition-all hover:shadow-md border group',
         segmentClasses,
       )}
     >
-      <div className={cn('flex items-center', !isStandaloneHalfDay && 'gap-1')}>
-        {showLabel && (
-          isStandaloneHalfDay ? (
-            <span className="truncate w-full font-medium group-hover:font-semibold">
-              {task.task_name}
-            </span>
-          ) : (
-            <>
-        {/* 任务类型首字母 */}
-        <span className="flex-shrink-0 font-bold text-[10px] opacity-80">{task.task_type.charAt(0)}</span>
-        
-        {/* 任务名称 */}
-        <span className="truncate flex-1 font-medium group-hover:font-semibold">
-          {task.task_name}
-        </span>
-        
-        {/* 状态图标 */}
-        <span className="flex-shrink-0 text-[10px]" title={statusConfig.label}>
-          {statusConfig.icon}
-        </span>
-        
-        {/* 时间槽标记（仅半天任务显示） */}
-        {getTimeIcon() && (
-          <span className="flex-shrink-0 text-[10px]">{getTimeIcon()}</span>
-        )}
-        
-        {/* 工时 */}
-        {displayHours > 0 && (
-          <span className="flex-shrink-0 text-[10px] opacity-70 font-semibold">
-            {displayHours}h
-          </span>
-        )}
-            </>
-          )
-        )}
-      </div>
+      {showLabel && (
+        <div ref={contentRef} data-task-card-content>
+          <div className="whitespace-normal break-words font-medium leading-tight group-hover:font-semibold">
+            {task.task_name}
+          </div>
+          <div
+            data-testid="task-card-metadata"
+            className="mt-1 whitespace-normal break-words text-[9px] leading-tight opacity-80"
+          >
+            {!isConnected && `${timeSlotLabel} · `}
+            {displayHours > 0 && `${displayHours}h · `}
+            {statusConfig.icon} {statusConfig.label}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
