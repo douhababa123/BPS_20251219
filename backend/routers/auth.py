@@ -71,14 +71,18 @@ def _login_employee_user(request: PasswordLoginRequest, cursor):
             detail="邮箱域名不被允许，请使用 @bosch.com 或 @bshg.com 邮箱",
         )
 
+    user = _get_user_by_email(cursor, email_input)
     employee = _get_active_employee(cursor, email_input)
-    if not employee:
+    standalone_admin = bool(
+        user
+        and str(user[4] or "").strip().lower() == "admin"
+    )
+    if not employee and not standalone_admin:
         raise HTTPException(
             status_code=403,
             detail="该邮箱未在员工表中启用，请联系管理员开通账号",
         )
 
-    user = _get_user_by_email(cursor, email_input)
     if not user:
         raise HTTPException(
             status_code=404,
@@ -87,9 +91,9 @@ def _login_employee_user(request: PasswordLoginRequest, cursor):
 
     user_id = str(user[0])
     email = user[1]
-    name = user[2] or employee[2] or email.split("@")[0]
+    name = user[2] or (employee[2] if employee else None) or email.split("@")[0]
     password_hash = user[3]
-    mapped_role = role_from_employee_role(employee[4])
+    mapped_role = "admin" if standalone_admin else role_from_employee_role(employee[4])
     is_active = bool(user[5]) if user[5] is not None else True
     must_change_password = bool(user[6]) if user[6] is not None else False
 
@@ -112,17 +116,18 @@ def _login_employee_user(request: PasswordLoginRequest, cursor):
         name,
         user_id,
     )
-    cursor.execute(
-        """
-        UPDATE dbo.employees
-        SET auth_user_id = ?, last_login_at = GETDATE(),
-            login_count = ISNULL(login_count, 0) + 1,
-            updated_at = GETDATE()
-        WHERE id = ?
-        """,
-        user_id,
-        str(employee[0]),
-    )
+    if employee:
+        cursor.execute(
+            """
+            UPDATE dbo.employees
+            SET auth_user_id = ?, last_login_at = GETDATE(),
+                login_count = ISNULL(login_count, 0) + 1,
+                updated_at = GETDATE()
+            WHERE id = ?
+            """,
+            user_id,
+            str(employee[0]),
+        )
     cursor.commit()
 
     return {
