@@ -24,6 +24,6 @@
 
 - [x] 5.1 Run focused/full tests, TypeScript, focused lint, build, whitespace, and strict OpenSpec validation.
 - [x] 5.2 Verify complete names, vertical order, and connected equal-height seamless bands locally in Firefox.
-- [ ] 5.3 Merge to `DEV`, rerun merged verification, and push.
-- [ ] 5.4 Confirm GitHub Actions code-quality and Jetson deployment jobs succeed.
-- [ ] 5.5 Recheck the deployed Jetson calendar in Firefox.
+- [x] 5.3 Merge to `DEV`, rerun merged verification, and push.
+- [x] 5.4 Confirm GitHub Actions code-quality and Jetson deployment jobs succeed.
+- [x] 5.5 Recheck the deployed Jetson calendar in Firefox.
