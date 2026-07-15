@@ -440,6 +440,7 @@ export interface MatrixRow {
   employeeCode: string
   employeeName: string
   departmentName: string | null
+  canEdit: boolean
   skills: Record<number, {  // skill_id -> score
     skillId: number
     currentLevel: number
@@ -475,6 +476,28 @@ export interface AssessmentStats {
   avgTargetLevel: number
   avgGap: number
   totalGapScore: number
+}
+
+export interface AssessmentSaveInput {
+  current_level: number
+  target_level: number
+  notes?: string
+}
+
+export interface AssessmentHistoryRecord {
+  id: string
+  assessment_id: string
+  employee_id: string
+  skill_id: number
+  current_level: number
+  target_level: number
+  gap: number
+  assessment_year: number
+  assessment_quarter: number
+  notes?: string | null
+  changed_at: string
+  changed_by_user_id?: string | null
+  change_source: 'MIGRATION_BASELINE' | 'WEB_EDIT'
 }
 
 // ========================================

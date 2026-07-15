@@ -6,7 +6,11 @@ import {
   Target, Award, Users2, BarChart3, Wrench, TrendingDown,
   Lightbulb, Zap, Gauge
 } from 'lucide-react';
-import { getMatrixData, getAllAssessments } from '../lib/competencyApi';
+import {
+  averageAssessmentValues,
+  getMatrixData,
+  getAllAssessments,
+} from '../lib/competencyApi';
 import MatrixView from '../components/MatrixView';
 import { cn } from '../lib/utils';
 import type { MatrixRow, MatrixColumn, MatrixFilters, AssessmentStats, AssessmentFull } from '../lib/database.types';
@@ -94,17 +98,8 @@ export function CompetencyAssessment() {
 
   // 计算员工汇总数据
   const calculateSummaries = (data: AssessmentFull[]) => {
-    const averagePositive = (values: number[]) => {
-      const positive = values.filter(value => value > 0);
-      return positive.length > 0
-        ? positive.reduce((sum, value) => sum + value, 0) / positive.length
-        : 0;
-    };
     const averageGap = (items: AssessmentFull[]) => {
-      const complete = items.filter(item => item.current_level > 0 && item.target_level > 0);
-      return complete.length > 0
-        ? complete.reduce((sum, item) => sum + item.gap, 0) / complete.length
-        : 0;
+      return averageAssessmentValues(items.map(item => item.gap));
     };
     const employeeMap = new Map<string, AssessmentFull[]>();
     
@@ -130,8 +125,8 @@ export function CompetencyAssessment() {
       });
 
       const moduleDetails = Array.from(moduleMap.entries()).map(([moduleId, items]) => {
-        const avgCurrent = averagePositive(items.map(i => i.current_level));
-        const avgTarget = averagePositive(items.map(i => i.target_level));
+        const avgCurrent = averageAssessmentValues(items.map(i => i.current_level));
+        const avgTarget = averageAssessmentValues(items.map(i => i.target_level));
         const avgGap = averageGap(items);
         return {
           moduleName: items[0].module_name,
@@ -143,8 +138,8 @@ export function CompetencyAssessment() {
         };
       });
 
-      const avgCurrent = averagePositive(assessments.map(a => a.current_level));
-      const avgTarget = averagePositive(assessments.map(a => a.target_level));
+      const avgCurrent = averageAssessmentValues(assessments.map(a => a.current_level));
+      const avgTarget = averageAssessmentValues(assessments.map(a => a.target_level));
       const avgGap = averageGap(assessments);
 
       summaryList.push({

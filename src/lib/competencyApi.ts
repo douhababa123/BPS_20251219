@@ -3,7 +3,19 @@
  */
 
 import { apiClient } from './api-client'; // 重用项目的 API 客户端
-import type { AssessmentFull, MatrixRow, MatrixColumn, AssessmentStats } from './database.types';
+import type {
+  AssessmentFull,
+  AssessmentSaveInput,
+  MatrixRow,
+  MatrixColumn,
+  AssessmentStats,
+} from './database.types';
+
+export function averageAssessmentValues(values: number[]): number {
+  return values.length > 0
+    ? values.reduce((sum, value) => sum + value, 0) / values.length
+    : 0;
+}
 
 /**
  * 获取所有能力评估数据（单次 SQL JOIN，后端完成关联）
@@ -29,6 +41,27 @@ export async function getAllAssessments(): Promise<AssessmentFull[]> {
     }
     throw error;
   }
+}
+
+export async function getAssessmentMatrix(): Promise<{
+  rows: MatrixRow[];
+  columns: MatrixColumn[];
+  stats: AssessmentStats;
+}> {
+  const response = await apiClient.get('/competency-assessments/matrix');
+  return response.data;
+}
+
+export async function saveAssessment(
+  employeeId: string,
+  skillId: number,
+  input: AssessmentSaveInput,
+): Promise<AssessmentFull> {
+  const response = await apiClient.put(
+    `/competency-assessments/employee/${employeeId}/skill/${skillId}`,
+    input,
+  );
+  return response.data;
 }
 
 /**
@@ -79,6 +112,7 @@ export async function getMatrixData(assessments: AssessmentFull[]): Promise<{
       employeeCode: first.employee_code,
       employeeName: first.employee_name,
       departmentName: first.department_name || null,
+      canEdit: false,
       skills: skills,
     };
   });
@@ -111,9 +145,9 @@ export async function getMatrixData(assessments: AssessmentFull[]): Promise<{
   });
   
   // 计算统计数据
-  const currentValues = assessments.map(a => a.current_level).filter(level => level > 0);
-  const targetValues = assessments.map(a => a.target_level).filter(level => level > 0);
-  const completeAssessments = assessments.filter(a => a.current_level > 0 && a.target_level > 0);
+  const currentValues = assessments.map(a => a.current_level);
+  const targetValues = assessments.map(a => a.target_level);
+  const completeAssessments = assessments;
   const totalGap = completeAssessments.reduce((sum, a) => sum + a.gap, 0);
   
   return {
@@ -123,12 +157,8 @@ export async function getMatrixData(assessments: AssessmentFull[]): Promise<{
       totalAssessments: assessments.length,
       totalEmployees: rows.length,
       totalSkills: columns.length,
-      avgCurrentLevel: currentValues.length > 0
-        ? Math.round((currentValues.reduce((sum, level) => sum + level, 0) / currentValues.length) * 10) / 10
-        : 0,
-      avgTargetLevel: targetValues.length > 0
-        ? Math.round((targetValues.reduce((sum, level) => sum + level, 0) / targetValues.length) * 10) / 10
-        : 0,
+      avgCurrentLevel: Math.round(averageAssessmentValues(currentValues) * 10) / 10,
+      avgTargetLevel: Math.round(averageAssessmentValues(targetValues) * 10) / 10,
       avgGap: completeAssessments.length > 0
         ? Math.round((totalGap / completeAssessments.length) * 10) / 10
         : 0,

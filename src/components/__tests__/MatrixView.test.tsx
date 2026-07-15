@@ -15,6 +15,7 @@ const rows = [
     employeeCode: 'SCh-PS_Gu_Xuan',
     employeeName: 'Gu Xuan',
     departmentName: 'SCh-PS',
+    canEdit: false,
     skills: {
       1: {
         skillId: 1,

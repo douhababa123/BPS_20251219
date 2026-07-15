@@ -259,8 +259,8 @@ export interface CompetencyAssessment {
   id: string; // UUID
   employee_id: string;
   skill_id: number;
-  current_level: number; // 0-3
-  target_level: number; // 0-3
+  current_level: number; // 0-5
+  target_level: number; // 0-5, must be >= current_level
   assessment_date?: string;
   assessor_notes?: string;
   gap?: number;
@@ -283,6 +283,12 @@ export interface CompetencyAssessmentUpdate {
   target_level?: number;
   assessment_date?: string;
   assessor_notes?: string;
+}
+
+export interface CompetencyAssessmentSave {
+  current_level: number;
+  target_level: number;
+  notes?: string;
 }
 
 // ============================================================================
