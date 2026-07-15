@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getAllAssessments } from '../lib/competencyApi';
+import { getAllAssessments, getAssessmentMatrix } from '../lib/competencyApi';
+import { TeamGapAnalysis } from '../components/competency/TeamGapAnalysis';
 import { getAssessmentYears } from '../lib/dashboardData';
 import {
   RadarChart,
@@ -24,17 +25,24 @@ import {
   calculateTeamSkillStats,
   calculatePersonalModuleStats,
   calculatePersonalSkillStats,
-  calculateEmployeeModuleGapMatrix,
-  getRankIcon,
+  calculateEmployeeModuleGapSummary,
   formatNumber,
   type ModuleStats,
   type PersonalModuleStats,
+  type PersonalSkillStats,
   type EmployeeModuleGapMatrix,
 } from '../lib/competencyAggregation';
 
 type ViewMode = 'team' | 'personal';
-type SubViewMode = 'analysis' | 'ranking' | 'total-score';
+type SubViewMode = 'analysis' | 'total-score';
 type ChartType = 'module' | 'skill';
+type RadarDatum = { module: string } & Record<string, string | number>;
+type GapBarDatum = { name: string; Gap: number };
+type EmployeeOption = {
+  id: string;
+  name: string;
+  departments: { name: string | null } | null;
+};
 
 export function Competency() {
   const [viewMode, setViewMode] = useState<ViewMode>('team');
@@ -48,6 +56,10 @@ export function Competency() {
     queryKey: ['competency-assessments'],
     queryFn: () => getAllAssessments(),
   });
+  const { data: assessmentMatrix } = useQuery({
+    queryKey: ['competency-assessment-matrix'],
+    queryFn: getAssessmentMatrix,
+  });
 
   const assessmentYears = useMemo(() => getAssessmentYears(allAssessments), [allAssessments]);
   const effectiveYear = assessmentYears.includes(selectedYear)
@@ -60,7 +72,7 @@ export function Competency() {
     [allAssessments, effectiveYear]
   );
 
-  // 从 assessments 派生技能列表（避免额外请求）
+  // 完整矩阵包含所有启用技能，包括所选年度暂无评估的技能。
   const skills = useMemo(() => {
     const skillMap = new Map<number, {
       id: number; module_id: number; module_name: string;
@@ -68,7 +80,22 @@ export function Competency() {
       description: string | null; display_order: number;
       is_active: boolean; created_at: string; updated_at: string;
     }>();
-    allAssessments.forEach(a => {
+    if (assessmentMatrix) {
+      assessmentMatrix.columns.forEach((column) => {
+        skillMap.set(column.skillId, {
+          id: column.skillId,
+          module_id: column.moduleId,
+          module_name: column.moduleName,
+          skill_name: column.skillName,
+          skill_code: null,
+          description: null,
+          display_order: column.displayOrder,
+          is_active: true,
+          created_at: '',
+          updated_at: '',
+        });
+      });
+    } else allAssessments.forEach(a => {
       if (!skillMap.has(a.skill_id)) {
         skillMap.set(a.skill_id, {
           id: a.skill_id,
@@ -85,12 +112,20 @@ export function Competency() {
       }
     });
     return Array.from(skillMap.values());
-  }, [allAssessments]);
+  }, [allAssessments, assessmentMatrix]);
 
-  // 从 assessments 派生员工列表（用于下拉选择框）
+  // 完整矩阵包含所有在职工程师，包括所选年度暂无评估的工程师。
   const employees = useMemo(() => {
     const empMap = new Map<string, { id: string; name: string; departments: { name: string | null } | null }>();
-    allAssessments.forEach(a => {
+    if (assessmentMatrix) {
+      assessmentMatrix.rows.forEach((row) => {
+        empMap.set(row.employeeId, {
+          id: row.employeeId,
+          name: row.employeeName,
+          departments: row.departmentName ? { name: row.departmentName } : null,
+        });
+      });
+    } else allAssessments.forEach(a => {
       if (!empMap.has(a.employee_id)) {
         empMap.set(a.employee_id, {
           id: a.employee_id,
@@ -100,7 +135,7 @@ export function Competency() {
       }
     });
     return Array.from(empMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [allAssessments]);
+  }, [allAssessments, assessmentMatrix]);
 
   // 计算团队统计
   const teamModuleStats = useMemo(
@@ -135,33 +170,40 @@ export function Competency() {
   }, [teamModuleStats]);
 
   const employeeModuleGapMatrix = useMemo(
-    () => calculateEmployeeModuleGapMatrix(assessments, skills),
-    [assessments, skills]
+    () => calculateEmployeeModuleGapSummary(
+      assessments,
+      skills,
+      employees.map((employee) => ({
+        employeeId: employee.id,
+        employeeName: employee.name,
+        departmentName: employee.departments?.name ?? null,
+      })),
+    ),
+    [assessments, employees, skills]
   );
 
   // 统计卡片数据
   const statistics = useMemo(() => {
-    const completeAssessments = assessments.filter(a => a.current_level > 0 && a.target_level > 0);
-    const currentValues = assessments.map(a => a.current_level).filter(level => level > 0);
-    const targetValues = assessments.map(a => a.target_level).filter(level => level > 0);
-    const totalGap = completeAssessments.reduce((sum, a) => sum + a.gap, 0);
+    const currentValues = assessments.map(a => a.current_level);
+    const targetValues = assessments.map(a => a.target_level);
+    const totalGap = assessments.reduce((sum, a) => sum + a.gap, 0);
     const avgCurrent = currentValues.length > 0
       ? currentValues.reduce((sum, level) => sum + level, 0) / currentValues.length
       : 0;
     const avgTarget = targetValues.length > 0
       ? targetValues.reduce((sum, level) => sum + level, 0) / targetValues.length
       : 0;
-    const gapCount = completeAssessments.filter(a => a.gap > 0).length;
+    const gapCount = assessments.filter(a => a.gap > 0).length;
 
     return {
-      employeeCount: new Set(assessments.map(a => a.employee_id)).size,
-      skillCount: new Set(assessments.map(a => a.skill_id)).size,
+      employeeCount: employees.length,
+      skillCount: skills.length,
       avgCurrent: formatNumber(avgCurrent),
       avgTarget: formatNumber(avgTarget),
       totalGap: formatNumber(totalGap),
       gapCount,
     };
-  }, [assessments]);
+  }, [assessments, employees.length, skills.length]);
 
   // 准备团队雷达图数据（9大模块 - 确保显示所有模块）
   const teamRadarData = teamModuleStats.map(m => ({
@@ -184,21 +226,6 @@ export function Competency() {
       }));
 
   // 准备柱状图数据（显示所有模块和技能）
-  const teamBarData = chartType === 'module'
-    ? [...teamModuleStats]
-        .sort((a, b) => b.totalGap - a.totalGap)
-        .map(m => ({
-          name: m.moduleName.length > 18 ? m.moduleName.substring(0, 18) + '...' : m.moduleName,
-          总Gap: Number(formatNumber(m.totalGap)),
-          平均Gap: Number(formatNumber(m.avgGap)),
-        }))
-    : teamSkillStats
-        .map(s => ({
-          name: s.skillName.length > 20 ? s.skillName.substring(0, 20) + '...' : s.skillName,
-          总Gap: Number(formatNumber(s.totalGap)),
-          平均Gap: Number(formatNumber(s.avgGap)),
-        }));
-
   const personalBarData = chartType === 'module'
     ? [...personalModuleStats]
         .sort((a, b) => b.gap - a.gap)
@@ -360,15 +387,22 @@ export function Competency() {
             <p className="text-gray-600">正在加载数据...</p>
           </div>
         ) : viewMode === 'team' ? (
-          <TeamView
+          <CompetencyTeamView
             subViewMode={subViewMode}
             setSubViewMode={setSubViewMode}
-            chartType={chartType}
-            setChartType={setChartType}
+            year={effectiveYear}
+            assessments={assessments}
+            skills={skills}
+            employees={employees.map((employee) => ({
+              employeeId: employee.id,
+              employeeName: employee.name,
+              departmentName: employee.departments?.name ?? null,
+            }))}
+            moduleStats={teamModuleStats}
+            skillStats={teamSkillStats}
             radarData={teamRadarData}
-            barData={teamBarData}
             moduleRanking={moduleRanking}
-            employeeModuleGapMatrix={employeeModuleGapMatrix}
+            summary={employeeModuleGapMatrix}
           />
         ) : (
           <PersonalView
@@ -390,276 +424,51 @@ export function Competency() {
   );
 }
 
-// 团队视图组件
-function TeamView({
+function CompetencyTeamView({
   subViewMode,
   setSubViewMode,
-  chartType,
-  setChartType,
+  year,
+  assessments,
+  skills,
+  employees,
+  moduleStats,
+  skillStats,
   radarData,
-  barData,
   moduleRanking,
-  employeeModuleGapMatrix,
+  summary,
 }: {
   subViewMode: SubViewMode;
   setSubViewMode: (mode: SubViewMode) => void;
-  chartType: ChartType;
-  setChartType: (type: ChartType) => void;
-  radarData: any[];
-  barData: any[];
+  year: number;
+  assessments: Parameters<typeof calculateEmployeeModuleGapSummary>[0];
+  skills: Parameters<typeof calculateEmployeeModuleGapSummary>[1];
+  employees: Parameters<typeof calculateEmployeeModuleGapSummary>[2];
+  moduleStats: ModuleStats[];
+  skillStats: ReturnType<typeof calculateTeamSkillStats>;
+  radarData: RadarDatum[];
   moduleRanking: (ModuleStats & { rank: number })[];
-  employeeModuleGapMatrix: EmployeeModuleGapMatrix;
+  summary: EmployeeModuleGapMatrix;
 }) {
   return (
     <div className="space-y-4">
-      {/* 二级Tab */}
       <div className="flex gap-2">
-        <button
-          onClick={() => setSubViewMode('analysis')}
-          className={cn(
-            'px-4 py-2 rounded-lg font-medium transition-colors',
-            subViewMode === 'analysis'
-              ? 'bg-white text-blue-600 border-2 border-blue-600'
-              : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
-          )}
-        >
+        <button type="button" onClick={() => setSubViewMode('analysis')} className={cn('px-4 py-2 rounded-lg font-medium border', subViewMode === 'analysis' ? 'text-blue-600 border-blue-600' : 'text-gray-600 border-gray-200')}>
           差距分析 Gap Analysis
         </button>
-        <button
-          onClick={() => setSubViewMode('ranking')}
-          className={cn(
-            'px-4 py-2 rounded-lg font-medium transition-colors',
-            subViewMode === 'ranking'
-              ? 'bg-white text-blue-600 border-2 border-blue-600'
-              : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
-          )}
-        >
-          排名 Ranking
-        </button>
-        <button
-          onClick={() => setSubViewMode('total-score')}
-          className={cn(
-            'px-4 py-2 rounded-lg font-medium transition-colors',
-            subViewMode === 'total-score'
-              ? 'bg-white text-blue-600 border-2 border-blue-600'
-              : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
-          )}
-        >
+        <button type="button" onClick={() => setSubViewMode('total-score')} className={cn('px-4 py-2 rounded-lg font-medium border', subViewMode === 'total-score' ? 'text-blue-600 border-blue-600' : 'text-gray-600 border-gray-200')}>
           总分视图 Total Score
         </button>
       </div>
-
       {subViewMode === 'analysis' ? (
-        <div className="grid grid-cols-2 gap-4">
-          {/* 团队雷达图 */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
-              团队9大模块雷达图 Team Module Radar
-            </h3>
-            <ResponsiveContainer width="100%" height={450}>
-              <RadarChart data={radarData}>
-                <PolarGrid stroke="#e5e7eb" />
-                <PolarAngleAxis 
-                  dataKey="module" 
-                  tick={{ fontSize: 10, fill: '#374151' }} 
-                  tickLine={false}
-                />
-                <PolarRadiusAxis angle={90} domain={[0, 5]} tick={{ fontSize: 9 }} />
-                <Radar name="现状" dataKey="现状" stroke="#2563EB" fill="#2563EB" fillOpacity={0.3} strokeWidth={2} />
-                <Radar name="目标" dataKey="目标" stroke="#F97316" fill="#F97316" fillOpacity={0.2} strokeWidth={2} />
-                <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '10px' }} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* 差距分布柱状图 */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">差距分布 Gap Distribution</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  {chartType === 'module' ? '显示全部9个模块' : '显示全部39个技能'}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setChartType('module')}
-                  className={cn(
-                    'px-3 py-1 rounded text-sm font-medium transition-colors',
-                    chartType === 'module'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  )}
-                >
-                  模块级(9个)
-                </button>
-                <button
-                  onClick={() => setChartType('skill')}
-                  className={cn(
-                    'px-3 py-1 rounded text-sm font-medium transition-colors',
-                    chartType === 'skill'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  )}
-                >
-                  技能级(39个)
-                </button>
-              </div>
-            </div>
-            <ResponsiveContainer width="100%" height={450}>
-              <BarChart data={barData} margin={{ bottom: 80, left: 10, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis 
-                  dataKey="name" 
-                  tick={{ fontSize: 9, fill: '#374151' }} 
-                  angle={-45} 
-                  textAnchor="end" 
-                  height={100}
-                  interval={0}
-                />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip 
-                  contentStyle={{ fontSize: '12px', borderRadius: '8px' }}
-                  cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }}
-                />
-                <Bar dataKey="总Gap" fill="#2563EB" radius={[6, 6, 0, 0]} />
-                {chartType === 'module' && <Bar dataKey="平均Gap" fill="#F59E0B" radius={[6, 6, 0, 0]} />}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      ) : subViewMode === 'ranking' ? (
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-gray-900">
-                工程师模块 GAP 排名 Employee Module GAP Ranking
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                按个人总 GAP 降序，展示每位工程师在 9 个能力模块中的 GAP 总分
-              </p>
-            </div>
-            {employeeModuleGapMatrix.rows.length === 0 ? (
-              <div className="py-12 text-center text-sm text-gray-500">
-                当前年度暂无有效能力评估数据
-              </div>
-            ) : (
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                <table className="min-w-max divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="sticky left-0 z-20 bg-gray-50 w-16 px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase">
-                        排名
-                      </th>
-                      <th className="sticky left-16 z-20 bg-gray-50 min-w-48 px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase border-r border-gray-200">
-                        工程师
-                      </th>
-                      {employeeModuleGapMatrix.modules.map((module) => (
-                        <th
-                          key={module.id}
-                          title={module.name}
-                          className="w-36 max-w-36 px-3 py-3 text-right text-xs font-bold text-gray-700"
-                        >
-                          <span className="block truncate">{module.icon} {module.name}</span>
-                        </th>
-                      ))}
-                      <th className="sticky right-0 z-20 bg-blue-50 min-w-28 px-4 py-3 text-right text-xs font-bold text-blue-900 uppercase border-l border-blue-200">
-                        个人总 GAP
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {employeeModuleGapMatrix.rows.map((row) => (
-                      <tr key={row.employeeId} className="hover:bg-blue-50/40">
-                        <td className="sticky left-0 z-10 bg-white w-16 px-3 py-3 text-sm">
-                          <span className="text-xl">{getRankIcon(row.rank)}</span>
-                        </td>
-                        <td className="sticky left-16 z-10 bg-white min-w-48 px-4 py-3 border-r border-gray-200">
-                          <div className="text-sm font-semibold text-gray-900">{row.employeeName}</div>
-                          <div className="text-xs text-gray-500">{row.departmentName || '—'}</div>
-                        </td>
-                        {employeeModuleGapMatrix.modules.map((module) => {
-                          const cell = row.modules[module.id];
-                          return (
-                            <td key={module.id} className="px-3 py-3 text-right text-sm text-gray-700">
-                              {cell.hasData ? formatNumber(cell.totalGap) : '—'}
-                            </td>
-                          );
-                        })}
-                        <td className="sticky right-0 z-10 bg-blue-50 px-4 py-3 text-right text-sm font-bold text-blue-900 border-l border-blue-200">
-                          {formatNumber(row.totalGap)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-gray-100 border-t-2 border-gray-300">
-                    <tr>
-                      <td className="sticky left-0 z-20 bg-gray-100 px-3 py-3" />
-                      <td className="sticky left-16 z-20 bg-gray-100 px-4 py-3 text-sm font-bold text-gray-900 border-r border-gray-300">
-                        模块合计
-                      </td>
-                      {employeeModuleGapMatrix.modules.map((module) => (
-                        <td key={module.id} className="px-3 py-3 text-right text-sm font-bold text-red-600">
-                          {formatNumber(employeeModuleGapMatrix.moduleTotals[module.id])}
-                        </td>
-                      ))}
-                      <td className="sticky right-0 z-20 bg-blue-100 px-4 py-3 text-right text-sm font-bold text-blue-900 border-l border-blue-300">
-                        {formatNumber(employeeModuleGapMatrix.grandTotal)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-          </div>
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-            <div className="mb-4">
-              <h3 className="text-lg font-bold text-gray-900">
-                模块排名 Module Ranking（全部9个模块，按总Gap排序）
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                显示所有9大能力模块的排名情况
-              </p>
-            </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">排名</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">模块名称</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">总Gap</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">平均Gap</th>
-                  <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">评估人数</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {moduleRanking.map((module) => (
-                  <tr key={module.moduleId} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm">
-                      <span className="text-2xl">{getRankIcon(module.rank)}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">{module.icon}</span>
-                        <span className="text-sm font-medium text-gray-900">{module.moduleName}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-red-600">
-                      {formatNumber(module.totalGap)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-700">
-                      {formatNumber(module.avgGap)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-700">
-                      {module.employeeCount}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </div>
+        <TeamGapAnalysis
+          year={year}
+          assessments={assessments}
+          skills={skills}
+          employees={employees ?? []}
+          moduleStats={moduleStats}
+          skillStats={skillStats}
+          summary={summary}
+        />
       ) : (
         <TotalScoreView radarData={radarData} moduleRanking={moduleRanking} />
       )}
@@ -685,13 +494,13 @@ function PersonalView({
   setSubViewMode: (mode: SubViewMode) => void;
   chartType: ChartType;
   setChartType: (type: ChartType) => void;
-  employees: any[];
+  employees: EmployeeOption[];
   selectedEmployee: string | null;
   setSelectedEmployee: (id: string | null) => void;
-  radarData: any[];
-  barData: any[];
+  radarData: RadarDatum[];
+  barData: GapBarDatum[];
   moduleStats: PersonalModuleStats[];
-  skillStats: any[];
+  skillStats: PersonalSkillStats[];
 }) {
   const selectedEmployeeInfo = employees.find(e => e.id === selectedEmployee);
   const moduleSummary = [...moduleStats].sort(
@@ -959,7 +768,7 @@ function TotalScoreView({
   radarData,
   moduleRanking,
 }: {
-  radarData: any[];
+  radarData: RadarDatum[];
   moduleRanking: (ModuleStats & { rank: number })[];
 }) {
   // 准备柱状图数据：每个模块的目标总分 vs 实际总分

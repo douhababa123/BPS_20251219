@@ -32,7 +32,7 @@ describe('useCompetencyGapTrend', () => {
         moduleId: 7,
         skillId,
       }),
-      { wrapper, initialProps: { skillId: undefined } },
+      { wrapper, initialProps: { skillId: undefined as number | undefined } },
     );
 
     await waitFor(() => expect(getCompetencyGapTrend).toHaveBeenCalledTimes(1));
