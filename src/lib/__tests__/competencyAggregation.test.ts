@@ -5,9 +5,9 @@ import {
   calculateTeamSkillStats,
   calculatePersonalModuleStats,
   calculatePersonalSkillStats,
-  calculateEmployeeModuleGapMatrix,
+  calculateEmployeeGapDistribution,
+  calculateEmployeeModuleGapSummary,
   formatNumber,
-  getRankIcon,
 } from '../competencyAggregation';
 import type { AssessmentFull, Skill } from '../database.types';
 
@@ -182,6 +182,17 @@ describe('calculateTeamModuleStats', () => {
     // totalCurrent = 2+3+4 = 9, count = 3
     expect(mod1.avgCurrent).toBeCloseTo(3.0, 5);
   });
+
+  it('includes assessed zero in module averages and total GAP', () => {
+    const rows: AssessmentFull[] = [
+      { ...mockAssessments[0], employee_id: 'emp-1', current_level: 0, target_level: 2, gap: 2 },
+      { ...mockAssessments[2], employee_id: 'emp-2', current_level: 4, target_level: 4, gap: 0 },
+    ];
+    const module = calculateTeamModuleStats(rows, mockSkills)[0];
+    expect(module.avgCurrent).toBe(2);
+    expect(module.avgTarget).toBe(3);
+    expect(module.totalGap).toBe(2);
+  });
 });
 
 // ──────────────────────────────────────────────────────────
@@ -210,9 +221,13 @@ describe('calculateTeamSkillStats', () => {
     expect(s1.avgCurrent).toBeCloseTo(3.0, 5); // (2+4)/2
   });
 
-  it('空 assessments 返回空数组', () => {
+  it('keeps active skills without selected-year assessments at zero', () => {
     const result = calculateTeamSkillStats([], mockSkills);
-    expect(result).toHaveLength(0);
+    expect(result.map((skill) => [skill.skillId, skill.totalGap])).toEqual([
+      [1, 0],
+      [2, 0],
+      [3, 0],
+    ]);
   });
 });
 
@@ -237,7 +252,7 @@ describe('calculatePersonalModuleStats', () => {
     expect(mod1.skillCount).toBe(2);
   });
 
-  it('directly totals completed GAP records when a module has an incomplete assessment', () => {
+  it('treats current level zero as assessed data in personal totals', () => {
     const assessments: AssessmentFull[] = [
       ...mockAssessments,
       {
@@ -255,8 +270,8 @@ describe('calculatePersonalModuleStats', () => {
     const result = calculatePersonalModuleStats('emp-1', assessments, mockSkills);
     const mod1 = result.find((module) => module.moduleId === 1)!;
 
-    expect(mod1.totalGap).toBe(3);
-    expect(mod1.gap).toBe(1.5);
+    expect(mod1.totalGap).toBe(7);
+    expect(mod1.gap).toBeCloseTo(7 / 3, 5);
     expect(mod1.skillCount).toBe(3);
   });
 
@@ -278,9 +293,9 @@ describe('calculatePersonalModuleStats', () => {
   });
 });
 
-describe('calculateEmployeeModuleGapMatrix', () => {
+describe('calculateEmployeeModuleGapSummary', () => {
   it('aggregates every employee by module and produces matching totals', () => {
-    const matrix = calculateEmployeeModuleGapMatrix(mockAssessments, mockSkills);
+    const matrix = calculateEmployeeModuleGapSummary(mockAssessments, mockSkills);
 
     expect(matrix.modules).toHaveLength(9);
     expect(matrix.rows).toHaveLength(2);
@@ -297,43 +312,92 @@ describe('calculateEmployeeModuleGapMatrix', () => {
     expect(matrix.grandTotal).toBe(5);
   });
 
-  it('sorts total GAP descending and breaks ties by employee name', () => {
+  it('sorts by employee name and has no rank', () => {
     const tiedAssessments = mockAssessments.map((assessment) =>
       assessment.employee_id === 'emp-1'
         ? { ...assessment, employee_name: 'Zoe', gap: assessment.id === 'a1' ? 2 : 0 }
         : { ...assessment, employee_name: 'Amy' }
     );
-    const matrix = calculateEmployeeModuleGapMatrix(tiedAssessments, mockSkills);
+    const matrix = calculateEmployeeModuleGapSummary(tiedAssessments, mockSkills);
 
     expect(matrix.rows.map((row) => row.employeeName)).toEqual(['Amy', 'Zoe']);
-    expect(matrix.rows.map((row) => row.rank)).toEqual([1, 2]);
+    expect(matrix.rows[0]).not.toHaveProperty('rank');
   });
 
-  it('distinguishes missing data from zero and preserves negative GAP values', () => {
+  it('distinguishes missing data from assessed zero', () => {
     const assessments: AssessmentFull[] = [
       { ...mockAssessments[0], current_level: 4, target_level: 4, gap: 0 },
-      { ...mockAssessments[1], current_level: 5, target_level: 4, gap: -1 },
       { ...mockAssessments[3], current_level: 0, target_level: 3, gap: 3 },
     ];
-    const matrix = calculateEmployeeModuleGapMatrix(assessments, mockSkills);
+    const matrix = calculateEmployeeModuleGapSummary(assessments, mockSkills);
     const emp1 = matrix.rows.find((row) => row.employeeId === 'emp-1')!;
     const emp2 = matrix.rows.find((row) => row.employeeId === 'emp-2')!;
 
-    expect(emp1.modules[1]).toEqual({ totalGap: -1, hasData: true });
+    expect(emp1.modules[1]).toEqual({ totalGap: 0, hasData: true });
     expect(emp1.modules[2]).toEqual({ totalGap: 0, hasData: false });
-    expect(emp2.modules[2]).toEqual({ totalGap: 0, hasData: false });
-    expect(matrix.moduleTotals[1]).toBe(-1);
-    expect(matrix.moduleTotals[2]).toBe(0);
-    expect(matrix.grandTotal).toBe(-1);
+    expect(emp2.modules[2]).toEqual({ totalGap: 3, hasData: true });
+    expect(matrix.moduleTotals[1]).toBe(0);
+    expect(matrix.moduleTotals[2]).toBe(3);
+    expect(matrix.grandTotal).toBe(3);
   });
 
   it('returns fixed module totals and no rows for an empty assessment set', () => {
-    const matrix = calculateEmployeeModuleGapMatrix([], mockSkills);
+    const matrix = calculateEmployeeModuleGapSummary([], mockSkills);
 
     expect(matrix.rows).toEqual([]);
     expect(matrix.modules).toHaveLength(9);
     expect(Object.values(matrix.moduleTotals)).toEqual(Array(9).fill(0));
     expect(matrix.grandTotal).toBe(0);
+  });
+
+  it('includes active employees without selected-year data', () => {
+    const summary = calculateEmployeeModuleGapSummary(mockAssessments, mockSkills, [
+      { employeeId: 'emp-3', employeeName: 'No Data', departmentName: 'D' },
+      { employeeId: 'emp-1', employeeName: 'Zoe', departmentName: 'D' },
+      { employeeId: 'emp-2', employeeName: 'Amy', departmentName: 'D' },
+    ]);
+
+    expect(summary.rows.map((row) => row.employeeName)).toEqual(['Amy', 'No Data', 'Zoe']);
+    expect(summary.rows[1].totalGap).toBe(0);
+    expect(Object.values(summary.rows[1].modules).every((cell) => !cell.hasData)).toBe(true);
+  });
+});
+
+describe('calculateEmployeeGapDistribution', () => {
+  const employees = [
+    { employeeId: 'emp-1', employeeName: 'Zoe', departmentName: 'D' },
+    { employeeId: 'emp-2', employeeName: 'Amy', departmentName: 'D' },
+    { employeeId: 'emp-3', employeeName: 'No Data', departmentName: 'D' },
+  ];
+
+  it('shows every active employee for a selected module', () => {
+    const points = calculateEmployeeGapDistribution(
+      mockAssessments,
+      mockSkills,
+      employees,
+      { dimension: 'module', itemId: 1 },
+    );
+
+    expect(points.map((point) => [point.employeeName, point.totalGap, point.hasData])).toEqual([
+      ['Zoe', 3, true],
+      ['Amy', 0, true],
+      ['No Data', 0, false],
+    ]);
+  });
+
+  it('filters by selected skill and sorts ties by employee name', () => {
+    const points = calculateEmployeeGapDistribution(
+      mockAssessments,
+      mockSkills,
+      employees,
+      { dimension: 'skill', itemId: 2 },
+    );
+
+    expect(points.map((point) => [point.employeeName, point.totalGap, point.hasData])).toEqual([
+      ['Zoe', 1, true],
+      ['Amy', 0, false],
+      ['No Data', 0, false],
+    ]);
   });
 });
 
@@ -387,28 +451,5 @@ describe('formatNumber', () => {
 
   it('整数值保留小数位', () => {
     expect(formatNumber(3, 1)).toBe('3.0');
-  });
-});
-
-// ──────────────────────────────────────────────────────────
-// getRankIcon
-// ──────────────────────────────────────────────────────────
-
-describe('getRankIcon', () => {
-  it('第 1 名返回 🥇', () => {
-    expect(getRankIcon(1)).toBe('🥇');
-  });
-
-  it('第 2 名返回 🥈', () => {
-    expect(getRankIcon(2)).toBe('🥈');
-  });
-
-  it('第 3 名返回 🥉', () => {
-    expect(getRankIcon(3)).toBe('🥉');
-  });
-
-  it('其他名次返回数字字符串', () => {
-    expect(getRankIcon(4)).toBe('4');
-    expect(getRankIcon(10)).toBe('10');
   });
 });

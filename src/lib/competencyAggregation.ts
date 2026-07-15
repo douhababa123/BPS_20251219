@@ -32,7 +32,6 @@ export interface EmployeeModuleGapCell {
 }
 
 export interface EmployeeModuleGapRow {
-  rank: number;
   employeeId: string;
   employeeName: string;
   departmentName: string | null;
@@ -46,6 +45,22 @@ export interface EmployeeModuleGapMatrix {
   moduleTotals: Record<number, number>;
   grandTotal: number;
 }
+
+export interface ActiveEmployeeScope {
+  employeeId: string;
+  employeeName: string;
+  departmentName: string | null;
+}
+
+export interface EmployeeGapDistributionPoint extends ActiveEmployeeScope {
+  totalGap: number;
+  hasData: boolean;
+}
+
+export type GapDistributionSelection = {
+  dimension: 'module' | 'skill';
+  itemId: number;
+};
 
 // 模块统计
 export interface ModuleStats {
@@ -136,18 +151,12 @@ export function calculateTeamModuleStats(
       skills: new Set<number>(),
     };
 
-    if (assessment.current_level > 0) {
-      existing.totalCurrent += assessment.current_level;
-      existing.currentCount += 1;
-    }
-    if (assessment.target_level > 0) {
-      existing.totalTarget += assessment.target_level;
-      existing.targetCount += 1;
-    }
-    if (assessment.current_level > 0 && assessment.target_level > 0) {
-      existing.totalGap += assessment.gap;
-      existing.gapCount += 1;
-    }
+    existing.totalCurrent += assessment.current_level;
+    existing.currentCount += 1;
+    existing.totalTarget += assessment.target_level;
+    existing.targetCount += 1;
+    existing.totalGap += assessment.gap;
+    existing.gapCount += 1;
     existing.count += 1;
     existing.employees.add(assessment.employee_id);
     existing.skills.add(skill.id);
@@ -216,9 +225,8 @@ export function calculateTeamSkillStats(
     employees: Set<string>;
   }>();
 
-  // 聚合数据
-  assessments.forEach(assessment => {
-    const existing = skillMap.get(assessment.skill_id) || {
+  skills.filter((skill) => skill.is_active).forEach((skill) => {
+    skillMap.set(skill.id, {
       totalCurrent: 0,
       totalTarget: 0,
       totalGap: 0,
@@ -227,20 +235,20 @@ export function calculateTeamSkillStats(
       targetCount: 0,
       gapCount: 0,
       employees: new Set<string>(),
-    };
+    });
+  });
 
-    if (assessment.current_level > 0) {
-      existing.totalCurrent += assessment.current_level;
-      existing.currentCount += 1;
-    }
-    if (assessment.target_level > 0) {
-      existing.totalTarget += assessment.target_level;
-      existing.targetCount += 1;
-    }
-    if (assessment.current_level > 0 && assessment.target_level > 0) {
-      existing.totalGap += assessment.gap;
-      existing.gapCount += 1;
-    }
+  // 聚合数据
+  assessments.forEach(assessment => {
+    const existing = skillMap.get(assessment.skill_id);
+    if (!existing) return;
+
+    existing.totalCurrent += assessment.current_level;
+    existing.currentCount += 1;
+    existing.totalTarget += assessment.target_level;
+    existing.targetCount += 1;
+    existing.totalGap += assessment.gap;
+    existing.gapCount += 1;
     existing.count += 1;
     existing.employees.add(assessment.employee_id);
 
@@ -270,39 +278,46 @@ export function calculateTeamSkillStats(
   });
 
   // 按总Gap排序
-  return result.sort((a, b) => b.totalGap - a.totalGap);
+  return result.sort((a, b) => b.totalGap - a.totalGap || a.skillId - b.skillId);
 }
 
-/**
- * Build the employee-by-module GAP ranking matrix for an already filtered year.
- */
-export function calculateEmployeeModuleGapMatrix(
+/** Build an employee-by-module GAP summary for an already filtered year. */
+export function calculateEmployeeModuleGapSummary(
   assessments: AssessmentFull[],
-  skills: Skill[]
+  skills: Skill[],
+  employeeScope?: ActiveEmployeeScope[],
 ): EmployeeModuleGapMatrix {
   const modules = Object.values(MODULE_MAPPING).map((module) => ({ ...module }));
   const moduleTotals: Record<number, number> = Object.fromEntries(
     modules.map((module) => [module.id, 0])
   );
-  const skillModuleMap = new Map(skills.map((skill) => [skill.id, skill.module_id]));
-  const employees = new Map<string, Omit<EmployeeModuleGapRow, 'rank'>>();
+  const skillModuleMap = new Map(
+    skills.filter((skill) => skill.is_active).map((skill) => [skill.id, skill.module_id])
+  );
+  const employees = new Map<string, EmployeeModuleGapRow>();
+
+  const createEmployee = (employee: ActiveEmployeeScope): EmployeeModuleGapRow => ({
+    ...employee,
+    modules: Object.fromEntries(
+      modules.map((module) => [module.id, { totalGap: 0, hasData: false }])
+    ),
+    totalGap: 0,
+  });
+
+  employeeScope?.forEach((employee) => {
+    employees.set(employee.employeeId, createEmployee(employee));
+  });
 
   assessments.forEach((assessment) => {
     let employee = employees.get(assessment.employee_id);
     if (!employee) {
-      employee = {
+      employee = createEmployee({
         employeeId: assessment.employee_id,
         employeeName: assessment.employee_name,
         departmentName: assessment.department_name || null,
-        modules: Object.fromEntries(
-          modules.map((module) => [module.id, { totalGap: 0, hasData: false }])
-        ),
-        totalGap: 0,
-      };
+      });
       employees.set(assessment.employee_id, employee);
     }
-
-    if (assessment.current_level <= 0 || assessment.target_level <= 0) return;
 
     const moduleId = skillModuleMap.get(assessment.skill_id);
     if (!moduleId || !employee.modules[moduleId]) return;
@@ -315,8 +330,7 @@ export function calculateEmployeeModuleGapMatrix(
   });
 
   const rows = Array.from(employees.values())
-    .sort((a, b) => b.totalGap - a.totalGap || a.employeeName.localeCompare(b.employeeName))
-    .map((employee, index) => ({ ...employee, rank: index + 1 }));
+    .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
 
   return {
     modules,
@@ -325,6 +339,41 @@ export function calculateEmployeeModuleGapMatrix(
     grandTotal: rows.reduce((sum, row) => sum + row.totalGap, 0),
   };
 }
+
+/** Aggregate one selected module or skill across every active employee. */
+export function calculateEmployeeGapDistribution(
+  assessments: AssessmentFull[],
+  skills: Skill[],
+  employees: ActiveEmployeeScope[],
+  selection: GapDistributionSelection,
+): EmployeeGapDistributionPoint[] {
+  const skillModuleMap = new Map(
+    skills.filter((skill) => skill.is_active).map((skill) => [skill.id, skill.module_id])
+  );
+  const points = new Map<string, EmployeeGapDistributionPoint>(
+    employees.map((employee) => [employee.employeeId, { ...employee, totalGap: 0, hasData: false }])
+  );
+
+  assessments.forEach((assessment) => {
+    const point = points.get(assessment.employee_id);
+    if (!point) return;
+
+    const matches = selection.dimension === 'skill'
+      ? assessment.skill_id === selection.itemId && skillModuleMap.has(assessment.skill_id)
+      : skillModuleMap.get(assessment.skill_id) === selection.itemId;
+    if (!matches) return;
+
+    point.totalGap += assessment.gap;
+    point.hasData = true;
+  });
+
+  return Array.from(points.values()).sort(
+    (a, b) => b.totalGap - a.totalGap || a.employeeName.localeCompare(b.employeeName)
+  );
+}
+
+/** @deprecated Use calculateEmployeeModuleGapSummary. */
+export const calculateEmployeeModuleGapMatrix = calculateEmployeeModuleGapSummary;
 
 /**
  * 计算个人模块统计（9大模块维度）
@@ -363,18 +412,12 @@ export function calculatePersonalModuleStats(
       gapCount: 0,
     };
 
-    if (assessment.current_level > 0) {
-      existing.totalCurrent += assessment.current_level;
-      existing.currentCount += 1;
-    }
-    if (assessment.target_level > 0) {
-      existing.totalTarget += assessment.target_level;
-      existing.targetCount += 1;
-    }
-    if (assessment.current_level > 0 && assessment.target_level > 0) {
-      existing.totalGap += assessment.gap;
-      existing.gapCount += 1;
-    }
+    existing.totalCurrent += assessment.current_level;
+    existing.currentCount += 1;
+    existing.totalTarget += assessment.target_level;
+    existing.targetCount += 1;
+    existing.totalGap += assessment.gap;
+    existing.gapCount += 1;
     existing.count += 1;
 
     moduleMap.set(moduleId, existing);
