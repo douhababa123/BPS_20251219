@@ -63,3 +63,18 @@ def test_verifier_collects_named_read_only_invariants():
         "invalid_web_history": 0,
     }
     assert cursor.execute.call_count == 4
+
+
+def test_verifier_handles_pre_migration_database_without_history_table():
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [(0,), (0,), (1,)]
+
+    results = collect_checks(cursor)
+
+    assert results == {
+        "history_table": 0,
+        "current_duplicates": 0,
+        "invalid_current": 1,
+        "invalid_web_history": 0,
+    }
+    assert cursor.execute.call_count == 3

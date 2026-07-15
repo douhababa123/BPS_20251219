@@ -43,7 +43,7 @@ def db_cursor(db_connection):
 @pytest.fixture(scope="session")
 def api_base_url():
     """API基础URL"""
-    return "http://localhost:8000/api"
+    return os.getenv("BPS_TEST_API_BASE_URL", "http://localhost:8000/api")
 
 
 @pytest.fixture(scope="session")

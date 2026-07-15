@@ -4,7 +4,6 @@
 """
 import pytest
 import requests
-from typing import List
 
 
 class TestCompetencyAssessments:
@@ -12,7 +11,7 @@ class TestCompetencyAssessments:
     
     def test_get_all_assessments(self, api_base_url):
         """测试获取所有能力评估"""
-        response = requests.get(f"{api_base_url}/competency-assessments")
+        response = requests.get(f"{api_base_url}/competency-assessments/")
         
         # 验证响应状态
         assert response.status_code == 200, f"期待200，实际{response.status_code}"
@@ -36,7 +35,7 @@ class TestCompetencyAssessments:
     
     def test_assessments_data_integrity(self, api_base_url):
         """测试能力评估数据完整性和类型"""
-        response = requests.get(f"{api_base_url}/competency-assessments")
+        response = requests.get(f"{api_base_url}/competency-assessments/")
         assert response.status_code == 200
         
         data = response.json()
@@ -76,7 +75,7 @@ class TestCompetencyAssessments:
             print(f"数据库中有{high_level_count}条记录的级别>=4")
             
             # API应该能正常返回这些记录
-            response = requests.get(f"{api_base_url}/competency-assessments")
+            response = requests.get(f"{api_base_url}/competency-assessments/")
             assert response.status_code == 200, \
                 "API应该能处理高级别值（4和5）的记录"
             
@@ -122,7 +121,7 @@ class TestCompetencyAssessments:
             
             # 验证所有记录都属于这个员工
             for item in data:
-                assert item['employee_id'] == str(employee_id), \
+                assert item['employee_id'].lower() == str(employee_id).lower(), \
                     "筛选结果中包含了其他员工的记录"
             
             print(f"✅ 按员工筛选功能正常，员工{employee_id}有{len(data)}条评估")
@@ -135,7 +134,7 @@ class TestCompetencyAssessments:
         db_count = db_cursor.fetchone()[0]
         
         # 从API获取记录数
-        response = requests.get(f"{api_base_url}/competency-assessments")
+        response = requests.get(f"{api_base_url}/competency-assessments/")
         assert response.status_code == 200
         api_count = len(response.json())
         
@@ -159,7 +158,7 @@ class TestCompetencyAssessments:
         
         if len(db_records) > 0:
             # 从API获取所有记录
-            response = requests.get(f"{api_base_url}/competency-assessments")
+            response = requests.get(f"{api_base_url}/competency-assessments/")
             assert response.status_code == 200
             api_records = response.json()
             

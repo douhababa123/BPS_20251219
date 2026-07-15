@@ -39,6 +39,9 @@ CHECKS = {
 def collect_checks(cursor):
     results = {}
     for name, sql in CHECKS.items():
+        if name == "invalid_web_history" and results.get("history_table") == 0:
+            results[name] = 0
+            continue
         cursor.execute(sql)
         results[name] = int(cursor.fetchone()[0])
     return results
