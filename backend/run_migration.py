@@ -71,5 +71,11 @@ def run_migration(sql_file_path):
         sys.exit(1)
 
 if __name__ == "__main__":
-    migration_file = Path(__file__).parent / "migrations" / "001_add_role_to_users.sql"
+    if len(sys.argv) != 2:
+        print("Usage: python run_migration.py <migration.sql>")
+        sys.exit(2)
+
+    migration_file = Path(sys.argv[1])
+    if not migration_file.is_absolute():
+        migration_file = Path(__file__).parent / migration_file
     run_migration(migration_file)

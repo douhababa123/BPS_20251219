@@ -136,6 +136,11 @@ jobs:
           echo "🔨 构建新镜像..."
           docker compose build --pull=false
 
+          # 使用新后端镜像，在服务启动前安全收紧能力等级约束
+          echo "🔧 应用能力等级 0-4 数据库约束..."
+          docker compose run --rm --no-deps backend \
+            python run_migration.py migrations/006_competency_levels_0_4.sql
+
           # 启动新容器
           echo "🚀 启动新容器..."
           docker compose up -d

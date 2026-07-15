@@ -151,8 +151,8 @@ CREATE TABLE dbo.competency_assessments (
   created_at DATETIME2 DEFAULT GETDATE(),
   updated_at DATETIME2 DEFAULT GETDATE(),
   CONSTRAINT UQ_competency_assessments_employee_skill UNIQUE (employee_id, skill_id),
-  CONSTRAINT CK_competency_assessments_current_0_5 CHECK (current_level BETWEEN 0 AND 5),
-  CONSTRAINT CK_competency_assessments_target_0_5 CHECK (target_level BETWEEN 0 AND 5),
+  CONSTRAINT CK_competency_assessments_current_0_4 CHECK (current_level BETWEEN 0 AND 4),
+  CONSTRAINT CK_competency_assessments_target_0_4 CHECK (target_level BETWEEN 0 AND 4),
   CONSTRAINT CK_competency_assessments_target_gte_current CHECK (target_level >= current_level),
   CONSTRAINT fk_assessments_employee FOREIGN KEY (employee_id) REFERENCES dbo.employees(id) ON DELETE CASCADE,
   CONSTRAINT fk_assessments_skill FOREIGN KEY (skill_id) REFERENCES dbo.skills(id) ON DELETE CASCADE
@@ -180,8 +180,8 @@ CREATE TABLE dbo.competency_assessment_history (
   changed_at DATETIME2 NOT NULL DEFAULT GETDATE(),
   changed_by_user_id UNIQUEIDENTIFIER NULL,
   change_source NVARCHAR(32) NOT NULL,
-  CONSTRAINT CK_competency_history_current_0_5 CHECK (current_level BETWEEN 0 AND 5),
-  CONSTRAINT CK_competency_history_target_0_5 CHECK (target_level BETWEEN 0 AND 5),
+  CONSTRAINT CK_competency_history_current_0_4 CHECK (current_level BETWEEN 0 AND 4),
+  CONSTRAINT CK_competency_history_target_0_4 CHECK (target_level BETWEEN 0 AND 4),
   CONSTRAINT CK_competency_history_target_gte_current
     CHECK (change_source = 'MIGRATION_BASELINE' OR target_level >= current_level),
   CONSTRAINT CK_competency_history_quarter CHECK (assessment_quarter BETWEEN 1 AND 4),

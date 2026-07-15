@@ -101,11 +101,11 @@ if __name__ == "__main__":
     run_migration(migration_file)
 ```
 
-In the Jetson deploy job, immediately after `docker compose up -d`, add:
+In the Jetson deploy job, after `docker compose build --pull=false` and before `docker compose up -d`, add:
 
 ```yaml
           echo "🔧 应用能力等级 0-4 数据库约束..."
-          docker compose exec -T backend \
+          docker compose run --rm --no-deps backend \
             python run_migration.py migrations/006_competency_levels_0_4.sql
 ```
 
@@ -128,7 +128,10 @@ git commit -m "feat: enforce four-level competency constraints"
 
 **Files:**
 - Modify: `backend/models.py:350-396`
+- Modify: `backend/routers/competency_assessments.py:360-440`
+- Modify: `backend/routers/admin_competency_assessments.py:14-45,120-190`
 - Modify: `backend/tests/test_competency_assessment_history.py`
+- Create: `backend/tests/test_competency_level_validation.py`
 - Modify: `backend/tests/test_competency_assessments.py:35-105`
 - Modify: `src/components/AssessmentEditDialog.tsx:18-54,115-148`
 - Modify: `src/components/__tests__/AssessmentEditDialog.test.tsx`
@@ -150,6 +153,16 @@ from models import CompetencyAssessmentSave
 def test_competency_save_rejects_level_five():
     with pytest.raises(ValidationError):
         CompetencyAssessmentSave(current_level=4, target_level=5)
+
+
+def test_admin_payload_rejects_level_five():
+    with pytest.raises(ValidationError):
+        AdminCompetencyAssessmentCreate(
+            employee_id="00000000-0000-0000-0000-000000000001",
+            skill_id=1,
+            current_level=4,
+            target_level=5,
+        )
 ```
 
 Change the dialog expectation after current 3 to:
@@ -169,7 +182,7 @@ Expected: backend accepts 5 and frontend still renders option 5, so both new ass
 
 - [ ] **Step 3: Implement the minimal four-level bounds**
 
-Change every competency create/update/save `Field(..., ge=0, le=5)` or optional equivalent in `backend/models.py` to `le=4`.
+Change every competency create/update/save `Field(..., ge=0, le=5)` or optional equivalent in `backend/models.py` to `le=4`. Add target/current combination validation to the legacy create model. For legacy and admin partial updates, read the stored current/target pair, merge submitted values, and raise HTTP 422 before executing UPDATE when `next_target < next_current`. Apply `Field(ge=0, le=4)` plus a model validator to the independent admin create/update schemas so no registered write route accepts 5.
 
 In the dialog use:
 
@@ -193,7 +206,7 @@ Expected: all tests PASS.
 - [ ] **Step 5: Commit four-level input validation**
 
 ```powershell
-git add backend/models.py backend/tests/test_competency_assessment_history.py backend/tests/test_competency_assessments.py src/components/AssessmentEditDialog.tsx src/components/__tests__/AssessmentEditDialog.test.tsx
+git add backend/models.py backend/routers/competency_assessments.py backend/routers/admin_competency_assessments.py backend/tests/test_competency_assessment_history.py backend/tests/test_competency_level_validation.py backend/tests/test_competency_assessments.py src/components/AssessmentEditDialog.tsx src/components/__tests__/AssessmentEditDialog.test.tsx
 git commit -m "feat: restrict competency editing to levels zero through four"
 ```
 
@@ -238,6 +251,15 @@ it('shows every active employee in selected module distribution', () => {
     ['Zoe', 3, true],
     ['Amy', 0, true],
     ['No Data', 0, false],
+  ]);
+});
+
+it('keeps an active skill with no selected-year assessment at zero', () => {
+  const result = calculateTeamSkillStats([], mockSkills);
+  expect(result.map(skill => [skill.skillId, skill.totalGap])).toEqual([
+    [1, 0],
+    [2, 0],
+    [3, 0],
   ]);
 });
 
@@ -293,7 +315,7 @@ export function calculateEmployeeModuleGapSummary(
 ): EmployeeModuleGapMatrix;
 ```
 
-For persisted current assessments, increment current, target and GAP counts for every record, including 0. Remove `rank` from `EmployeeModuleGapRow`, sort summary rows by `employeeName.localeCompare`, and make distribution sort GAP descending then name ascending. Rename UI-facing matrix comments from ranking to summary; remove `getRankIcon` once no consumers remain.
+For persisted current assessments, increment current, target and GAP counts for every record, including 0. Seed skill statistics from every active `Skill` so skills without a selected-year assessment remain visible with zero totals. Remove `rank` from `EmployeeModuleGapRow`, sort summary rows by `employeeName.localeCompare`, and make distribution sort GAP descending then name ascending. Rename UI-facing matrix comments from ranking to summary; remove `getRankIcon` once no consumers remain.
 
 - [ ] **Step 4: Run the aggregation suite**
 
@@ -566,7 +588,7 @@ const [trendSkillId, setTrendSkillId] = useState<number | undefined>();
 
 Render only `totalGap` in Gap Distribution. Build per-person bars with `calculateEmployeeGapDistribution`; render every active employee, show `暂无评估` when `hasData` is false, and use GAP-desc/name-asc order from the aggregator. Trend filters must reset incompatible skills, call `useCompetencyGapTrend`, show a card-local retry on error, and label `hasData: false` as `暂无历史基线`. Render the summary table without a rank header or cell and keep its module/team total footer.
 
-In `Competency.tsx`, reduce `SubViewMode` to `'analysis' | 'total-score'`, remove ranking imports/state/branch, query `getAssessmentMatrix()` so active employees and all active skill columns are available, and pass the mapped active scope into this component.
+In `Competency.tsx`, reduce `SubViewMode` to `'analysis' | 'total-score'`, remove ranking imports/state/branch, query `getAssessmentMatrix()` so active employees and all active skill columns are available, and pass the mapped active scope into this component. Remove the `level > 0` filters from the page-level current and target KPI calculation so valid zero values use the same denominator as module averages.
 
 - [ ] **Step 4: Run component and aggregation tests**
 
