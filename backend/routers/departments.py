@@ -26,6 +26,7 @@ def get_departments(cursor=Depends(get_db)):
     cursor.execute("""
         SELECT id, name, code, description, created_at, updated_at
         FROM dbo.departments
+        WHERE ISNULL(is_active, 1) = 1
         ORDER BY id
     """)
     
