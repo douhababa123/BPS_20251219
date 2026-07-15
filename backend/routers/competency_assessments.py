@@ -369,28 +369,23 @@ def create_competency_assessment(
     cursor=Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    """创建能力评估"""
+    """Compatibility create route using the canonical history-preserving save."""
     try:
-        cursor.execute("""
-            INSERT INTO dbo.competency_assessments 
-            (employee_id, skill_id, current_level, target_level, 
-             assessment_date, assessor_notes)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            str(assessment.employee_id),
+        payload = CompetencyAssessmentSave(
+            current_level=assessment.current_level,
+            target_level=assessment.target_level,
+            notes=assessment.assessor_notes,
+        )
+        assessment_id = save_latest_assessment(
+            cursor,
+            assessment.employee_id,
             assessment.skill_id,
-            assessment.current_level,
-            assessment.target_level,
-            assessment.assessment_date,
-            assessment.assessor_notes
-        ))
-        
-        cursor.execute("SELECT CAST(@@IDENTITY AS VARCHAR(36))")
-        new_id = cursor.fetchone()[0]
-        cursor.commit()
-        
-        return get_competency_assessment(UUID(new_id), cursor)
-    
+            payload,
+            current_user,
+        )
+        return get_competency_assessment(UUID(assessment_id), cursor)
+    except HTTPException:
+        raise
     except Exception as e:
         cursor.rollback()
         logger.error(f"创建能力评估失败: {str(e)}")
@@ -424,36 +419,29 @@ def update_competency_assessment(
             detail="目标能力必须大于或等于能力现状",
         )
     
-    # 构建更新字段
-    update_fields = []
-    params = []
-    
-    if assessment.current_level is not None:
-        update_fields.append("current_level = ?")
-        params.append(assessment.current_level)
-    if assessment.target_level is not None:
-        update_fields.append("target_level = ?")
-        params.append(assessment.target_level)
-    if assessment.assessment_date is not None:
-        update_fields.append("assessment_date = ?")
-        params.append(assessment.assessment_date)
-    if assessment.assessor_notes is not None:
-        update_fields.append("assessor_notes = ?")
-        params.append(assessment.assessor_notes)
-    
-    if not update_fields:
+    if not assessment.model_fields_set:
         return existing
-    
-    update_fields.append("updated_at = GETDATE()")
-    params.append(str(assessment_id))
-    
+
     try:
-        sql = f"UPDATE dbo.competency_assessments SET {', '.join(update_fields)} WHERE id = ?"
-        cursor.execute(sql, params)
-        cursor.commit()
-        
-        return get_competency_assessment(assessment_id, cursor)
-    
+        payload = CompetencyAssessmentSave(
+            current_level=next_current,
+            target_level=next_target,
+            notes=(
+                assessment.assessor_notes
+                if assessment.assessor_notes is not None
+                else existing.assessor_notes
+            ),
+        )
+        saved_id = save_latest_assessment(
+            cursor,
+            existing.employee_id,
+            existing.skill_id,
+            payload,
+            current_user,
+        )
+        return get_competency_assessment(UUID(saved_id), cursor)
+    except HTTPException:
+        raise
     except Exception as e:
         cursor.rollback()
         logger.error(f"更新能力评估失败: {str(e)}")

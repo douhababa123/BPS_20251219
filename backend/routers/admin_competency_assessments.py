@@ -10,6 +10,8 @@ import pyodbc
 
 from database import db
 from auth import get_current_user, verify_admin
+from competency_assessment_history import save_latest_assessment
+from models import CompetencyAssessmentSave as CanonicalAssessmentSave
 
 router = APIRouter()
 
@@ -64,36 +66,24 @@ class CompetencyAssessmentResponse(BaseModel):
 
 @router.post("/competency-assessments", response_model=CompetencyAssessmentResponse, dependencies=[Depends(verify_admin)])
 def create_assessment(assessment: CompetencyAssessmentCreate, current_user: dict = Depends(get_current_user)):
-    """创建能力评估"""
+    """Create or replace current values and append one immutable history row."""
     try:
         with db.get_cursor() as cursor:
-            # 验证 employee_id 存在
-            cursor.execute("SELECT id FROM employees WHERE id = ?", (assessment.employee_id,))
-            if not cursor.fetchone():
-                raise HTTPException(status_code=400, detail="Invalid employee_id")
-            
-            # 验证 skill_id 存在
-            cursor.execute("SELECT id FROM skills WHERE id = ?", (assessment.skill_id,))
-            if not cursor.fetchone():
-                raise HTTPException(status_code=400, detail="Invalid skill_id")
-            
-            # 插入新评估
-            cursor.execute("""
-                INSERT INTO competency_assessments 
-                (employee_id, skill_id, current_level, target_level, 
-                 assessment_year, assessment_date, notes, created_at, updated_at)
-                OUTPUT INSERTED.*
-                VALUES (?, ?, ?, ?, ?, ?, ?, GETDATE(), GETDATE())
-            """, (
+            assessment_id = save_latest_assessment(
+                cursor,
                 assessment.employee_id,
                 assessment.skill_id,
-                assessment.current_level,
-                assessment.target_level,
-                assessment.assessment_year,
-                assessment.assessment_date,
-                assessment.notes
-            ))
-            
+                CanonicalAssessmentSave(
+                    current_level=assessment.current_level,
+                    target_level=assessment.target_level,
+                    notes=assessment.notes,
+                ),
+                current_user,
+            )
+            cursor.execute(
+                "SELECT * FROM competency_assessments WHERE id = ?",
+                (assessment_id,),
+            )
             row = cursor.fetchone()
             
             return {
@@ -199,7 +189,8 @@ def update_assessment(
         with db.get_cursor() as cursor:
             # 检查评估是否存在
             cursor.execute(
-                "SELECT id, current_level, target_level FROM competency_assessments WHERE id = ?",
+                """SELECT id, employee_id, skill_id, current_level, target_level, notes
+                   FROM competency_assessments WHERE id = ?""",
                 (assessment_id,),
             )
             existing = cursor.fetchone()
@@ -222,45 +213,21 @@ def update_assessment(
                     detail="目标能力必须大于或等于能力现状",
                 )
             
-            # 构建更新 SQL
-            update_fields = []
-            params = []
-            
-            if assessment.current_level is not None:
-                update_fields.append("current_level = ?")
-                params.append(assessment.current_level)
-            
-            if assessment.target_level is not None:
-                update_fields.append("target_level = ?")
-                params.append(assessment.target_level)
-            
-            if assessment.assessment_year is not None:
-                update_fields.append("assessment_year = ?")
-                params.append(assessment.assessment_year)
-            
-            if assessment.assessment_date is not None:
-                update_fields.append("assessment_date = ?")
-                params.append(assessment.assessment_date)
-            
-            if assessment.notes is not None:
-                update_fields.append("notes = ?")
-                params.append(assessment.notes)
-            
-            if not update_fields:
+            if not assessment.model_fields_set:
                 raise HTTPException(status_code=400, detail="No fields to update")
-            
-            update_fields.append("updated_at = GETDATE()")
-            params.append(assessment_id)
-            
-            # 更新评估
-            query = f"""
-                UPDATE competency_assessments 
-                SET {', '.join(update_fields)}
-                WHERE id = ?
-            """
-            cursor.execute(query, params)
-            
-            # 返回更新后的评估
+
+            save_latest_assessment(
+                cursor,
+                existing.employee_id,
+                existing.skill_id,
+                CanonicalAssessmentSave(
+                    current_level=next_current,
+                    target_level=next_target,
+                    notes=(assessment.notes if assessment.notes is not None else existing.notes),
+                ),
+                current_user,
+            )
+
             cursor.execute("SELECT * FROM competency_assessments WHERE id = ?", (assessment_id,))
             row = cursor.fetchone()
             
