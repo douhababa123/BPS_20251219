@@ -19,7 +19,9 @@ vi.mock('recharts', () => {
     PolarRadiusAxis: ({ domain }: { domain: unknown }) => <div data-testid="radar-domain">{JSON.stringify(domain)}</div>,
     YAxis: ({ domain }: { domain: unknown }) => <div data-testid="bar-domain">{JSON.stringify(domain)}</div>,
     Radar: ({ dataKey, label }: { dataKey: string; label?: (props: object) => React.ReactElement }) => {
-      const rendered = label?.({ x: 10, y: 10, cx: 0, cy: 0, value: 2 });
+      // Recharts' Radar label list exposes Cartesian x/y coordinates, but no
+      // radar centre (cx/cy). Keep this mock aligned with the real contract.
+      const rendered = label?.({ x: 10, y: 10, value: 2 });
       return <div data-testid={`radar-${dataKey}`}>{rendered?.props.children}</div>;
     },
     Bar: ({ dataKey, children }: { dataKey: string; children?: React.ReactNode }) => <div data-testid={`bar-${dataKey}`}>{children}</div>,

@@ -26,27 +26,22 @@ interface TotalScoreViewProps {
 interface RadarValueLabelProps {
   x?: number;
   y?: number;
-  cx?: number;
-  cy?: number;
   value?: number | string;
 }
 
-function radarValueLabel(color: string, offset: number) {
-  return ({ x, y, cx, cy, value }: RadarValueLabelProps) => {
-    if (x === undefined || y === undefined || cx === undefined || cy === undefined || value === undefined) return null;
-    const dx = x - cx;
-    const dy = y - cy;
-    const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+function radarValueLabel(color: string, yOffset: number) {
+  return ({ x, y, value }: RadarValueLabelProps) => {
+    if (x === undefined || y === undefined || value === undefined) return null;
     return (
-      <text x={x + dx / distance * offset} y={y + dy / distance * offset} fill={color} fontSize={11} fontWeight={700} textAnchor="middle">
+      <text x={x} y={y + yOffset} fill={color} fontSize={11} fontWeight={700} textAnchor="middle">
         {Number(value).toFixed(1)}
       </text>
     );
   };
 }
 
-const currentRadarLabel = radarValueLabel('#2563EB', 10);
-const targetRadarLabel = radarValueLabel('#F97316', 24);
+const currentRadarLabel = radarValueLabel('#2563EB', -7);
+const targetRadarLabel = radarValueLabel('#F97316', 14);
 const oneDecimal = (value: unknown) => Number(value).toFixed(1);
 
 export function TotalScoreView({ moduleStats }: TotalScoreViewProps) {
