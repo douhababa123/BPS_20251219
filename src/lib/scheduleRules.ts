@@ -119,18 +119,12 @@ export function sortCalendarTasks<T extends { id: string; start_date?: string; t
   });
 }
 
-export type CalendarTaskColumn = 'am' | 'pm' | 'full';
+export type CalendarTaskSection = 'connected' | 'full' | 'am' | 'pm';
 
 export interface CalendarTaskLayout<T> {
   task: T;
   row: number;
-  column: CalendarTaskColumn;
-}
-
-interface CalendarTaskLane<T> {
-  am?: T;
-  pm?: T;
-  full?: T;
+  section: CalendarTaskSection;
 }
 
 export function buildCalendarTaskLayout<T extends ScheduleTaskForContinuity>(
@@ -138,33 +132,32 @@ export function buildCalendarTaskLayout<T extends ScheduleTaskForContinuity>(
   date: string,
   segments: Map<string, ContinuousTaskSegmentMeta>
 ): CalendarTaskLayout<T>[] {
-  const lanes: CalendarTaskLane<T>[] = [];
-  const visibleTasks = sortCalendarTasks(tasks, date, segments)
-    .filter((task) => !segments.get(`${task.id}|${date}`)?.hidden);
-  const layout: CalendarTaskLayout<T>[] = [];
+  const sectionRank: Record<CalendarTaskSection, number> = {
+    connected: 0,
+    full: 1,
+    am: 2,
+    pm: 3,
+  };
 
-  visibleTasks.forEach((task) => {
-    const timeSlot = task.time_slot || 'FULL_DAY';
-    if (timeSlot === 'FULL_DAY') {
-      const row = lanes.length;
-      lanes.push({ full: task });
-      layout.push({ task, row, column: 'full' });
-      return;
-    }
-
-    const column = timeSlot === 'AM' ? 'am' : 'pm';
-    let row = lanes.findIndex((lane) => !lane.full && !lane[column]);
-    if (row === -1) {
-      row = lanes.length;
-      lanes.push({});
-    }
-    lanes[row][column] = task;
-    layout.push({ task, row, column });
-  });
-
-  return layout.sort((left, right) =>
-    left.row - right.row || left.column.localeCompare(right.column)
-  );
+  return sortCalendarTasks(tasks, date, segments)
+    .filter((task) => !segments.get(`${task.id}|${date}`)?.hidden)
+    .map((task) => {
+      const segment = segments.get(`${task.id}|${date}`);
+      const timeSlot = task.time_slot || 'FULL_DAY';
+      const section: CalendarTaskSection = segment && segment.position !== 'single'
+        ? 'connected'
+        : timeSlot === 'FULL_DAY'
+          ? 'full'
+          : timeSlot === 'AM'
+            ? 'am'
+            : 'pm';
+      return { task, section };
+    })
+    .sort((left, right) =>
+      sectionRank[left.section] - sectionRank[right.section]
+      || left.task.id.localeCompare(right.task.id)
+    )
+    .map((item, row) => ({ ...item, row }));
 }
 
 interface ExpandedSlot {

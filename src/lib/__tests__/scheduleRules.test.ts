@@ -139,29 +139,45 @@ const task = (overrides: Partial<ScheduleTaskForContinuity>): ScheduleTaskForCon
 });
 
 describe('continuous task segment rules', () => {
-  it('pairs AM and PM in one lane and gives FULL_DAY an exclusive full-width lane', () => {
+  it('orders full-day, AM, then PM as full-width vertical rows', () => {
     const am = task({ id: '1-am', time_slot: 'AM' });
     const pm = task({ id: '2-pm', time_slot: 'PM' });
     const full = task({ id: '3-full', task_name: 'Full', time_slot: 'FULL_DAY' });
     const segments = buildContinuousTaskSegments([am, pm, full]);
 
     expect(buildCalendarTaskLayout([am, pm, full], '2026-07-01', segments)).toEqual([
-      { task: am, row: 0, column: 'am' },
-      { task: pm, row: 0, column: 'pm' },
-      { task: full, row: 1, column: 'full' },
+      { task: full, row: 0, section: 'full' },
+      { task: am, row: 1, section: 'am' },
+      { task: pm, row: 2, section: 'pm' },
     ]);
   });
 
-  it('stacks tasks in the same half on separate lanes', () => {
+  it('stacks tasks in the same time slot on separate vertical rows', () => {
     const first = task({ id: 'am-1', task_name: 'A', time_slot: 'AM' });
     const second = task({ id: 'am-2', task_name: 'B', time_slot: 'AM' });
     const segments = buildContinuousTaskSegments([first, second]);
 
     expect(buildCalendarTaskLayout([first, second], '2026-07-01', segments)
-      .map(({ row, column }) => ({ row, column }))).toEqual([
-      { row: 0, column: 'am' },
-      { row: 1, column: 'am' },
+      .map(({ row, section }) => ({ row, section }))).toEqual([
+      { row: 0, section: 'am' },
+      { row: 1, section: 'am' },
     ]);
+  });
+
+  it('places connected fragments before ordinary full-day tasks', () => {
+    const connected = task({ id: 'connected', time_slot: 'FULL_DAY' });
+    const full = task({ id: 'full', time_slot: 'FULL_DAY' });
+    const segments = new Map([
+      ['connected|2026-07-01', {
+        position: 'start',
+        continuousHours: 32,
+        showLabel: true,
+        groupId: 'group-a',
+      }],
+    ] satisfies Array<[string, ContinuousTaskSegmentMeta]>);
+
+    expect(buildCalendarTaskLayout([full, connected], '2026-07-01', segments)
+      .map(({ task: layoutTask }) => layoutTask.id)).toEqual(['connected', 'full']);
   });
 
   it('excludes fragments marked hidden by the continuous segment map', () => {
