@@ -1,32 +1,36 @@
 ## Context
 
-The team calendar renders each engineer/date intersection as one table cell and currently stacks task cards vertically. Existing rules already identify AM, PM, FULL_DAY, and connected segments over 8h. A previous fix also keeps connected fragments on a stable lane and at a fixed 26px height.
+The team calendar uses a table cell for every engineer/date intersection. Half-width AM/PM cards made task labels unreadable. The approved design returns each card to the complete date-cell width and communicates time through vertical order.
 
 ## Goals / Non-Goals
 
-- Goals: make AM/PM visually distinguishable by horizontal position; allow AM and PM to share a lane; retain connected-band behavior; keep the half-cell structure invisible.
-- Non-goals: change time-slot values, use 3.5/4.5 proportional widths, add hour ticks, change persisted records, or alter workload calculations.
+- Goals: 100px minimum date columns; complete wrapped labels; connected/FULL_DAY -> AM -> PM order; seamless connected fragments whose height follows the first fragment.
+- Non-goals: change time-slot values, persisted tasks, continuity identity, workload calculations, APIs, or database structures.
 
 ## Decisions
 
-### Invisible two-column layout
+### Single-column vertical flow
 
-Each date cell uses a CSS grid with two equal columns and no column gap or visible decoration. AM occupies column 1, PM occupies column 2, and FULL_DAY spans columns 1–2.
+Each date cell uses one full-width column. Connected and ordinary FULL_DAY cards render first, AM cards next, and PM cards last. Same-slot tasks stack in stable task order. No visible sub-grid is introduced.
 
-### Greedy stable lane packing
+### Complete labels and natural height
 
-Tasks first use the existing stable calendar ordering. A full-day task always creates an exclusive row. An AM task uses the earliest row without a full-day or AM task, and a PM task uses the earliest row without a full-day or PM task. This lets AM and PM share a row while stacking multiple tasks in the same half.
+Visible task names use normal wrapping and long-word breaking without truncation or line clamps. Status, slot, and hours move to a smaller second line. Card and engineer-row heights grow naturally.
 
-### Connected bands
+### Connected first-fragment measurement
 
-Existing connected-segment metadata remains authoritative. Stable ordering places the same connected group on the same earliest lane across dates. PM-to-next-AM and FULL_DAY-to-next-AM fragments meet at the date boundary through the existing connected-edge styles. Labels remain visible only on the leftmost fragment.
+The first connected fragment wraps its complete name inside only the first date cell. It reports its rendered content height under `groupId`. `Schedule` shares the latest height with every date cell so middle/end fragments render empty at exactly the same height. Layout-stage measurement and `ResizeObserver` updates cover initial rendering and later width/font changes.
+
+### Connected edges
+
+The first fragment keeps only left rounding, middle fragments keep no side rounding, and the end keeps only right rounding. Existing edge overlap removes date-cell padding gaps. Every fragment remains independently clickable and points to the same task behavior.
 
 ## Risks / Trade-offs
 
-- Half-width cards have less text space. Existing truncation and complete hover text mitigate this.
-- Independent day-cell layout can drift if ordering is unstable. The renderer must consume the existing stable sort before packing lanes.
-- Visible gaps would undermine the time-band metaphor. The two grid columns must have no gap or divider; only task-card position communicates AM/PM.
+- Complete names increase row height. This is intentional and bounded horizontally by 100px minimum date columns.
+- Height measurement can cause a brief mismatch. Layout-stage measurement updates before paint; 26px is only a safe initial minimum.
+- More column width increases horizontal scrolling. The existing calendar scroll container remains authoritative.
 
 ## Migration Plan
 
-No data migration is required. Deploy the frontend change through the existing `DEV` GitHub Actions workflow. Rollback is a normal revert of the frontend commit.
+No data migration is required. Deploy the frontend through the existing `DEV` GitHub Actions workflow. Rollback is a normal frontend revert.

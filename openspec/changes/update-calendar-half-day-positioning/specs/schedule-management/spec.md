@@ -1,47 +1,37 @@
 ## ADDED Requirements
 
-### Requirement: Horizontal half-day task positioning
+### Requirement: Vertical half-day task positioning and complete labels
 
-The system SHALL communicate half-day timing through task-card position inside each calendar date cell without rendering a visible sub-grid.
+The system SHALL render calendar tasks in full-width vertical time-slot order and SHALL display every visible task name in full.
 
-#### Scenario: Morning task
-- **WHEN** a date contains an AM task
-- **THEN** the task card occupies the left 50 percent of the date cell
-- **AND** no visible half-cell divider, background, or heading is added
+#### Scenario: Morning and afternoon tasks
+- **WHEN** a date contains AM and PM tasks
+- **THEN** every card occupies the complete usable width of the date cell
+- **AND** AM cards appear above PM cards
+- **AND** no visible AM/PM sub-grid is rendered
 
-#### Scenario: Afternoon task
-- **WHEN** a date contains a PM task
-- **THEN** the task card occupies the right 50 percent of the date cell
-- **AND** the unused left half remains visually empty
+#### Scenario: Complete ordinary task name
+- **WHEN** a task name exceeds the available width of its 100px-minimum date column
+- **THEN** the name wraps without truncation or line clamping
+- **AND** the task card and engineer row grow to contain the complete name
 
 #### Scenario: Full-day task
 - **WHEN** a date contains a FULL_DAY task
-- **THEN** the task card spans the complete usable width of the date cell
+- **THEN** the card occupies the complete usable width of the date cell
+- **AND** its complete visible name wraps when necessary
 
-#### Scenario: Morning and afternoon on the same date
-- **WHEN** one AM task and one PM task occur on the same date for the same engineer
-- **THEN** the two cards share one horizontal lane in the left and right halves respectively
-- **AND** each card remains independently clickable
+#### Scenario: Connected task label and height
+- **WHEN** a connected task crosses one or more date boundaries
+- **THEN** its first fragment wraps the complete task name within the first date cell
+- **AND** middle and end fragments omit repeated text
+- **AND** every fragment uses the measured height of the first fragment
+- **AND** adjacent fragments connect without a visible gap
 
-#### Scenario: Multiple tasks in one half-day
-- **WHEN** multiple tasks occupy the same AM or PM half-day
-- **THEN** the tasks stack vertically within that half
-- **AND** the half is not subdivided horizontally again
+#### Scenario: Multiple tasks in one slot
+- **WHEN** multiple tasks occupy the same AM, PM, or FULL_DAY slot
+- **THEN** the tasks stack vertically in stable order
 
-#### Scenario: Connected task compatibility
-- **WHEN** a connected task over 8h crosses a date boundary
-- **THEN** each fragment uses the horizontal position implied by its time slot
-- **AND** all fragments remain the same height and on a stable lane
-- **AND** the task name and total continuous hours appear only on the leftmost fragment
-
-#### Scenario: Truncated half-width label
-- **WHEN** a half-width card cannot display its complete label
-- **THEN** the visible label is truncated
-- **AND** hover information exposes the complete task details
-
-#### Scenario: Half-day task label priority
-- **WHEN** a standalone AM or PM task is rendered in a half-width card
-- **THEN** the visible card content prioritizes the task name across the available width
-- **AND** task type initials, status icons, time-slot icons, and hours are omitted from the visible card
-- **AND** hover information still exposes the complete task details
-- **AND** FULL_DAY and cross-date connected tasks retain their detailed visible content
+#### Scenario: Complete interactions
+- **WHEN** any ordinary or connected task fragment is clicked or hovered
+- **THEN** clicking opens the same task detail behavior as before
+- **AND** hover information exposes complete task details

@@ -1,29 +1,29 @@
-## 1. Layout rules
+## 1. Approved design and specification
 
-- [x] 1.1 Add failing tests for AM/PM/full-day columns, same-half stacking, AM/PM lane pairing, hidden fragments, and stable connected-task lanes.
-- [x] 1.2 Implement the pure calendar-day lane builder and make its focused tests pass.
+- [x] 1.1 Confirm 100px columns, vertical AM/PM order, complete wrapping, and connected first-fragment height synchronization.
+- [x] 1.2 Update the design document and implementation plan.
+- [x] 1.3 Validate the updated OpenSpec change in strict mode.
 
-## 2. Calendar rendering
+## 2. Vertical layout rules
 
-- [x] 2.1 Add a tested reusable date-cell task renderer with an invisible two-column grid.
-- [x] 2.2 Replace assigned and unassigned date-cell task loops with the shared renderer.
-- [x] 2.3 Preserve fixed card height, connected edges, leftmost-only labels, click behavior, truncation, and complete hover information.
+- [ ] 2.1 Add failing tests for connected/FULL_DAY, AM, and PM vertical ordering.
+- [ ] 2.2 Replace half-column packing with stable full-width vertical rows.
 
-## 3. Verification
+## 3. Complete task cards and connected height
 
-- [x] 3.1 Run focused and full frontend tests, TypeScript checking, focused lint, and production build.
-- [x] 3.2 Validate this OpenSpec change in strict mode.
-- [x] 3.3 Verify AM-left, PM-right, FULL_DAY-full-width, same-day pairing, invisible partition, and connected bands in Firefox.
+- [ ] 3.1 Add failing component tests for complete wrapping, secondary metadata, height reporting, and shared height application.
+- [ ] 3.2 Implement natural-height task cards and first-fragment measurement.
 
-## 4. Deployment
+## 4. Calendar integration
 
-- [x] 4.1 Merge to `DEV`, push, and confirm code-quality and Jetson deployment jobs succeed.
-- [x] 4.2 Refresh the Jetson page in Firefox and confirm the deployed layout.
+- [ ] 4.1 Add failing renderer tests for single-column full-width cards and shared connected height.
+- [ ] 4.2 Convert assigned and unassigned date cells to vertical rendering.
+- [ ] 4.3 Set header and body date cells to a 100px minimum width.
 
-## 5. Half-day label visibility follow-up
+## 5. Verification and deployment
 
-- [x] 5.1 Add failing component tests proving standalone AM/PM cards prioritize task names and retain complete hover information.
-- [x] 5.2 Hide fixed-width auxiliary content from standalone AM/PM cards while preserving FULL_DAY and connected-task detail.
-- [x] 5.3 Run focused and full frontend tests, TypeScript checking, focused lint, production build, and strict OpenSpec validation.
-- [x] 5.4 Verify task-name visibility and unchanged connected bands in Firefox.
-- [ ] 5.5 Merge to `DEV`, push, and confirm GitHub Actions and the deployed Jetson page.
+- [ ] 5.1 Run focused/full tests, TypeScript, focused lint, build, whitespace, and strict OpenSpec validation.
+- [ ] 5.2 Verify complete names, vertical order, and connected equal-height seamless bands locally in Firefox.
+- [ ] 5.3 Merge to `DEV`, rerun merged verification, and push.
+- [ ] 5.4 Confirm GitHub Actions code-quality and Jetson deployment jobs succeed.
+- [ ] 5.5 Recheck the deployed Jetson calendar in Firefox.
