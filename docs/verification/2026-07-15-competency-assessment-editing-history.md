@@ -36,8 +36,13 @@
 - 应用异常：回滚本功能提交并重新部署；兼容的历史表可保留。
 - 迁移不变量异常：使用上述发布专用备份或最近 Veeam 完整恢复点恢复，禁止执行临时破坏性 SQL。
 
-## 待发布验证
+## Jetson 发布验证
 
-- GitHub Actions Jetson 工作流成功。
-- Jetson 页面管理员/工程师复验及健康检查。
-- 部署后当前记录与新增历史快照再次核对。
+- GitHub Actions：[运行 29389635058](https://github.com/douhababa123/BPS_20251219/actions/runs/29389635058)，代码质量检查和部署到 Jetson 均为 `success`。
+- Jetson 仓库提交：`daab44284cd5fbdb33a9d23c35c6496d3b227ea2`。
+- `http://10.70.80.183:3000/api/health`：`healthy`，数据库 `connected`；后端容器 healthy，前端容器 running。
+- 管理员使用 `admin@bosch.com` 密码登录成功；矩阵 684 个能力格可编辑，红色 106、绿色 324、黄色 0。
+- 普通工程师页面仅本人 38 个能力格可编辑，其他人员为 0。
+- 工程师携带有效令牌修改他人返回 HTTP 403“只能访问本人的能力评估”，目标历史 1→1。
+- 部署后本人保存 current 0 / target 1 成功：当前投影保持 1 条，历史由 1 增至 2，最新来源为 `WEB_EDIT`。
+- 截图：`competency-edit-jetson-admin.png`、`competency-edit-jetson-engineer.png`。

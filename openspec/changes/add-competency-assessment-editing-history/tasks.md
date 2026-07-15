@@ -26,5 +26,5 @@
 - [x] 4.1 Run backend focused tests, frontend unit tests, TypeScript, targeted ESLint and production build.
 - [x] 4.2 Verify Dashboard, competency analytics and matching continue to consume the latest projection without duplicate or missing zero values.
 - [x] 4.3 Run migration preflight against the deployment database after confirming a backup/restore point.
-- [ ] 4.4 Deploy through the existing GitHub Actions Jetson workflow and verify administrator and engineer flows in Firefox.
-- [ ] 4.5 Confirm one current row and one new history snapshot for a smoke-test save, then record rollback and release evidence.
+- [x] 4.4 Deploy through the existing GitHub Actions Jetson workflow and verify administrator and engineer flows in Firefox.
+- [x] 4.5 Confirm one current row and one new history snapshot for a smoke-test save, then record rollback and release evidence.
