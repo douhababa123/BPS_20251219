@@ -14,6 +14,7 @@
 
 IF OBJECT_ID('dbo.resource_planning_tasks', 'U') IS NOT NULL DROP TABLE dbo.resource_planning_tasks;
 IF OBJECT_ID('dbo.tasks', 'U') IS NOT NULL DROP TABLE dbo.tasks;
+IF OBJECT_ID('dbo.competency_assessment_history', 'U') IS NOT NULL DROP TABLE dbo.competency_assessment_history;
 IF OBJECT_ID('dbo.competency_assessments', 'U') IS NOT NULL DROP TABLE dbo.competency_assessments;
 IF OBJECT_ID('dbo.employees', 'U') IS NOT NULL DROP TABLE dbo.employees;
 IF OBJECT_ID('dbo.skills', 'U') IS NOT NULL DROP TABLE dbo.skills;
@@ -141,16 +142,18 @@ CREATE TABLE dbo.competency_assessments (
   id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
   employee_id UNIQUEIDENTIFIER NOT NULL,
   skill_id BIGINT NOT NULL,
-  current_level INT NOT NULL CHECK (current_level BETWEEN 1 AND 5),
-  target_level INT NOT NULL CHECK (target_level BETWEEN 1 AND 5),
+  current_level INT NOT NULL,
+  target_level INT NOT NULL,
   gap AS (target_level - current_level) PERSISTED,
   assessment_year INT DEFAULT YEAR(GETDATE()),
   assessment_date DATE DEFAULT CAST(GETDATE() AS DATE),
   notes NVARCHAR(MAX),
   created_at DATETIME2 DEFAULT GETDATE(),
   updated_at DATETIME2 DEFAULT GETDATE(),
-  CONSTRAINT uq_assessments_emp_skill_year UNIQUE (employee_id, skill_id, assessment_year),
-  CONSTRAINT chk_assessments_target_level CHECK (target_level >= current_level),
+  CONSTRAINT UQ_competency_assessments_employee_skill UNIQUE (employee_id, skill_id),
+  CONSTRAINT CK_competency_assessments_current_0_5 CHECK (current_level BETWEEN 0 AND 5),
+  CONSTRAINT CK_competency_assessments_target_0_5 CHECK (target_level BETWEEN 0 AND 5),
+  CONSTRAINT CK_competency_assessments_target_gte_current CHECK (target_level >= current_level),
   CONSTRAINT fk_assessments_employee FOREIGN KEY (employee_id) REFERENCES dbo.employees(id) ON DELETE CASCADE,
   CONSTRAINT fk_assessments_skill FOREIGN KEY (skill_id) REFERENCES dbo.skills(id) ON DELETE CASCADE
 );
@@ -159,6 +162,48 @@ CREATE INDEX idx_assessments_employee ON dbo.competency_assessments(employee_id)
 CREATE INDEX idx_assessments_skill ON dbo.competency_assessments(skill_id);
 CREATE INDEX idx_assessments_year ON dbo.competency_assessments(assessment_year);
 CREATE INDEX idx_assessments_gap ON dbo.competency_assessments(gap);
+GO
+
+CREATE TABLE dbo.competency_assessment_history (
+  id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
+  assessment_id UNIQUEIDENTIFIER NOT NULL,
+  source_assessment_id UNIQUEIDENTIFIER NULL,
+  employee_id UNIQUEIDENTIFIER NOT NULL,
+  skill_id BIGINT NOT NULL,
+  current_level INT NOT NULL,
+  target_level INT NOT NULL,
+  gap AS (target_level - current_level) PERSISTED,
+  assessment_date DATETIME2 NOT NULL,
+  assessment_year INT NOT NULL,
+  assessment_quarter TINYINT NOT NULL,
+  notes NVARCHAR(MAX) NULL,
+  changed_at DATETIME2 NOT NULL DEFAULT GETDATE(),
+  changed_by_user_id UNIQUEIDENTIFIER NULL,
+  change_source NVARCHAR(32) NOT NULL,
+  CONSTRAINT CK_competency_history_current_0_5 CHECK (current_level BETWEEN 0 AND 5),
+  CONSTRAINT CK_competency_history_target_0_5 CHECK (target_level BETWEEN 0 AND 5),
+  CONSTRAINT CK_competency_history_target_gte_current
+    CHECK (change_source = 'MIGRATION_BASELINE' OR target_level >= current_level),
+  CONSTRAINT CK_competency_history_quarter CHECK (assessment_quarter BETWEEN 1 AND 4),
+  CONSTRAINT CK_competency_history_source
+    CHECK (change_source IN ('MIGRATION_BASELINE', 'WEB_EDIT')),
+  CONSTRAINT FK_competency_history_assessment FOREIGN KEY (assessment_id)
+    REFERENCES dbo.competency_assessments(id),
+  CONSTRAINT FK_competency_history_employee FOREIGN KEY (employee_id)
+    REFERENCES dbo.employees(id),
+  CONSTRAINT FK_competency_history_skill FOREIGN KEY (skill_id)
+    REFERENCES dbo.skills(id),
+  CONSTRAINT FK_competency_history_user FOREIGN KEY (changed_by_user_id)
+    REFERENCES dbo.users(id)
+);
+
+CREATE UNIQUE INDEX UX_competency_history_source_assessment
+  ON dbo.competency_assessment_history(source_assessment_id)
+  WHERE source_assessment_id IS NOT NULL;
+CREATE INDEX IX_competency_history_employee_skill_changed
+  ON dbo.competency_assessment_history(employee_id, skill_id, changed_at DESC);
+CREATE INDEX IX_competency_history_year_quarter
+  ON dbo.competency_assessment_history(assessment_year, assessment_quarter, changed_at DESC);
 GO
 
 PRINT '✅ 能力评估表 (competency_assessments) 创建完成';
