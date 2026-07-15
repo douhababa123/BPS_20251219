@@ -3,7 +3,7 @@
 使用 Pydantic 定义所有表的 Request/Response schemas
 """
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
 from typing import Optional, List
 from datetime import datetime, date
 from uuid import UUID
@@ -377,6 +377,38 @@ class CompetencyAssessment(CompetencyAssessmentBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CompetencyAssessmentSave(BaseModel):
+    """Payload for an authorized matrix save."""
+
+    current_level: int = Field(..., ge=0, le=5)
+    target_level: int = Field(..., ge=0, le=5)
+    notes: Optional[str] = Field(None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_target(self):
+        if self.target_level < self.current_level:
+            raise ValueError("目标能力必须大于或等于能力现状")
+        return self
+
+
+class CompetencyAssessmentHistoryResponse(BaseModel):
+    id: UUID
+    assessment_id: UUID
+    employee_id: UUID
+    skill_id: int
+    current_level: int
+    target_level: int
+    gap: int
+    assessment_year: int
+    assessment_quarter: int
+    notes: Optional[str] = None
+    changed_at: datetime
+    changed_by_user_id: Optional[UUID] = None
+    change_source: str
+
     model_config = ConfigDict(from_attributes=True)
 
 

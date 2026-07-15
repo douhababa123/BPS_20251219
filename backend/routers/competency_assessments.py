@@ -14,10 +14,17 @@ from models import (
     CompetencyAssessment, 
     CompetencyAssessmentCreate, 
     CompetencyAssessmentUpdate, 
+    CompetencyAssessmentSave,
+    CompetencyAssessmentHistoryResponse,
     MessageResponse
 )
 from database import get_db
 from .auth import get_current_user
+from competency_assessment_history import (
+    build_matrix_payload,
+    resolve_employee_scope,
+    save_latest_assessment,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,7 +54,7 @@ def get_competency_assessments_full(
             COALESCE(s.display_order, 0) AS display_order,
             ca.current_level,
             ca.target_level,
-            COALESCE(ca.gap, ca.target_level - ca.current_level) AS gap,
+            ca.target_level - ca.current_level AS gap,
             COALESCE(ca.assessment_year, YEAR(ca.assessment_date)) AS assessment_year,
             ca.assessment_date,
             ca.notes,
@@ -101,7 +108,7 @@ def get_competency_assessments(cursor=Depends(get_db)):
     """获取所有能力评估列表"""
     cursor.execute("""
         SELECT id, employee_id, skill_id, current_level, target_level, 
-               gap, assessment_date, notes,
+               target_level - current_level AS gap, assessment_date, notes,
                created_at, updated_at
         FROM dbo.competency_assessments WITH (NOLOCK)
         ORDER BY assessment_date DESC
@@ -131,7 +138,7 @@ def get_employee_assessments(employee_id: UUID, cursor=Depends(get_db)):
     """获取指定员工的所有能力评估"""
     cursor.execute("""
         SELECT id, employee_id, skill_id, current_level, target_level, 
-               gap, assessment_date, notes,
+               target_level - current_level AS gap, assessment_date, notes,
                created_at, updated_at
         FROM dbo.competency_assessments WITH (NOLOCK)
         WHERE employee_id = ?
@@ -157,12 +164,180 @@ def get_employee_assessments(employee_id: UUID, cursor=Depends(get_db)):
     return assessments
 
 
+@router.get("/matrix")
+def get_assessment_matrix(
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return the complete editable matrix without polluting analytics reads."""
+
+    cursor.execute(
+        """
+        SELECT
+            e.id,
+            e.employee_id,
+            e.name,
+            d.name,
+            LOWER(LTRIM(RTRIM(e.email)))
+        FROM dbo.employees e
+        LEFT JOIN dbo.departments d ON d.id = e.department_id
+        WHERE ISNULL(e.is_active, 1) = 1
+        ORDER BY e.name
+        """
+    )
+    employees = cursor.fetchall()
+
+    cursor.execute(
+        """
+        SELECT
+            id,
+            module_id,
+            module_name,
+            skill_name,
+            COALESCE(display_order, 0)
+        FROM dbo.skills
+        WHERE ISNULL(is_active, 1) = 1
+        ORDER BY module_id, display_order, id
+        """
+    )
+    skills = cursor.fetchall()
+
+    cursor.execute(
+        """
+        SELECT
+            employee_id,
+            skill_id,
+            current_level,
+            target_level,
+            target_level - current_level AS gap
+        FROM dbo.competency_assessments
+        """
+    )
+    assessments = cursor.fetchall()
+    return build_matrix_payload(employees, skills, assessments, current_user)
+
+
+@router.put("/employee/{employee_id}/skill/{skill_id}")
+def save_assessment(
+    employee_id: UUID,
+    skill_id: int,
+    payload: CompetencyAssessmentSave,
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Atomically update latest values and append one history snapshot."""
+
+    assessment_id = save_latest_assessment(
+        cursor,
+        employee_id,
+        skill_id,
+        payload,
+        current_user,
+    )
+    return get_competency_assessment(UUID(assessment_id), cursor)
+
+
+@router.get(
+    "/history",
+    response_model=List[CompetencyAssessmentHistoryResponse],
+)
+def get_assessment_history(
+    employee_id: UUID,
+    skill_id: Optional[int] = None,
+    year: Optional[int] = None,
+    quarter: Optional[int] = Query(None, ge=1, le=4),
+    latest_per_quarter: bool = False,
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return full or quarterly-final history within the caller's scope."""
+
+    resolve_employee_scope(cursor, current_user, employee_id)
+    filters = ["employee_id = ?"]
+    params = [str(employee_id)]
+    if skill_id is not None:
+        filters.append("skill_id = ?")
+        params.append(skill_id)
+    if year is not None:
+        filters.append("assessment_year = ?")
+        params.append(year)
+    if quarter is not None:
+        filters.append("assessment_quarter = ?")
+        params.append(quarter)
+
+    where_sql = " AND ".join(filters)
+    columns = """
+        id,
+        assessment_id,
+        employee_id,
+        skill_id,
+        current_level,
+        target_level,
+        gap,
+        assessment_year,
+        assessment_quarter,
+        notes,
+        changed_at,
+        changed_by_user_id,
+        change_source
+    """
+    if latest_per_quarter:
+        sql = f"""
+            WITH ranked AS (
+                SELECT
+                    {columns},
+                    ROW_NUMBER() OVER (
+                        PARTITION BY
+                            employee_id,
+                            skill_id,
+                            assessment_year,
+                            assessment_quarter
+                        ORDER BY changed_at DESC, id DESC
+                    ) AS rn
+                FROM dbo.competency_assessment_history
+                WHERE {where_sql}
+            )
+            SELECT {columns}
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY changed_at DESC, id DESC
+        """
+    else:
+        sql = f"""
+            SELECT {columns}
+            FROM dbo.competency_assessment_history
+            WHERE {where_sql}
+            ORDER BY changed_at DESC, id DESC
+        """
+
+    cursor.execute(sql, params)
+    return [
+        {
+            "id": row[0],
+            "assessment_id": row[1],
+            "employee_id": row[2],
+            "skill_id": row[3],
+            "current_level": row[4],
+            "target_level": row[5],
+            "gap": row[6],
+            "assessment_year": row[7],
+            "assessment_quarter": row[8],
+            "notes": row[9],
+            "changed_at": row[10],
+            "changed_by_user_id": row[11],
+            "change_source": row[12],
+        }
+        for row in cursor.fetchall()
+    ]
+
+
 @router.get("/{assessment_id}", response_model=CompetencyAssessment)
 def get_competency_assessment(assessment_id: UUID, cursor=Depends(get_db)):
     """获取指定能力评估"""
     cursor.execute("""
         SELECT id, employee_id, skill_id, current_level, target_level, 
-               gap, assessment_year, assessment_date, notes,
+               target_level - current_level AS gap,
+               assessment_year, assessment_date, notes,
                created_at, updated_at
         FROM dbo.competency_assessments WITH (NOLOCK)
         WHERE id = ?
