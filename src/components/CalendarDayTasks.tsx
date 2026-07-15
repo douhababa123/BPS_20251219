@@ -11,19 +11,17 @@ interface CalendarDayTasksProps {
   tasks: CalendarDayTask[];
   date: string;
   segments: Map<string, ContinuousTaskSegmentMeta>;
+  continuousHeights: Record<string, number>;
+  onContinuousHeightChange: (groupId: string, height: number) => void;
   onTaskClick?: (task: CalendarDayTask) => void;
 }
-
-const gridColumnBySlot = {
-  am: '1 / 2',
-  pm: '2 / 3',
-  full: '1 / 3',
-} as const;
 
 export function CalendarDayTasks({
   tasks,
   date,
   segments,
+  continuousHeights,
+  onContinuousHeightChange,
   onTaskClick,
 }: CalendarDayTasksProps) {
   const layout = buildCalendarTaskLayout(tasks, date, segments);
@@ -31,26 +29,27 @@ export function CalendarDayTasks({
   return (
     <div
       data-testid="calendar-day-tasks"
-      className="grid grid-cols-2 auto-rows-[30px]"
+      className="flex flex-col"
     >
-      {layout.map(({ task, row, column }) => (
-        <div
-          key={task.id}
-          className="task-card-compact"
-          data-testid={`calendar-task-${task.id}`}
-          data-calendar-column={column}
-          style={{
-            gridRow: row + 1,
-            gridColumn: gridColumnBySlot[column],
-          }}
-        >
-          <TaskCardCompact
-            task={task}
-            onClick={() => onTaskClick?.(task)}
-            segmentMeta={segments.get(`${task.id}|${date}`)}
-          />
-        </div>
-      ))}
+      {layout.map(({ task, section }) => {
+        const segment = segments.get(`${task.id}|${date}`);
+        return (
+          <div
+            key={task.id}
+            className="task-card-compact w-full"
+            data-testid={`calendar-task-${task.id}`}
+            data-calendar-section={section}
+          >
+            <TaskCardCompact
+              task={task}
+              onClick={() => onTaskClick?.(task)}
+              segmentMeta={segment}
+              continuousHeight={segment ? continuousHeights[segment.groupId] : undefined}
+              onContinuousHeightChange={onContinuousHeightChange}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

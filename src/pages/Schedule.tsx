@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tasksService, employeesService, scheduleNotificationsService, taskTypesService, competencyDefinitionsService } from '../services';
 import { TASK_TYPES, getCompetenceConfig } from '../lib/taskTypeConfig';
@@ -816,6 +816,17 @@ function TeamView({
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const unassignedTasks = tasks.filter((task: any) => !task.assigned_employee_id);
   const continuousSegments = useMemo(() => buildContinuousTaskSegments(tasks), [tasks]);
+  const [continuousTaskHeights, setContinuousTaskHeights] = useState<Record<string, number>>({});
+
+  const handleContinuousHeightChange = useCallback((groupId: string, height: number) => {
+    setContinuousTaskHeights((current) => current[groupId] === height
+      ? current
+      : { ...current, [groupId]: height });
+  }, []);
+
+  useEffect(() => {
+    setContinuousTaskHeights({});
+  }, [selectedDate]);
 
   // 判断是否为周末
   const isWeekend = (day: any) => {
@@ -852,7 +863,7 @@ function TeamView({
                     <th 
                       key={day} 
                       className={cn(
-                        "p-2 text-center font-medium text-sm border-b-2 border-r border-gray-300 min-w-[80px]",
+                        "p-2 text-center font-medium text-sm border-b-2 border-r border-gray-300 min-w-[100px]",
                         weekend ? "bg-gray-100 text-gray-600" : "bg-gray-50 text-gray-700"
                       )}
                     >
@@ -889,7 +900,7 @@ function TeamView({
                         <td
                           key={`${emp.id}-${day}`}
                           className={cn(
-                            "p-1 min-h-[60px] text-xs border-b border-r border-gray-200 align-top relative",
+                            "p-1 min-w-[100px] min-h-[60px] text-xs border-b border-r border-gray-200 align-top relative",
                             weekend ? "bg-gray-50/50" : "bg-white"
                           )}
                           onDoubleClick={(e) => {
@@ -903,6 +914,8 @@ function TeamView({
                             tasks={dayTasks}
                             date={dateStr}
                             segments={continuousSegments}
+                            continuousHeights={continuousTaskHeights}
+                            onContinuousHeightChange={handleContinuousHeightChange}
                             onTaskClick={setSelectedTask}
                           />
                         </td>
@@ -928,7 +941,7 @@ function TeamView({
                       <td
                         key={`${UNASSIGNED_ROW_ID}-${day}`}
                         className={cn(
-                          "p-1 min-h-[60px] text-xs border-b border-r border-gray-200 align-top relative",
+                          "p-1 min-w-[100px] min-h-[60px] text-xs border-b border-r border-gray-200 align-top relative",
                           weekend ? "bg-amber-50/50" : "bg-amber-50/20"
                         )}
                         onDoubleClick={(e) => {
@@ -940,6 +953,8 @@ function TeamView({
                           tasks={dayTasks}
                           date={dateStr}
                           segments={continuousSegments}
+                          continuousHeights={continuousTaskHeights}
+                          onContinuousHeightChange={handleContinuousHeightChange}
                           onTaskClick={setSelectedTask}
                         />
                       </td>

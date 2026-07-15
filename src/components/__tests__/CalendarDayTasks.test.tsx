@@ -31,31 +31,47 @@ const tasks = [
 ];
 
 describe('CalendarDayTasks', () => {
-  it('positions AM and PM in invisible halves and lets full-day tasks span both halves', () => {
+  it('renders full-day, AM, and PM tasks in full-width vertical order', () => {
     render(
       <CalendarDayTasks
         tasks={tasks}
         date="2026-07-14"
         segments={buildContinuousTaskSegments(tasks)}
+        continuousHeights={{}}
+        onContinuousHeightChange={vi.fn()}
       />
     );
 
-    const grid = screen.getByTestId('calendar-day-tasks');
-    expect(grid).toHaveClass('grid', 'grid-cols-2');
-    expect(grid.className).not.toMatch(/border|divide|bg-/);
+    const root = screen.getByTestId('calendar-day-tasks');
+    expect(root).toHaveClass('flex', 'flex-col');
+    expect(root).not.toHaveClass('grid-cols-2');
+    expect(screen.getAllByTestId(/calendar-task-/).map((element) => element.dataset.calendarSection))
+      .toEqual(['full', 'am', 'pm']);
+    expect(screen.getAllByTestId(/calendar-task-/).every((element) => element.classList.contains('w-full')))
+      .toBe(true);
+  });
 
-    expect(screen.getByTestId('calendar-task-1-am')).toHaveStyle({
-      gridRow: '1',
-      gridColumn: '1 / 2',
-    });
-    expect(screen.getByTestId('calendar-task-2-pm')).toHaveStyle({
-      gridRow: '1',
-      gridColumn: '2 / 3',
-    });
-    expect(screen.getByTestId('calendar-task-3-full')).toHaveStyle({
-      gridRow: '2',
-      gridColumn: '1 / 3',
-    });
+  it('passes a connected group height to its fragment', () => {
+    const connectedTask = { ...tasks[2], id: 'connected', task_name: 'Connected task' };
+    const segments = new Map([
+      ['connected|2026-07-14', {
+        position: 'middle' as const,
+        continuousHours: 32,
+        showLabel: false,
+        groupId: 'group-a',
+      }],
+    ]);
+    render(
+      <CalendarDayTasks
+        tasks={[connectedTask]}
+        date="2026-07-14"
+        segments={segments}
+        continuousHeights={{ 'group-a': 84 }}
+        onContinuousHeightChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTitle(/Connected task/)).toHaveStyle({ height: '84px' });
   });
 
   it('keeps task click and tooltip behavior', () => {
@@ -65,6 +81,8 @@ describe('CalendarDayTasks', () => {
         tasks={tasks.slice(0, 2)}
         date="2026-07-14"
         segments={buildContinuousTaskSegments(tasks.slice(0, 2))}
+        continuousHeights={{}}
+        onContinuousHeightChange={vi.fn()}
         onTaskClick={onTaskClick}
       />
     );
