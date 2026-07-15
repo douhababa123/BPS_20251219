@@ -4,6 +4,7 @@ import { apiClient } from '../api-client';
 import {
   averageAssessmentValues,
   getAssessmentMatrix,
+  getCompetencyGapTrend,
   getMatrixData,
   saveAssessment,
 } from '../competencyApi';
@@ -95,5 +96,18 @@ describe('competencyApi', () => {
 
     await expect(getAssessmentMatrix()).resolves.toEqual(payload);
     expect(apiClient.get).toHaveBeenCalledWith('/competency-assessments/matrix');
+  });
+
+  it('requests a filtered quarter-end GAP trend', async () => {
+    const payload = { year: 2026, moduleId: 7, skillId: 21, quarters: [] };
+    vi.mocked(apiClient.get).mockResolvedValue({ data: payload });
+
+    await expect(
+      getCompetencyGapTrend({ year: 2026, moduleId: 7, skillId: 21 }),
+    ).resolves.toEqual(payload);
+
+    expect(apiClient.get).toHaveBeenCalledWith('/competency-assessments/gap-trend', {
+      params: { year: 2026, module_id: 7, skill_id: 21 },
+    });
   });
 });

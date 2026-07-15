@@ -11,6 +11,26 @@ import type {
   AssessmentStats,
 } from './database.types';
 
+export interface GapTrendFilters {
+  year: number;
+  moduleId?: number;
+  skillId?: number;
+}
+
+export interface CompetencyGapTrendPoint {
+  quarter: 1 | 2 | 3 | 4;
+  label: string;
+  totalGap: number;
+  hasData: boolean;
+}
+
+export interface CompetencyGapTrendResponse {
+  year: number;
+  moduleId: number | null;
+  skillId: number | null;
+  quarters: CompetencyGapTrendPoint[];
+}
+
 export function averageAssessmentValues(values: number[]): number {
   return values.length > 0
     ? values.reduce((sum, value) => sum + value, 0) / values.length
@@ -62,6 +82,19 @@ export async function saveAssessment(
     input,
   );
   return response.data;
+}
+
+export async function getCompetencyGapTrend(
+  filters: GapTrendFilters,
+): Promise<CompetencyGapTrendResponse> {
+  const response = await apiClient.get('/competency-assessments/gap-trend', {
+    params: {
+      year: filters.year,
+      module_id: filters.moduleId,
+      skill_id: filters.skillId,
+    },
+  });
+  return response.data as CompetencyGapTrendResponse;
 }
 
 /**
