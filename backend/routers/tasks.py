@@ -29,6 +29,50 @@ def _user_id(current_user: dict) -> str:
     return str(current_user.get('user_id') or current_user.get('id') or '')
 
 
+def _same_id(left: Any, right: Any) -> bool:
+    return bool(left and right and str(left).lower() == str(right).lower())
+
+
+def _current_employee_id(cursor, current_user: dict) -> Optional[str]:
+    cursor.execute(
+        """
+        SELECT TOP 1 e.id
+        FROM dbo.employees e
+        WHERE ISNULL(e.is_active, 1) = 1
+          AND (
+              e.auth_user_id = ?
+              OR (e.email IS NOT NULL AND LOWER(e.email) = LOWER(?))
+          )
+        ORDER BY CASE WHEN e.auth_user_id = ? THEN 0 ELSE 1 END
+        """,
+        _user_id(current_user),
+        current_user.get('email') or '',
+        _user_id(current_user),
+    )
+    row = cursor.fetchone()
+    return str(row[0]) if row else None
+
+
+SELF_MANAGED_STATUSES = {'planned', 'in_progress', 'completed', 'cancelled', 'confirmed'}
+
+
+def _self_schedule_status(requested_status: Optional[str]) -> str:
+    return requested_status if requested_status in SELF_MANAGED_STATUSES else 'planned'
+
+
+def _status_for_assignment(
+    current_user: dict,
+    requested_status: Optional[str],
+    assigned_employee_id: Any,
+    current_employee_id: Optional[str],
+) -> str:
+    if _is_admin(current_user):
+        return requested_status or 'planned'
+    if _same_id(assigned_employee_id, current_employee_id):
+        return _self_schedule_status(requested_status)
+    return 'pending_approval'
+
+
 def _task_snapshot(task: Task) -> str:
     if hasattr(task, 'model_dump'):
         data = task.model_dump()
@@ -65,9 +109,11 @@ def _safe_log_task_audit(
 def _can_modify_task(task: Task, current_user: dict) -> bool:
     if _is_admin(current_user):
         return True
-    return (
-        str(task.requester_id or '').lower() == _user_id(current_user).lower()
-        and task.status == 'pending_approval'
+    if not _same_id(task.requester_id, _user_id(current_user)):
+        return False
+    return task.status == 'pending_approval' or _same_id(
+        task.assigned_employee_id,
+        current_user.get('employee_id'),
     )
 
 
@@ -209,9 +255,13 @@ def create_task(
             days_count = (end - start).days + 1
             total_hours = days_count * hours_per_day
 
-        status = task.status
-        if not _is_admin(current_user):
-            status = 'pending_approval'
+        current_employee_id = None if _is_admin(current_user) else _current_employee_id(cursor, current_user)
+        status = _status_for_assignment(
+            current_user,
+            task.status,
+            task.assigned_employee_id,
+            current_employee_id,
+        )
 
         cursor.execute("""
             INSERT INTO dbo.tasks 
@@ -265,10 +315,21 @@ def update_task(
     """更新任务"""
     # 检查是否存在
     existing = get_task(task_id, cursor, current_user)
-    if not _can_modify_task(existing, current_user):
-        raise HTTPException(status_code=403, detail="只能修改自己提交且仍待审批的任务草稿")
-    if not _is_admin(current_user) and task.status is not None and task.status != 'pending_approval':
-        raise HTTPException(status_code=403, detail="普通用户不能修改任务审批状态")
+    current_employee_id = None if _is_admin(current_user) else _current_employee_id(cursor, current_user)
+    permission_user = {**current_user, 'employee_id': current_employee_id}
+    if not _can_modify_task(existing, permission_user):
+        raise HTTPException(status_code=403, detail="只能修改自己录入的日程或尚未审批的任务分配")
+
+    effective_status = task.status
+    if not _is_admin(current_user):
+        target_employee_id = task.assigned_employee_id or existing.assigned_employee_id
+        requested_status = task.status if task.status is not None else existing.status
+        effective_status = _status_for_assignment(
+            current_user,
+            requested_status,
+            target_employee_id,
+            current_employee_id,
+        )
     
     # 构建更新字段
     update_fields = []
@@ -298,9 +359,9 @@ def update_task(
     if task.total_hours is not None:
         update_fields.append("total_hours = ?")
         params.append(task.total_hours)
-    if task.status is not None:
+    if effective_status is not None:
         update_fields.append("status = ?")
-        params.append(task.status)
+        params.append(effective_status)
     if task.notes is not None:
         update_fields.append("notes = ?")
         params.append(task.notes)
@@ -348,8 +409,10 @@ def delete_task(
     """删除任务"""
     # 检查是否存在
     existing = get_task(task_id, cursor, current_user)
-    if not _can_modify_task(existing, current_user):
-        raise HTTPException(status_code=403, detail="只能删除自己提交且仍待审批的任务草稿")
+    current_employee_id = None if _is_admin(current_user) else _current_employee_id(cursor, current_user)
+    permission_user = {**current_user, 'employee_id': current_employee_id}
+    if not _can_modify_task(existing, permission_user):
+        raise HTTPException(status_code=403, detail="只能删除自己录入的日程或尚未审批的任务分配")
     
     try:
         cursor.execute("DELETE FROM dbo.tasks WHERE id = ?", str(task_id))

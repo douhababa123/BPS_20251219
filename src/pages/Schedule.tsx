@@ -8,6 +8,7 @@ import {
   buildContinuousTaskSegments,
   getTaskLocationOptions,
   isLeaveTaskType,
+  isTaskAwaitingCurrentUserConfirmation,
   normalizeOptionalStatus,
 } from '../lib/scheduleRules';
 import { taskWorkflowService } from '../services/task-workflow.service';
@@ -214,9 +215,8 @@ export function Schedule() {
   // 我的待确认任务：status=planned 且 assigned_employee_id 与当前用户匹配（通过邮箱）
   const myPlannedTasks = useMemo(() => {
     if (!user) return [];
-    const userEmail = user.email.toLowerCase();
-    return normalizedTasks.filter((t: any) =>
-      t.status === 'planned' && (t.assigned_employee_email || '').toLowerCase() === userEmail
+    return normalizedTasks.filter((task: any) =>
+      isTaskAwaitingCurrentUserConfirmation(task, user)
     );
   }, [normalizedTasks, user]);
 

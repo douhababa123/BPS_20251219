@@ -10,6 +10,8 @@ The existing schedule page combines chart aggregation, form transitions, and cal
 ## Decisions
 
 - Put aggregation, form transitions, and slot-continuity calculations in pure utility functions.
+- Treat `/tasks` self-assignment as self-managed schedule entry, while assignments to another employee and `/matching/assign` remain approval-controlled.
+- Resolve the authenticated user's employee record by `auth_user_id` with email fallback before deciding whether an assignment is to self.
 - Expand FULL_DAY into AM and PM slots for continuity analysis.
 - Group only records with the same engineer, task name, and task type, then split groups wherever time slots are not adjacent.
 - Render connected work as date-local start/middle/end fragments so the existing calendar table structure remains intact.
@@ -23,4 +25,4 @@ The existing schedule page combines chart aggregation, form transitions, and cal
 
 ## Migration Plan
 
-No persisted data migration. Deploy frontend changes through the existing `DEV` GitHub Actions workflow and roll back by reverting the feature commit if needed.
+Deploy through the existing `DEV` GitHub Actions workflow. Run the idempotent `007_self_schedule_approval.sql` migration to move only historical `pending_approval` rows whose requester and assignee resolve to the same employee to `planned`; leave unassigned and other-assigned rows unchanged.

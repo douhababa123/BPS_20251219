@@ -10,6 +10,7 @@ The schedule page currently presents competence hours in an unsorted pie chart, 
 - Replace the standard `GPU-SU` task location option with `Supplier` while retaining legacy edit compatibility.
 - Make task status an optional select with a `planned` fallback.
 - Apply automatic values and input locking when task type is Leave.
+- Bypass approval for schedules entered and assigned by users to themselves; keep approval for assignments to other engineers.
 - Identify truly continuous work from AM/PM/FULL_DAY slots and connect same-task segments exceeding 8 hours across calendar days.
 
 ## Impact

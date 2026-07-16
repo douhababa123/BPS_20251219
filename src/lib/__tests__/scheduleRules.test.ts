@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as scheduleRules from '../scheduleRules';
 import {
   applyTaskTypeChange,
   buildCalendarTaskLayout,
@@ -13,6 +14,29 @@ import {
 } from '../scheduleRules';
 
 describe('schedule chart and form rules', () => {
+  it('does not ask the requester to accept a self-entered planned schedule', () => {
+    const isAwaitingConfirmation = (scheduleRules as Record<string, unknown>)
+      .isTaskAwaitingCurrentUserConfirmation as undefined | ((task: unknown, user: unknown) => boolean);
+
+    expect(typeof isAwaitingConfirmation).toBe('function');
+    expect(isAwaitingConfirmation?.({
+      status: 'planned',
+      requester_id: 'user-1',
+      assigned_employee_email: 'self@bshg.com',
+    }, {
+      id: 'user-1',
+      email: 'self@bshg.com',
+    })).toBe(false);
+    expect(isAwaitingConfirmation?.({
+      status: 'planned',
+      requester_id: 'manager-1',
+      assigned_employee_email: 'self@bshg.com',
+    }, {
+      id: 'user-1',
+      email: 'self@bshg.com',
+    })).toBe(true);
+  });
+
   it('aggregates competence hours and returns the largest area first', () => {
     expect(buildCompetenceHourStats([
       { competence: 'TPM', total_hours: 3 },

@@ -157,6 +157,11 @@ jobs:
           docker compose run --rm --no-deps backend \
             python run_migration.py migrations/006_competency_levels_0_4.sql
 
+          # 自录且自分配的日程不需要审批；迁移脚本幂等，仅处理错误的待审批历史记录
+          echo "🔧 修正自录日程审批状态..."
+          docker compose run --rm --no-deps backend \
+            python run_migration.py migrations/007_self_schedule_approval.sql
+
           # 启动新容器
           echo "🚀 启动新容器..."
           docker compose up -d

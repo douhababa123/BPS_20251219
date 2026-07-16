@@ -65,3 +65,27 @@ The calendar SHALL render work exceeding 8 continuous hours as a connected band 
 - **WHEN** a user hovers or clicks any fragment of a connected band
 - **THEN** the fragment exposes the complete task information
 - **AND** clicking opens the associated task detail without modifying persisted task records
+
+### Requirement: Self-Entered Schedule Approval Bypass
+The system SHALL distinguish a user's own schedule entry from a task assignment to another engineer.
+
+#### Scenario: User enters a schedule for self
+- **WHEN** a non-admin user creates a schedule assigned to the employee record bound to the same account
+- **THEN** the system preserves the selected business status, defaulting to `planned`
+- **AND** does not place the schedule in `pending_approval`
+- **AND** does not ask the same user to accept the schedule again
+- **AND** allows the requester to edit or delete the self-entered schedule
+
+#### Scenario: User assigns a task to another engineer
+- **WHEN** a non-admin user creates or reassigns a task to a different employee
+- **THEN** the system stores `pending_approval` regardless of the submitted status
+- **AND** the existing admin approval and engineer acceptance workflow remains in effect
+
+#### Scenario: Accepted system task
+- **WHEN** a task has already been accepted by its assigned engineer or has no assignment requester
+- **THEN** the schedule is not shown in the engineer acceptance queue
+
+#### Scenario: Historical correction
+- **WHEN** the deployment migration finds a `pending_approval` task whose requester account is bound to its assigned employee
+- **THEN** the migration changes that task to `planned`
+- **AND** leaves unassigned and other-assigned tasks unchanged

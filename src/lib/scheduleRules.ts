@@ -79,6 +79,22 @@ export function normalizeOptionalStatus(status: string | null | undefined): stri
   return status || 'planned';
 }
 
+export function isTaskAwaitingCurrentUserConfirmation(
+  task: {
+    status?: string | null;
+    requester_id?: string | null;
+    assigned_employee_email?: string | null;
+  },
+  user: { id?: string | null; email?: string | null } | null | undefined
+): boolean {
+  const requesterId = task.requester_id?.toLowerCase();
+  const userId = user?.id?.toLowerCase();
+  return task.status === 'planned'
+    && !!requesterId
+    && requesterId !== userId
+    && task.assigned_employee_email?.toLowerCase() === user?.email?.toLowerCase();
+}
+
 export type ScheduleTimeSlot = 'AM' | 'PM' | 'FULL_DAY';
 
 export interface ScheduleTaskForContinuity {

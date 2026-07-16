@@ -2,6 +2,7 @@
 
 - [x] 1.1 Add tested competence sorting, location compatibility, optional status, and Leave transition rules.
 - [x] 1.2 Add tested continuous AM/PM/FULL_DAY segment detection using the four confirmed identity/adjacency conditions.
+- [x] 1.3 Add tested self-entry versus other-assignment approval rules, ownership permissions, and scoped historical migration.
 
 ## 2. User interface
 
@@ -9,6 +10,7 @@
 - [x] 2.2 Update Location and optional task-status controls.
 - [x] 2.3 Apply Leave auto-fill, preserve and require the assigned engineer, and clear or disable only irrelevant fields.
 - [x] 2.4 Render continuous tasks over 8h as connected calendar bands and preserve independent display across gaps.
+- [x] 2.5 Exclude self-entered and already accepted system schedules from the engineer acceptance queue.
 
 ## 3. Verification
 
