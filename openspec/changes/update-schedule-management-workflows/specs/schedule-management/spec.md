@@ -29,7 +29,8 @@ The task form SHALL enforce Leave-specific automatic values and prevent irreleva
 - **WHEN** task type changes to `Leave`
 - **THEN** task name becomes `Leave`
 - **AND** Location becomes `out of office`
-- **AND** competence, competence item, assigned engineer, status, and notes are cleared and disabled
+- **AND** competence, competence item, status, and notes are cleared and disabled
+- **AND** the assigned engineer remains editable, preserves any existing selection, and is required before submission
 - **AND** task type, start date, end date, and time slot remain editable
 - **AND** disabled fields do not block submission validation
 

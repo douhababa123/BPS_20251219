@@ -46,7 +46,7 @@ describe('schedule chart and form rules', () => {
     expect(getTaskLocationOptions('GPU-SU')).toContain('GPU-SU');
   });
 
-  it('normalizes Leave fields and clears irrelevant input', () => {
+  it('normalizes Leave fields while preserving the assigned engineer', () => {
     expect(applyTaskTypeChange({
       task_name: 'Old',
       task_type: 'WS',
@@ -64,7 +64,7 @@ describe('schedule chart and form rules', () => {
       competence: '',
       competence_module: '',
       competence_type: '',
-      assigned_employee_id: '',
+      assigned_employee_id: 'e1',
       status: '',
       notes: '',
     });
@@ -85,6 +85,7 @@ describe('schedule chart and form rules', () => {
       task_name: 'Leave',
       task_type: 'L',
       task_location: 'out of office',
+      assigned_employee_id: 'e1',
       status: '',
     });
   });

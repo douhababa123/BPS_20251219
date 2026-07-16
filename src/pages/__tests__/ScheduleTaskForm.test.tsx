@@ -24,7 +24,7 @@ function renderForm() {
   return render(
     <QueryClientProvider client={queryClient}>
       <TaskFormModal
-        employees={[]}
+        employees={[{ id: 'e1', name: 'Engineer One', department_name: 'FCLCh' }]}
         editingTask={null}
         prefilledData={null}
         onClose={vi.fn()}
@@ -56,8 +56,10 @@ describe('schedule task form', () => {
     expect(status.value).toBe('');
   });
 
-  it('locks irrelevant fields and keeps dates/time editable in Leave mode', () => {
+  it('locks irrelevant fields but preserves a required engineer in Leave mode', () => {
     renderForm();
+    const engineer = selectUnder('分配工程师');
+    fireEvent.change(engineer, { target: { value: 'e1' } });
     fireEvent.change(selectUnder('任务类型'), { target: { value: 'Leave' } });
 
     expect(screen.getByPlaceholderText('输入任务名称')).toHaveValue('Leave');
@@ -65,7 +67,9 @@ describe('schedule task form', () => {
     expect(selectUnder('任务地点')).toHaveValue('out of office');
     expect(selectUnder('任务地点')).toBeDisabled();
     expect(selectUnder('能力域 Competence')).toBeDisabled();
-    expect(selectUnder('分配工程师')).toBeDisabled();
+    expect(engineer).toHaveValue('e1');
+    expect(engineer).not.toBeDisabled();
+    expect(engineer).toBeRequired();
     expect(selectUnder('任务状态（可选）')).toBeDisabled();
 
     const dateInputs = screen.getAllByDisplayValue('')

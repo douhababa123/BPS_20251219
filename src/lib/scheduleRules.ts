@@ -61,7 +61,6 @@ export function applyTaskTypeChange<T extends TaskFormRuleFields>(form: T, taskT
       competence: '',
       competence_module: '',
       competence_type: '',
-      assigned_employee_id: '',
       status: '',
       notes: '',
     };

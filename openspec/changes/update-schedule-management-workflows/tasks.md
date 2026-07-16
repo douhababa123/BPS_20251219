@@ -7,7 +7,7 @@
 
 - [x] 2.1 Replace team and personal competence pies with descending colored bar charts.
 - [x] 2.2 Update Location and optional task-status controls.
-- [x] 2.3 Apply Leave auto-fill, clearing, required-state, and disabled-field behavior.
+- [x] 2.3 Apply Leave auto-fill, preserve and require the assigned engineer, and clear or disable only irrelevant fields.
 - [x] 2.4 Render continuous tasks over 8h as connected calendar bands and preserve independent display across gaps.
 
 ## 3. Verification
