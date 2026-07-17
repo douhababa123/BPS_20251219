@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, Zap, LogIn } from 'lucide-react';
 import { EmailInput } from './EmailInput';
 import { simpleLogin } from '../lib/authService';
+import { BRAND } from '../lib/branding';
 import { useNewAuth } from '../contexts/NewAuthContext';
 
 export function SimpleLoginScreen() {
@@ -80,10 +81,10 @@ export function SimpleLoginScreen() {
             <Zap className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            BPS 能力管理系统
+            {BRAND.name}
           </h1>
           <p className="text-gray-600 text-sm">
-            Bosch Production System
+            {BRAND.slogan}
           </p>
           <div className="mt-4 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-700 flex items-center justify-center gap-2">
@@ -182,7 +183,7 @@ export function SimpleLoginScreen() {
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-gray-200">
           <p className="text-xs text-center text-gray-500">
-            © 2026 Bosch BPS 能力管理系统
+            {BRAND.footer}
           </p>
         </div>
       </div>

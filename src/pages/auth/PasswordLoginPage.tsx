@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/api-client';
 import { useNewAuth } from '@/contexts/NewAuthContext';
+import { BRAND } from '../../lib/branding';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, LogIn } from 'lucide-react';
 
 export function PasswordLoginPage() {
@@ -60,7 +61,8 @@ export function PasswordLoginPage() {
             <LogIn className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">欢迎回来</h1>
-          <p className="text-gray-600">登录 BPS 管理系统</p>
+          <p className="text-gray-700 font-medium">{BRAND.name}</p>
+          <p className="text-gray-500 text-sm mt-1">{BRAND.slogan}</p>
         </div>
 
         {/* 表单 */}

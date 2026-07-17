@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNewAuth } from '@/contexts/NewAuthContext';
+import { BRAND } from '../lib/branding';
 
 export const OTPLogin: React.FC = () => {
   const { requestOTP, verifyOTP, isLoading } = useNewAuth();
@@ -85,8 +86,9 @@ export const OTPLogin: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            登录 BPS 系统
+            {BRAND.name}
           </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">{BRAND.slogan}</p>
           <p className="mt-2 text-center text-sm text-gray-600">
             {step === 'email' ? '输入您的邮箱地址' : '输入邮箱中的验证码'}
           </p>

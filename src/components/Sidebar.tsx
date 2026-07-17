@@ -1,5 +1,6 @@
 import { LayoutDashboard, Calendar, Target, Award, BarChart3, FileSpreadsheet, Settings } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { BRAND } from '../lib/branding';
 import { useNewAuth } from '../contexts/NewAuthContext';
 
 interface SidebarProps {
@@ -24,8 +25,8 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
       <div className="p-6 border-b border-gray-200">
-        <h1 className="text-lg font-bold text-blue-900">BPS 能力与排程平台</h1>
-        <p className="text-xs text-gray-500 mt-1">BPS Capacity & Scheduling</p>
+        <h1 className="text-lg font-bold text-blue-900">{BRAND.name}</h1>
+        <p className="text-xs text-gray-500 mt-1 leading-relaxed">{BRAND.slogan}</p>
       </div>
 
       <nav className="flex-1 p-4">

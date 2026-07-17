@@ -1,5 +1,26 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { BRAND } from '../branding';
+
+const reactBrandSurfaces = [
+  '../../components/Sidebar.tsx',
+  '../../components/LoginScreen.tsx',
+  '../../components/SimpleLoginScreen.tsx',
+  '../../components/BindEmailScreen.tsx',
+  '../../components/ProfileSetupScreen.tsx',
+  '../../components/SignupScreen.tsx',
+  '../../components/OTPLogin.tsx',
+  '../../pages/auth/PasswordLoginPage.tsx',
+  '../../pages/auth/RegisterPage.tsx',
+];
+
+const legacyPlatformNames = [
+  'BPS 能力与排程平台',
+  'BPS Capacity & Scheduling',
+  'BPS 能力管理系统',
+  'BPS 管理系统',
+  'BPS 系统',
+];
 
 describe('BPS Compass brand copy', () => {
   it('exposes the approved user-visible copy', () => {
@@ -8,5 +29,14 @@ describe('BPS Compass brand copy', () => {
       slogan: 'Guide the Right people to the Right projects.',
       footer: '© 2026 Bosch BPS Compass',
     });
+  });
+
+  it('removes legacy platform names from React brand surfaces', () => {
+    for (const path of reactBrandSurfaces) {
+      const source = readFileSync(new URL(path, import.meta.url), 'utf8');
+      for (const legacyName of legacyPlatformNames) {
+        expect(source, `${path} still contains ${legacyName}`).not.toContain(legacyName);
+      }
+    }
   });
 });

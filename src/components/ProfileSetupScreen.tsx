@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseService } from '../lib/supabaseService';
 import { getEmployeeProfile } from '../lib/authService';
+import { BRAND } from '../lib/branding';
 import { User, Briefcase, Building2, Loader2, CheckCircle } from 'lucide-react';
 import type { Department } from '../lib/database.types';
 
@@ -140,9 +141,8 @@ export function ProfileSetupScreen() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             完善个人资料
           </h1>
-          <p className="text-gray-600">
-            欢迎加入 BPS 能力管理系统！
-          </p>
+          <p className="text-gray-700 font-medium">{BRAND.name}</p>
+          <p className="text-gray-500 text-sm mt-1">{BRAND.slogan}</p>
           {authUser?.email && (
             <p className="text-sm text-indigo-600 mt-2">
               {authUser.email}
@@ -258,7 +258,7 @@ export function ProfileSetupScreen() {
           {/* 提示信息 */}
           <div className="text-center">
             <p className="text-xs text-gray-500">
-              提交后您将进入 BPS 能力管理系统主界面
+              提交后您将进入 {BRAND.name} 主界面
             </p>
           </div>
         </div>
@@ -266,7 +266,7 @@ export function ProfileSetupScreen() {
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-gray-200">
           <p className="text-xs text-center text-gray-500">
-            © 2026 Bosch BPS 能力管理系统
+            {BRAND.footer}
           </p>
         </div>
       </div>

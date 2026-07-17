@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { supabaseService } from '../lib/supabaseService';
+import { BRAND } from '../lib/branding';
 import { EmailInput } from './EmailInput';
 import { OTPInput } from './OTPInput';
 import { Link2, Mail, Loader2, ArrowLeft, CheckCircle, User, Search } from 'lucide-react';
@@ -174,7 +175,9 @@ export function BindEmailScreen() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             绑定邮箱账号
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-700 font-medium">{BRAND.name}</p>
+          <p className="text-gray-500 text-sm mt-1">{BRAND.slogan}</p>
+          <p className="text-gray-600 mt-2">
             {step === 'select' && '请选择您的员工信息'}
             {step === 'email' && '请输入您的 Bosch 邮箱'}
             {step === 'otp' && '输入验证码完成绑定'}
@@ -408,7 +411,7 @@ export function BindEmailScreen() {
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-gray-200">
           <p className="text-xs text-center text-gray-500">
-            © 2026 Bosch BPS 能力管理系统
+            {BRAND.footer}
           </p>
         </div>
       </div>

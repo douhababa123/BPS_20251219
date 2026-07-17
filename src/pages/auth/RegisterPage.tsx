@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/api-client';
+import { BRAND } from '../../lib/branding';
 import { Mail, Lock, User, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
 
 export function RegisterPage() {
@@ -109,7 +110,8 @@ export function RegisterPage() {
             <User className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">创建账号</h1>
-          <p className="text-gray-600">注册 BPS 管理系统</p>
+          <p className="text-gray-700 font-medium">{BRAND.name}</p>
+          <p className="text-gray-500 text-sm mt-1">{BRAND.slogan}</p>
         </div>
 
         {/* 表单 */}

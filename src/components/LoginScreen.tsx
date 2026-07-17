@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { EmailInput } from './EmailInput';
 import { OTPInput } from './OTPInput';
 import { LogIn, Mail, Loader2, ArrowLeft, CheckCircle } from 'lucide-react';
+import { BRAND } from '../lib/branding';
 
 type LoginStep = 'email' | 'otp';
 
@@ -123,9 +124,10 @@ export function LoginScreen() {
             <LogIn className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            BPS 能力管理系统
+            {BRAND.name}
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 text-sm">{BRAND.slogan}</p>
+          <p className="text-gray-600 mt-2">
             {step === 'email' ? '请使用邮箱登录' : '输入验证码'}
           </p>
         </div>
@@ -271,7 +273,7 @@ export function LoginScreen() {
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-gray-200">
           <p className="text-xs text-center text-gray-500">
-            © 2026 Bosch BPS 能力管理系统
+            {BRAND.footer}
           </p>
         </div>
       </div>
