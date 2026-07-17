@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BRAND } from '../branding';
 
@@ -38,5 +39,11 @@ describe('BPS Compass brand copy', () => {
         expect(source, `${path} still contains ${legacyName}`).not.toContain(legacyName);
       }
     }
+  });
+
+  it('uses BPS Compass as the browser title', () => {
+    const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
+    expect(html).toContain('<title>BPS Compass</title>');
+    expect(html).not.toContain('BPS Capacity Scheduling Platform');
   });
 });
