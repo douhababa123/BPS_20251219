@@ -1,6 +1,7 @@
 import { X, Calendar, Clock, MapPin, User, FileText, Tag, CheckCircle2 } from 'lucide-react';
 import { getTimeSlotLabel, getTimeSlotColor } from './TimeSlotSelector';
 import { cn } from '../lib/utils';
+import type { TaskExecutionStatus } from '../services/tasks.service';
 
 // 任务状态配置
 const TASK_STATUS_CONFIG = {
@@ -8,6 +9,7 @@ const TASK_STATUS_CONFIG = {
   in_progress: { label: '进行中', icon: '⚡', color: 'text-yellow-600 bg-yellow-50', dotColor: 'bg-yellow-500' },
   completed: { label: '已完成', icon: '✅', color: 'text-green-600 bg-green-50', dotColor: 'bg-green-500' },
   cancelled: { label: '已取消', icon: '❌', color: 'text-red-600 bg-red-50', dotColor: 'bg-red-500' },
+  confirmed: { label: '已确认', icon: '✓', color: 'text-teal-600 bg-teal-50', dotColor: 'bg-teal-500' },
 };
 
 const getTaskStatusConfig = (status?: string) => {
@@ -22,9 +24,10 @@ interface TaskDetailModalProps {
   onClose: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onExecutionStatusChange?: (status: TaskExecutionStatus) => void;
 }
 
-export function TaskDetailModal({ task, onClose, onEdit, onDelete }: TaskDetailModalProps) {
+export function TaskDetailModal({ task, onClose, onEdit, onDelete, onExecutionStatusChange }: TaskDetailModalProps) {
   const timeSlot = task.time_slot || 'FULL_DAY';
   const timeSlotLabel = getTimeSlotLabel(timeSlot);
   const timeSlotColorClass = getTimeSlotColor(timeSlot);
@@ -139,6 +142,25 @@ export function TaskDetailModal({ task, onClose, onEdit, onDelete }: TaskDetailM
         </div>
 
         {/* 操作按钮 */}
+        {onExecutionStatusChange && (
+          <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <label htmlFor="execution-status" className="block text-sm font-medium text-blue-900 mb-2">
+              修改执行状态
+            </label>
+            <select
+              id="execution-status"
+              value={task.status}
+              onChange={(event) => onExecutionStatusChange(event.target.value as TaskExecutionStatus)}
+              className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="confirmed">已确认</option>
+              <option value="in_progress">进行中</option>
+              <option value="completed">已完成</option>
+            </select>
+            <p className="mt-2 text-xs text-blue-700">任务内容由分配人维护，你只能变更执行状态。</p>
+          </div>
+        )}
+
         <div className="flex gap-3 mt-8 pt-6 border-t border-gray-200">
           {onEdit && (
             <button

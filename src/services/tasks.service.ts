@@ -3,7 +3,10 @@
  */
 
 import { BaseService } from './base.service';
+import { apiClient } from '@/lib/api-client';
 import type { Task, TaskCreate, TaskUpdate } from '@/types/api';
+
+export type TaskExecutionStatus = 'confirmed' | 'in_progress' | 'completed';
 
 class TasksService extends BaseService<Task, TaskCreate, TaskUpdate> {
   constructor() {
@@ -20,6 +23,11 @@ class TasksService extends BaseService<Task, TaskCreate, TaskUpdate> {
     end_date?: string;
   }): Promise<Task[]> {
     return this.getAll(params);
+  }
+
+  async updateExecutionStatus(id: string, status: TaskExecutionStatus): Promise<Task> {
+    const response = await apiClient.put<Task>(`${this.endpoint}/${id}/execution-status`, { status });
+    return response.data;
   }
 }
 

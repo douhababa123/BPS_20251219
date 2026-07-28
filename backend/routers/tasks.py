@@ -12,7 +12,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import Task, TaskCreate, TaskUpdate, MessageResponse
+from models import Task, TaskCreate, TaskUpdate, TaskExecutionStatusUpdate, MessageResponse
 from database import get_db
 from .auth import get_current_user
 from audit import log_audit
@@ -54,6 +54,7 @@ def _current_employee_id(cursor, current_user: dict) -> Optional[str]:
 
 
 SELF_MANAGED_STATUSES = {'planned', 'in_progress', 'completed', 'cancelled', 'confirmed'}
+EXECUTION_STATUSES = {'confirmed', 'in_progress', 'completed'}
 
 
 def _self_schedule_status(requested_status: Optional[str]) -> str:
@@ -117,6 +118,52 @@ def _can_modify_task(task: Task, current_user: dict) -> bool:
     )
 
 
+def _can_update_execution_status(
+    task: Task,
+    current_user: dict,
+    current_employee_id: Optional[str],
+) -> bool:
+    if _is_admin(current_user):
+        return True
+    return (
+        _same_id(task.assigned_employee_id, current_employee_id)
+        and not _same_id(task.requester_id, _user_id(current_user))
+    )
+
+
+def _complete_expired_tasks(cursor) -> None:
+    """Persist completion for eligible tasks that ended before today."""
+    cursor.execute(
+        """
+        UPDATE t
+        SET t.status = 'completed',
+            t.updated_at = GETDATE()
+        FROM dbo.tasks t
+        LEFT JOIN dbo.employees e
+          ON e.id = t.assigned_employee_id
+        LEFT JOIN dbo.users u
+          ON u.id = t.requester_id
+        WHERE t.end_date < CAST(GETDATE() AS date)
+          AND (
+              t.status IN ('in_progress', 'confirmed')
+              OR (
+                  t.status = 'planned'
+                  AND t.requester_id IS NOT NULL
+                  AND t.assigned_employee_id IS NOT NULL
+                  AND (
+                      e.auth_user_id = t.requester_id
+                      OR (
+                          e.email IS NOT NULL
+                          AND u.email IS NOT NULL
+                          AND LOWER(e.email) = LOWER(u.email)
+                      )
+                  )
+              )
+          )
+        """
+    )
+
+
 @router.get("/", response_model=List[Task])
 def get_tasks(
     employee_id: Optional[UUID] = None,
@@ -127,6 +174,8 @@ def get_tasks(
     current_user=Depends(get_current_user)
 ):
     """获取任务列表，支持筛选"""
+    _complete_expired_tasks(cursor)
+
     query = """
         SELECT id, task_name, task_type, task_location, assigned_employee_id,
                start_date, end_date,
@@ -398,6 +447,50 @@ def update_task(
         cursor.rollback()
         logger.error(f"更新任务失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
+
+
+@router.put("/{task_id}/execution-status", response_model=Task)
+def update_task_execution_status(
+    task_id: UUID,
+    update: TaskExecutionStatusUpdate,
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Allow an assignee to update execution state without editing task content."""
+    existing = get_task(task_id, cursor, current_user)
+    current_employee_id = None if _is_admin(current_user) else _current_employee_id(cursor, current_user)
+
+    if not _can_update_execution_status(existing, current_user, current_employee_id):
+        raise HTTPException(status_code=403, detail="只能修改分配给自己的任务执行状态")
+    if existing.status not in EXECUTION_STATUSES:
+        raise HTTPException(status_code=400, detail="任务尚未接受或当前状态不可修改")
+
+    try:
+        cursor.execute(
+            """
+            UPDATE dbo.tasks
+            SET status = ?, updated_at = GETDATE()
+            WHERE id = ?
+            """,
+            update.status,
+            str(task_id),
+        )
+        cursor.commit()
+
+        updated_task = get_task(task_id, cursor, current_user)
+        _safe_log_task_audit(
+            str(task_id),
+            'UPDATE',
+            current_user,
+            field_name='status',
+            old_value=existing.status,
+            new_value=updated_task.status,
+        )
+        return updated_task
+    except Exception as error:
+        cursor.rollback()
+        logger.error("Failed to update task execution status: %s", error, exc_info=True)
+        raise HTTPException(status_code=500, detail="更新任务执行状态失败")
 
 
 @router.delete("/{task_id}", response_model=MessageResponse)

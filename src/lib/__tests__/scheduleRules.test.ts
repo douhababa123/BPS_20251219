@@ -37,6 +37,49 @@ describe('schedule chart and form rules', () => {
     })).toBe(true);
   });
 
+  it('allows the owner to fully edit a self-entered schedule in every business status', () => {
+    const user = { id: 'user-1', email: 'self@bshg.com' };
+
+    ['planned', 'in_progress', 'confirmed', 'completed', 'cancelled'].forEach((status) => {
+      expect(scheduleRules.canFullyEditSchedule({
+        status,
+        requester_id: 'user-1',
+        assigned_employee_email: 'self@bshg.com',
+      }, user, false)).toBe(true);
+    });
+  });
+
+  it('keeps a pending assignment fully editable by its requester', () => {
+    expect(scheduleRules.canFullyEditSchedule({
+      status: 'pending_approval',
+      requester_id: 'user-1',
+      assigned_employee_email: 'other@bshg.com',
+    }, { id: 'user-1', email: 'self@bshg.com' }, false)).toBe(true);
+  });
+
+  it('allows an assignee to update execution status but not fully edit assigned content', () => {
+    const assignedTask = {
+      status: 'confirmed',
+      requester_id: 'manager-1',
+      assigned_employee_email: 'self@bshg.com',
+    };
+    const user = { id: 'user-1', email: 'self@bshg.com' };
+
+    expect(scheduleRules.canFullyEditSchedule(assignedTask, user, false)).toBe(false);
+    expect(scheduleRules.canUpdateAssignedTaskExecutionStatus(assignedTask, user, false)).toBe(true);
+  });
+
+  it('does not expose execution-status editing before acceptance or after rejection/cancellation', () => {
+    const user = { id: 'user-1', email: 'self@bshg.com' };
+    ['planned', 'pending_approval', 'rejected', 'employee_rejected', 'cancelled'].forEach((status) => {
+      expect(scheduleRules.canUpdateAssignedTaskExecutionStatus({
+        status,
+        requester_id: 'manager-1',
+        assigned_employee_email: 'self@bshg.com',
+      }, user, false)).toBe(false);
+    });
+  });
+
   it('aggregates competence hours and returns the largest area first', () => {
     expect(buildCompetenceHourStats([
       { competence: 'TPM', total_hours: 3 },

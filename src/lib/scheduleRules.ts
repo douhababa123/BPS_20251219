@@ -95,6 +95,44 @@ export function isTaskAwaitingCurrentUserConfirmation(
     && task.assigned_employee_email?.toLowerCase() === user?.email?.toLowerCase();
 }
 
+interface SchedulePermissionTask {
+  status?: string | null;
+  requester_id?: string | null;
+  assigned_employee_email?: string | null;
+}
+
+interface SchedulePermissionUser {
+  id?: string | null;
+  email?: string | null;
+}
+
+function sameNormalizedValue(left?: string | null, right?: string | null): boolean {
+  return !!left && !!right && left.toLowerCase() === right.toLowerCase();
+}
+
+export function canFullyEditSchedule(
+  task: SchedulePermissionTask,
+  user: SchedulePermissionUser | null | undefined,
+  isAdmin: boolean
+): boolean {
+  if (isAdmin) return true;
+  if (!sameNormalizedValue(task.requester_id, user?.id)) return false;
+  return task.status === 'pending_approval'
+    || sameNormalizedValue(task.assigned_employee_email, user?.email);
+}
+
+const EDITABLE_EXECUTION_STATUSES = new Set(['confirmed', 'in_progress', 'completed']);
+
+export function canUpdateAssignedTaskExecutionStatus(
+  task: SchedulePermissionTask,
+  user: SchedulePermissionUser | null | undefined,
+  isAdmin: boolean
+): boolean {
+  if (isAdmin || !EDITABLE_EXECUTION_STATUSES.has(task.status || '')) return false;
+  return sameNormalizedValue(task.assigned_employee_email, user?.email)
+    && !sameNormalizedValue(task.requester_id, user?.id);
+}
+
 export type ScheduleTimeSlot = 'AM' | 'PM' | 'FULL_DAY';
 
 export interface ScheduleTaskForContinuity {

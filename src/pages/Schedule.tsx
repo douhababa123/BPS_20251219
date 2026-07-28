@@ -6,11 +6,14 @@ import {
   applyTaskTypeChange,
   buildCompetenceHourStats,
   buildContinuousTaskSegments,
+  canFullyEditSchedule,
+  canUpdateAssignedTaskExecutionStatus,
   getTaskLocationOptions,
   isLeaveTaskType,
   isTaskAwaitingCurrentUserConfirmation,
   normalizeOptionalStatus,
 } from '../lib/scheduleRules';
+import type { TaskExecutionStatus } from '../services/tasks.service';
 import { taskWorkflowService } from '../services/task-workflow.service';
 import { Plus, Download, Calendar as CalendarIcon, Users, X, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -191,6 +194,19 @@ export function Schedule() {
     },
   });
 
+  const updateExecutionStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: TaskExecutionStatus }) =>
+      tasksService.updateExecutionStatus(id, status),
+    onSuccess: (updatedTask: any) => {
+      queryClient.setQueriesData({ queryKey: ['tasks'] }, (old: any) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((task: any) => task.id === updatedTask.id ? updatedTask : task);
+      });
+      queryClient.refetchQueries({ queryKey: ['tasks'] });
+    },
+    onError: (error: any) => alert(`更新执行状态失败: ${error.message}`),
+  });
+
   // 工程师确认 / 拒绝 mutation
   const [empRejectModal, setEmpRejectModal] = useState<{ taskId: string; taskName: string } | null>(null);
   const [empRejectReason, setEmpRejectReason] = useState('');
@@ -227,12 +243,11 @@ export function Schedule() {
   }, [normalizedTasks, isAdmin]);
 
   const canModifyTask = (task: any) => {
-    if (isAdmin) return true;
-    return (
-      task.status === 'pending_approval'
-      && (task.requester_id || '').toLowerCase() === (user?.id || '').toLowerCase()
-    );
+    return canFullyEditSchedule(task, user, isAdmin);
   };
+
+  const canUpdateExecutionStatus = (task: any) =>
+    canUpdateAssignedTaskExecutionStatus(task, user, isAdmin);
 
   // Admin 审批 / 拒绝 mutation
   const [adminRejectModal, setAdminRejectModal] = useState<{ taskId: string; taskName: string } | null>(null);
@@ -673,6 +688,10 @@ export function Schedule() {
               }
             }}
             canModifyTask={canModifyTask}
+            canUpdateExecutionStatus={canUpdateExecutionStatus}
+            onExecutionStatusChange={(taskId: string, status: TaskExecutionStatus) => {
+              updateExecutionStatusMutation.mutate({ id: taskId, status });
+            }}
             onQuickAdd={(data: { employeeId: string; date: string }) => {
               // 打开新增任务对话框，预填充员工和日期
               setPrefilledTaskData(data);
@@ -810,6 +829,8 @@ function TeamView({
   onEditTask,
   onDeleteTask,
   canModifyTask,
+  canUpdateExecutionStatus,
+  onExecutionStatusChange,
   onQuickAdd,
 }: any) {
   const { days } = calendarData;
@@ -978,6 +999,10 @@ function TeamView({
           } : undefined}
           onDelete={canModifyTask(selectedTask) ? () => {
             onDeleteTask(selectedTask.id);
+            setSelectedTask(null);
+          } : undefined}
+          onExecutionStatusChange={canUpdateExecutionStatus(selectedTask) ? (status) => {
+            onExecutionStatusChange(selectedTask.id, status);
             setSelectedTask(null);
           } : undefined}
         />

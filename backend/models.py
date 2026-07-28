@@ -4,7 +4,7 @@
 """
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime, date
 from uuid import UUID
 
@@ -474,6 +474,12 @@ class TaskUpdate(BaseModel):
     rejection_reason: Optional[str] = None
     requester_id: Optional[UUID] = None
     rejected_by: Optional[str] = None
+
+
+class TaskExecutionStatusUpdate(BaseModel):
+    status: Literal["confirmed", "in_progress", "completed"]
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class Task(TaskBase):
