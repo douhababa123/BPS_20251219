@@ -17,5 +17,5 @@
 - [x] 3.1 Run focused backend and frontend tests.
 - [x] 3.2 Run the complete frontend test suite, typecheck, production build, and selected backend regression suite.
 - [x] 3.3 Verify the OpenSpec change with strict validation.
-- [ ] 3.4 Deploy through the existing GitHub Actions workflow and verify Jetson health and rendered permissions.
+- [x] 3.4 Deploy through the existing GitHub Actions workflow and verify Jetson health and rendered permissions.
 
