@@ -12,10 +12,11 @@
  */
 
 import { useState } from 'react';
-import { Database, Users, BookOpen, Upload, Download, Trash2, Plus, Edit, Eye, History, ClipboardCheck, X, Check, KeyRound } from 'lucide-react';
+import { Database, Users, BookOpen, Upload, Download, Trash2, Plus, Edit, Eye, History, ClipboardCheck, X, Check, KeyRound, CalendarRange } from 'lucide-react';
 import { AdminImportCard } from '@/components/AdminImportCard';
 import { ImportHistoryView } from '@/components/ImportHistoryView';
 import { AdminAccountsPanel } from '@/components/AdminAccountsPanel';
+import { AdminAnnualBaselinePanel } from '@/components/AdminAnnualBaselinePanel';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getDepartments, getEmployees, getSkills,
@@ -27,7 +28,7 @@ import {
 import { taskWorkflowService } from '../services/task-workflow.service';
 import axios from 'axios';
 
-type TabType = 'departments' | 'employees' | 'skills' | 'history' | 'approvals' | 'accounts';
+type TabType = 'departments' | 'employees' | 'skills' | 'history' | 'approvals' | 'accounts' | 'baselines';
 
 // 9大能力模块选项
 const MODULE_OPTIONS = [
@@ -47,7 +48,8 @@ const INIT_EMP_FORM  = { employee_id: '', name: '', department_id: '', email: ''
 const INIT_SKILL_FORM = { module_id: 1, module_name: 'BPS elements', skill_name: '', skill_code: '', description: '', display_order: 1 };
 
 export function Admin() {
-  const [activeTab, setActiveTab] = useState<TabType>('departments');
+  const requestedTab = new URLSearchParams(window.location.search).get('adminTab');
+  const [activeTab, setActiveTab] = useState<TabType>(requestedTab === 'baselines' ? 'baselines' : 'departments');
   const [showImport, setShowImport] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit' | 'view' | null>(null);
   const [selectedItem, setSelectedItem] = useState<any>(null);
@@ -311,6 +313,7 @@ export function Admin() {
     { id: 'history' as TabType, label: '导入历史', icon: History, count: 0 },
     { id: 'approvals' as TabType, label: '待审批任务', icon: ClipboardCheck, count: pendingTasks.length },
     { id: 'accounts' as TabType, label: '账号管理', icon: KeyRound, count: 0 },
+    { id: 'baselines' as TabType, label: '年初基线管理', icon: CalendarRange, count: 0 },
   ];
 
   const isLoading =
@@ -360,7 +363,7 @@ export function Admin() {
         </div>
 
         {/* Actions Bar - 仅在数据管理tab显示 */}
-        {activeTab !== 'history' && activeTab !== 'approvals' && activeTab !== 'accounts' && (
+        {activeTab !== 'history' && activeTab !== 'approvals' && activeTab !== 'accounts' && activeTab !== 'baselines' && (
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-200 mb-6">
           <div className="flex flex-wrap gap-3">
             <button
@@ -397,7 +400,7 @@ export function Admin() {
         )}
 
         {/* Import Section */}
-        {showImport && activeTab !== 'history' && activeTab !== 'accounts' && (
+        {showImport && activeTab !== 'history' && activeTab !== 'accounts' && activeTab !== 'baselines' && (
           <div className="mb-6">
             {activeTab === 'departments' && (
               <AdminImportCard
@@ -529,9 +532,10 @@ export function Admin() {
         )}
 
         {activeTab === 'accounts' && <AdminAccountsPanel />}
+        {activeTab === 'baselines' && <AdminAnnualBaselinePanel />}
 
         {/* Data Table */}
-        {activeTab !== 'history' && activeTab !== 'approvals' && activeTab !== 'accounts' && (
+        {activeTab !== 'history' && activeTab !== 'approvals' && activeTab !== 'accounts' && activeTab !== 'baselines' && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
           {/* Table Header */}
           <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
@@ -681,7 +685,7 @@ export function Admin() {
       </div>
 
       {/* ── 新增弹窗 ── */}
-      {modalMode !== null && activeTab !== 'history' && (
+      {modalMode !== null && activeTab !== 'history' && activeTab !== 'baselines' && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl">
             {/* Modal Header */}

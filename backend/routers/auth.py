@@ -275,6 +275,13 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     return payload
 
 
+async def verify_admin(current_user: dict = Depends(get_current_user)):
+    """Require an authenticated administrator for package-local route imports."""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    return current_user
+
+
 @router.get("/me")
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     """

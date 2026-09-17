@@ -202,8 +202,7 @@ def test_update_success(admin_token):
 
 
 def test_delete_assessment(admin_token):
-    """测试删除评估"""
-    # 先创建一个评估
+    """能力评估治理启用后，管理员接口也不得删除最新投影。"""
     response = requests.get(
         f"{BASE_URL}/competency-assessments",
         headers={"Authorization": f"Bearer {admin_token}"}
@@ -212,9 +211,8 @@ def test_delete_assessment(admin_token):
     if len(assessments) > 0:
         assessment_id = assessments[-1]["id"]
         
-        # 删除评估
         response = requests.delete(
             f"{BASE_URL}/competency-assessments/{assessment_id}",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
-        assert response.status_code == 200
+        assert response.status_code == 410

@@ -63,8 +63,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppContent() {
-  const [currentPage, setCurrentPage] = useState<keyof typeof pages>('assessment');
   const { isAdmin } = useNewAuth();
+  const requestedPage = new URLSearchParams(window.location.search).get('page') as keyof typeof pages | null;
+  const initialPage = requestedPage && requestedPage in pages && (!adminOnlyPages.has(requestedPage) || isAdmin)
+    ? requestedPage
+    : 'assessment';
+  const [currentPage, setCurrentPage] = useState<keyof typeof pages>(initialPage);
   const PageComponent = pages[currentPage].component;
 
   const handleNavigate = (page: string) => {

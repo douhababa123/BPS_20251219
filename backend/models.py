@@ -410,6 +410,17 @@ class CompetencyAssessmentSave(BaseModel):
         return self
 
 
+class CompetencyAssessmentBatchCell(CompetencyAssessmentSave):
+    employee_id: UUID
+    skill_id: int = Field(..., ge=1)
+    expected_updated_at: Optional[datetime] = None
+
+
+class CompetencyAssessmentBatchSave(BaseModel):
+    cells: List[CompetencyAssessmentBatchCell] = Field(..., min_length=1)
+    notes: Optional[str] = Field(None, max_length=2000)
+
+
 class CompetencyAssessmentHistoryResponse(BaseModel):
     id: UUID
     assessment_id: UUID

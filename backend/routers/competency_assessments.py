@@ -15,6 +15,7 @@ from models import (
     CompetencyAssessmentCreate, 
     CompetencyAssessmentUpdate, 
     CompetencyAssessmentSave,
+    CompetencyAssessmentBatchSave,
     CompetencyAssessmentHistoryResponse,
     MessageResponse
 )
@@ -23,7 +24,10 @@ from .auth import get_current_user
 from competency_assessment_history import (
     build_gap_trend,
     build_matrix_payload,
+    owner_configuration_warnings,
     resolve_employee_scope,
+    resolve_editable_module_ids,
+    save_assessment_batch,
     save_latest_assessment,
     validate_gap_trend_scope,
 )
@@ -211,12 +215,32 @@ def get_assessment_matrix(
             skill_id,
             current_level,
             target_level,
-            target_level - current_level AS gap
+            target_level - current_level AS gap,
+            updated_at
         FROM dbo.competency_assessments
         """
     )
     assessments = cursor.fetchall()
-    return build_matrix_payload(employees, skills, assessments, current_user)
+    permission_user = dict(current_user)
+    permission_user["editable_module_ids"] = resolve_editable_module_ids(cursor, current_user)
+    payload = build_matrix_payload(employees, skills, assessments, permission_user)
+    payload["permissionWarnings"] = (
+        owner_configuration_warnings(cursor)
+        if str(current_user.get("role") or "").strip().lower() == "admin"
+        else []
+    )
+    return payload
+
+
+@router.post("/batch-save")
+def batch_save_assessments(
+    payload: CompetencyAssessmentBatchSave,
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Persist all drafted cells as one authorized, conflict-checked version."""
+
+    return save_assessment_batch(cursor, payload.cells, payload.notes, current_user)
 
 
 @router.put("/employee/{employee_id}/skill/{skill_id}")
@@ -227,16 +251,9 @@ def save_assessment(
     cursor=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Atomically update latest values and append one history snapshot."""
-
-    assessment_id = save_latest_assessment(
-        cursor,
-        employee_id,
-        skill_id,
-        payload,
-        current_user,
-    )
-    return get_competency_assessment(UUID(assessment_id), cursor)
+    """Deprecated immediate-save route; callers must use the batch endpoint."""
+    del employee_id, skill_id, payload, cursor, current_user
+    raise HTTPException(status_code=410, detail="请使用草稿和 /batch-save 统一保存")
 
 
 @router.get(
@@ -391,27 +408,9 @@ def create_competency_assessment(
     cursor=Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    """Compatibility create route using the canonical history-preserving save."""
-    try:
-        payload = CompetencyAssessmentSave(
-            current_level=assessment.current_level,
-            target_level=assessment.target_level,
-            notes=assessment.assessor_notes,
-        )
-        assessment_id = save_latest_assessment(
-            cursor,
-            assessment.employee_id,
-            assessment.skill_id,
-            payload,
-            current_user,
-        )
-        return get_competency_assessment(UUID(assessment_id), cursor)
-    except HTTPException:
-        raise
-    except Exception as e:
-        cursor.rollback()
-        logger.error(f"创建能力评估失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"创建失败: {str(e)}")
+    """Deprecated immediate create; matrix edits must be one explicit batch."""
+    del assessment, cursor, current_user
+    raise HTTPException(status_code=410, detail="请使用草稿和 /batch-save 统一保存")
 
 
 @router.put("/{assessment_id}", response_model=CompetencyAssessment)
@@ -421,53 +420,9 @@ def update_competency_assessment(
     cursor=Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    """更新能力评估"""
-    # 检查是否存在
-    existing = get_competency_assessment(assessment_id, cursor)
-
-    next_current = (
-        assessment.current_level
-        if assessment.current_level is not None
-        else existing.current_level
-    )
-    next_target = (
-        assessment.target_level
-        if assessment.target_level is not None
-        else existing.target_level
-    )
-    if next_target < next_current:
-        raise HTTPException(
-            status_code=422,
-            detail="目标能力必须大于或等于能力现状",
-        )
-    
-    if not assessment.model_fields_set:
-        return existing
-
-    try:
-        payload = CompetencyAssessmentSave(
-            current_level=next_current,
-            target_level=next_target,
-            notes=(
-                assessment.assessor_notes
-                if assessment.assessor_notes is not None
-                else existing.assessor_notes
-            ),
-        )
-        saved_id = save_latest_assessment(
-            cursor,
-            existing.employee_id,
-            existing.skill_id,
-            payload,
-            current_user,
-        )
-        return get_competency_assessment(UUID(saved_id), cursor)
-    except HTTPException:
-        raise
-    except Exception as e:
-        cursor.rollback()
-        logger.error(f"更新能力评估失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
+    """Deprecated immediate update; matrix edits must be one explicit batch."""
+    del assessment_id, assessment, cursor, current_user
+    raise HTTPException(status_code=410, detail="请使用草稿和 /batch-save 统一保存")
 
 
 @router.delete("/{assessment_id}", response_model=MessageResponse)
@@ -476,17 +431,6 @@ def delete_competency_assessment(
     cursor=Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    """删除能力评估"""
-    # 检查是否存在
-    get_competency_assessment(assessment_id, cursor)
-    
-    try:
-        cursor.execute("DELETE FROM dbo.competency_assessments WHERE id = ?", str(assessment_id))
-        cursor.commit()
-        
-        return MessageResponse(message="删除成功")
-    
-    except Exception as e:
-        cursor.rollback()
-        logger.error(f"删除能力评估失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+    """Delete is not part of the governed assessment workflow."""
+    del assessment_id, cursor, current_user
+    raise HTTPException(status_code=410, detail="能力评估历史不可通过普通接口删除")

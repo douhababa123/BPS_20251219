@@ -22,7 +22,7 @@ const matchingSchema = z.object({
   location: z.string().min(1, 'Required'),
   topic: z.string().min(1, 'Required'),
   moduleId: z.string().min(1, 'Required'),
-  suggestedUserId: z.number().optional(),
+  suggestedUserId: z.string().optional(),
 });
 
 type WorkflowStatus = 'pending_approval' | 'planned' | 'confirmed' | 'in_progress' | 'completed' | 'rejected' | 'employee_rejected' | 'cancelled';
@@ -94,10 +94,11 @@ export function Matching() {
   const [activeTab, setActiveTab] = useState<'matching' | 'kanban'>('matching');
   const [requiredItems, setRequiredItems] = useState<Array<{ itemId: number; requiredLevel: number; isKey: boolean }>>([]);
   const [candidates, setCandidates] = useState<MatchingCandidate[]>([]);
+  const [showAllCandidates, setShowAllCandidates] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<MatchingCandidate | null>(null);
   const [explainDrawerOpen, setExplainDrawerOpen] = useState(false);
   const [currentTaskInfo, setCurrentTaskInfo] = useState<any>(null);
-  const [confirmingId, setConfirmingId] = useState<number | null>(null); // 内联确认中的候选人 userId
+  const [confirmingId, setConfirmingId] = useState<string | null>(null); // 内联确认中的候选人 userId
   const [_lastSubmittedStatus, setLastSubmittedStatus] = useState<'pending_approval' | 'planned' | null>(null);
   const [submissionFeedback, setSubmissionFeedback] = useState<StatusFeedback | null>(null);
 
@@ -233,6 +234,7 @@ export function Matching() {
     mutationFn: (data: MatchingRequest) => matchingApi.previewMatching(data),
     onSuccess: (data) => {
       setCandidates(data);
+      setShowAllCandidates(false);
     },
   });
 
@@ -410,10 +412,7 @@ export function Matching() {
 
   const qualifiedCandidates = useMemo(() => candidates.filter(candidate => candidate.qualified), [candidates]);
   const hasQualifiedCandidate = qualifiedCandidates.length > 0;
-  const fallbackRecommendations = useMemo(
-    () => (hasQualifiedCandidate ? [] : candidates.slice(0, 3)),
-    [hasQualifiedCandidate, candidates]
-  );
+  const visibleCandidates = showAllCandidates ? candidates : candidates.slice(0, 5);
 
   const workflowSteps = useMemo(() => {
     const hasPreview = candidates.length > 0;
@@ -647,11 +646,11 @@ export function Matching() {
                   建议人选 Suggested User (Optional)
                 </label>
                 <select
-                  {...register('suggestedUserId', { setValueAs: v => v ? parseInt(v, 10) : undefined })}
+                  {...register('suggestedUserId', { setValueAs: v => v || undefined })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">无 None</option>
-                  {users?.map((user: { id: number; name: string }) => (
+                  {users?.map((user: { id: string; name: string }) => (
                     <option key={user.id} value={user.id}>{user.name}</option>
                   ))}
                 </select>
@@ -746,7 +745,7 @@ export function Matching() {
                 <span>最佳候选综合得分 {matchingSummary.topScore}%</span>
               </div>
               <div className="text-xs text-gray-500 leading-relaxed">
-                系统按照「0.5×能力匹配 + 0.5×可用时间率」计算综合得分，并对关键项自动加权。合格标准：能力匹配 ≥70% 且 时间可用率 ≥50%。
+                系统先排除时间冲突、能力现状低于要求、缺少评估或角色不达标的人员，再按能力评分排序。
               </div>
               <div
                 className={cn(
@@ -758,7 +757,7 @@ export function Matching() {
               >
                 {hasQualifiedCandidate ? (
                   <div className="space-y-2">
-                    <p>系统已识别 {qualifiedCandidates.length} 位符合条件（能力 ≥70% 且 时间 ≥50%）的合适人选。</p>
+                    <p>系统已识别 {qualifiedCandidates.length} 位同时满足时间、能力和角色硬条件的合适人选。</p>
                     <div className="flex flex-wrap gap-2 text-xs">
                       {qualifiedCandidates.slice(0, 4).map(candidate => (
                         <span key={candidate.userId} className="px-2 py-1 bg-white/70 rounded-full">
@@ -771,16 +770,7 @@ export function Matching() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <p>暂未找到符合条件（能力 ≥70% 且 时间 ≥50%）的人选，以下候选作为 Top3 推荐供 Site PS 参考。</p>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      {fallbackRecommendations.map(candidate => (
-                        <span key={candidate.userId} className="px-2 py-1 bg-white/70 rounded-full">
-                          {candidate.name} · {Math.round(candidate.finalScore * 100)}%
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                  <p>暂未找到同时满足时间、能力和角色硬条件的人选。</p>
                 )}
               </div>
             </div>
@@ -796,7 +786,7 @@ export function Matching() {
               </div>
               {candidates.length > 0 && (
                 <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                  Top {candidates.length}
+                  合格 {candidates.length}
                 </div>
               )}
             </div>
@@ -809,7 +799,7 @@ export function Matching() {
               </div>
             ) : (
               <div className="space-y-3">
-                {candidates.map((candidate, idx) => {
+                {visibleCandidates.map((candidate, idx) => {
                   const GateIcon = getRoleGateIcon(candidate.roleGate);
                   const isTop = idx === 0;
                   const isSuggested = candidate.badges.includes('suggested');
@@ -951,6 +941,15 @@ export function Matching() {
                     </div>
                   );
                 })}
+                {candidates.length > 5 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllCandidates(value => !value)}
+                    className="w-full rounded-lg border border-blue-200 bg-blue-50 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+                  >
+                    {showAllCandidates ? '收起，仅显示前 5 名' : `展开全部 ${candidates.length} 名合格候选人`}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1052,7 +1051,7 @@ export function Matching() {
                   <div className="p-4 border border-gray-200 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-gray-600">已占用时间段</span>
-                      <span className="font-bold text-gray-900">{selectedCandidate.explain.time.workSlots}</span>
+                      <span className="font-bold text-gray-900">{selectedCandidate.explain.time.occupiedSlots}</span>
                     </div>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm text-gray-600">空闲时间段</span>
@@ -1062,7 +1061,7 @@ export function Matching() {
                       <div
                         className="h-full bg-green-500"
                         style={{
-                          width: `${(selectedCandidate.explain.time.freeSlots / (selectedCandidate.explain.time.workSlots + selectedCandidate.explain.time.freeSlots)) * 100}%`
+                          width: `${selectedCandidate.explain.time.totalSlots > 0 ? (selectedCandidate.explain.time.freeSlots / selectedCandidate.explain.time.totalSlots) * 100 : 0}%`
                         }}
                       ></div>
                     </div>

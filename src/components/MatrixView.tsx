@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { Filter, Download, Loader2, Database, Maximize2, Minimize2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type {
   AssessmentSaveInput,
+  AssessmentBatchSaveInput,
   MatrixRow,
   MatrixColumn,
   MatrixFilters,
@@ -15,6 +16,9 @@ interface MatrixViewProps {
   columns: MatrixColumn[];
   stats: AssessmentStats;
   isLoading?: boolean;
+  editableModuleIds?: number[] | null;
+  onSaveAssessments?: (cells: AssessmentBatchSaveInput[]) => Promise<void>;
+  onConflictReload?: () => Promise<void>;
   onSaveAssessment?: (
     employeeId: string,
     skillId: number,
@@ -94,6 +98,9 @@ export default function MatrixView({
   columns,
   stats,
   isLoading = false,
+  editableModuleIds,
+  onSaveAssessments,
+  onConflictReload,
   onSaveAssessment,
 }: MatrixViewProps) {
   const [filters] = useState<MatrixFilters>({
@@ -109,6 +116,28 @@ export default function MatrixView({
   } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const editTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, AssessmentBatchSaveInput>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const draftKey = (employeeId: string, skillId: number) => `${employeeId}:${skillId}`;
+  const saveDrafts = async () => {
+    if (!onSaveAssessments || Object.keys(drafts).length === 0) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onSaveAssessments(Object.values(drafts));
+      setDrafts({});
+    } catch (error) {
+      const candidate = error as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+      setSaveError(candidate.response?.data?.detail || candidate.message || '保存失败');
+      if (candidate.response?.status === 409 && onConflictReload) {
+        await onConflictReload();
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const closeEditor = () => {
     setEditingCell(null);
@@ -260,6 +289,18 @@ export default function MatrixView({
       }
     >
       {/* 统计卡片 */}
+      {onSaveAssessments && Object.keys(drafts).length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <div>
+            <span className="text-sm font-medium text-amber-900">{Object.keys(drafts).length} 项未保存修改</span>
+            {saveError && <p className="mt-1 text-xs text-red-700">{saveError}</p>}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { setDrafts({}); setSaveError(null); }} disabled={isSaving} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 disabled:opacity-50">放弃修改</button>
+            <button type="button" onClick={saveDrafts} disabled={isSaving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{isSaving ? '保存中…' : '保存'}</button>
+          </div>
+        </div>
+      )}
       {!isFullscreen && (
       <div className="grid grid-cols-4 gap-3">
         <div className="bg-blue-50 rounded-lg p-4">
@@ -482,7 +523,15 @@ export default function MatrixView({
                     {row.employeeName}
                   </td>
                   {filteredColumns.map(col => {
-                    const skill = row.skills[col.skillId];
+                    const persistedSkill = row.skills[col.skillId];
+                    const draft = drafts[draftKey(row.employeeId, col.skillId)];
+                    const skill = draft ? {
+                      skillId: col.skillId,
+                      currentLevel: draft.current_level,
+                      targetLevel: draft.target_level,
+                      gap: draft.target_level - draft.current_level,
+                      updatedAt: persistedSkill?.updatedAt,
+                    } : persistedSkill;
                     const positiveGap = Boolean(skill && skill.gap > 0);
                     const bgColor = !skill
                       ? 'bg-gray-50'
@@ -494,6 +543,10 @@ export default function MatrixView({
                       : positiveGap
                         ? 'text-red-700'
                         : 'text-green-700';
+                    const permission = editableModuleIds === undefined
+                      ? row.canEdit
+                      : editableModuleIds === null || editableModuleIds.includes(col.moduleId);
+                    const editable = permission && Boolean(onSaveAssessments || onSaveAssessment);
                     const content = skill ? (
                       <>
                         <div className={`text-sm font-medium ${textColor}`}>
@@ -506,11 +559,10 @@ export default function MatrixView({
                         )}
                       </>
                     ) : (
-                      <span className={row.canEdit ? 'text-xs text-blue-600' : 'text-gray-300'}>
-                        {row.canEdit ? '点击录入' : '-'}
+                      <span className="text-gray-300">
+                        {editable ? '点击录入' : '-'}
                       </span>
                     );
-                    const editable = row.canEdit && Boolean(onSaveAssessment);
 
                     return (
                       <td key={col.skillId} className={`text-center border-r border-gray-200 ${bgColor}`}>
@@ -559,23 +611,34 @@ export default function MatrixView({
         </div>
       </div>
       )}
-      {editingCell && onSaveAssessment && (
+      {editingCell && (onSaveAssessments || onSaveAssessment) && (
         <AssessmentEditDialog
           employeeName={editingCell.row.employeeName}
           skillName={editingCell.column.skillName}
-          initial={editingCell.row.skills[editingCell.column.skillId]
+          initial={(drafts[draftKey(editingCell.row.employeeId, editingCell.column.skillId)] || editingCell.row.skills[editingCell.column.skillId])
             ? {
-                current_level: editingCell.row.skills[editingCell.column.skillId].currentLevel,
-                target_level: editingCell.row.skills[editingCell.column.skillId].targetLevel,
+                current_level: drafts[draftKey(editingCell.row.employeeId, editingCell.column.skillId)]?.current_level ?? editingCell.row.skills[editingCell.column.skillId]?.currentLevel,
+                target_level: drafts[draftKey(editingCell.row.employeeId, editingCell.column.skillId)]?.target_level ?? editingCell.row.skills[editingCell.column.skillId]?.targetLevel,
               }
             : undefined}
           onCancel={closeEditor}
           onSave={async input => {
-            await onSaveAssessment(
-              editingCell.row.employeeId,
-              editingCell.column.skillId,
-              input,
-            );
+            if (onSaveAssessments) {
+              const persisted = editingCell.row.skills[editingCell.column.skillId];
+              setDrafts(previous => ({
+                ...previous,
+                [draftKey(editingCell.row.employeeId, editingCell.column.skillId)]: {
+                  employee_id: editingCell.row.employeeId,
+                  skill_id: editingCell.column.skillId,
+                  current_level: input.current_level,
+                  target_level: input.target_level,
+                  notes: input.notes,
+                  expected_updated_at: persisted?.updatedAt ?? null,
+                },
+              }));
+            } else if (onSaveAssessment) {
+              await onSaveAssessment(editingCell.row.employeeId, editingCell.column.skillId, input);
+            }
             closeEditor();
           }}
         />

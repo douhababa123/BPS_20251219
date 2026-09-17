@@ -1,417 +1,228 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { TrendingUp, AlertCircle, CheckCircle, Upload, Users, Zap, Filter, Target, BarChart2, GitMerge, ClipboardList } from 'lucide-react';
-import { KpiCard } from '../components/KpiCard';
-import { getAllAssessments } from '../lib/competencyApi';
-import { employeesService, tasksService } from '../services';
+import { AlertCircle, BarChart3, CalendarDays, Filter, Settings } from 'lucide-react';
 import {
-  buildAbilityGapDistribution,
-  buildCompetencyDistribution,
-  buildModuleGapRanking,
-  buildPersonalGapRanking,
-  buildRadarData,
-  buildRecentActivities,
-  buildSaturationTrend,
-  buildTaskDistributions,
-  buildTopGapCounts,
-  buildUpcomingTasks,
-  buildWorkflowSummary,
-  getAssessmentYears,
-} from '../lib/dashboardData';
-import {
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
+  Bar, CartesianGrid, ComposedChart, Legend, Line,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { TOPICS } from '../lib/constants';
-import { cn } from '../lib/utils';
+import { useNewAuth } from '../contexts/NewAuthContext';
+import {
+  formatCloseRate, formatGap, formatLevel, getCompetencyModules,
+  getCompetencyProgress, getCompetencyProgressYears, selectedMonthForYear, shanghaiYearMonth,
+} from '../lib/dashboardProgressApi';
 
-export function Dashboard() {
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+const shanghaiToday = shanghaiYearMonth();
+const currentYear = shanghaiToday.year;
+const currentMonth = shanghaiToday.month;
 
-  const { data: realAssessments } = useQuery({
-    queryKey: ['dashboard-competency-assessments-full'],
-    queryFn: () => getAllAssessments(),
-  });
-
-  const { data: employees } = useQuery({
-    queryKey: ['dashboard-employees'],
-    queryFn: () => employeesService.getAll(),
-  });
-
-  const { data: tasks } = useQuery({
-    queryKey: ['dashboard-tasks'],
-    queryFn: () => tasksService.getTasks(),
-  });
-
-  const assessmentYears = useMemo(() => getAssessmentYears(realAssessments || []), [realAssessments]);
-  const effectiveYear = assessmentYears.includes(selectedYear)
-    ? selectedYear
-    : assessmentYears[0] || selectedYear;
-  const assessments = useMemo(
-    () => (realAssessments || []).filter(assessment => assessment.assessment_year === effectiveYear),
-    [realAssessments, effectiveYear]
+function MetricCard({ title, value, tone }: {
+  title: string;
+  value: string;
+  tone: 'blue' | 'green' | 'amber';
+}) {
+  const tones = {
+    blue: 'border-blue-100 bg-blue-50 text-blue-900',
+    green: 'border-green-100 bg-green-50 text-green-900',
+    amber: 'border-amber-100 bg-amber-50 text-amber-900',
+  };
+  return (
+    <div className={`min-w-0 rounded-2xl border p-4 shadow-sm ${tones[tone]}`}>
+      <p className="min-h-10 text-xs font-medium leading-5 text-gray-600">{title}</p>
+      <p className="mt-2 break-words text-2xl font-bold" title={value}>{value}</p>
+    </div>
   );
-  const allTasks = tasks || [];
+}
 
-  const radarData = useMemo(() => buildRadarData(assessments), [assessments]);
-  const gapData = useMemo(() => buildTopGapCounts(assessments), [assessments]);
-  const competencyDistribution = useMemo(() => buildCompetencyDistribution(assessments), [assessments]);
-  const moduleGapRanking = useMemo(() => buildModuleGapRanking(assessments), [assessments]);
-  const personalGapRanking = useMemo(() => buildPersonalGapRanking(assessments), [assessments]);
-  const abilityGapDistribution = useMemo(() => buildAbilityGapDistribution(assessments), [assessments]);
-  const { typeDistribution, locationDistribution } = useMemo(() => buildTaskDistributions(allTasks), [allTasks]);
-  const workflowCounts = useMemo(() => buildWorkflowSummary(allTasks), [allTasks]);
-  const saturationTrend = useMemo(
-    () => buildSaturationTrend(allTasks, employees?.length || 0),
-    [allTasks, employees?.length]
-  );
-  const recentActivities = useMemo(() => buildRecentActivities(allTasks), [allTasks]);
-  const upcomingTasks = useMemo(() => buildUpcomingTasks(allTasks), [allTasks]);
-  const gapCount = useMemo(
-    () => new Set(assessments
-      .filter(assessment => Number(assessment.gap ?? assessment.target_level - assessment.current_level) >= 2)
-      .map(assessment => assessment.employee_id)
-    ).size,
-    [assessments]
-  );
-  const latestSaturation = saturationTrend[saturationTrend.length - 1]?.saturation || 0;
+interface ProgressTooltipEntry {
+  color?: string;
+  dataKey?: string | number;
+  name?: string | number;
+  value?: number | string | null;
+}
 
-  const workflowSummary = useMemo(() => {
-    const pending = workflowCounts.pendingApproval;
-    const matching = workflowCounts.pendingApproval;
-    const allocated = workflowCounts.assigned;
-    return [
-      { label: '匹配中 Matching', value: matching, color: 'bg-blue-100 text-blue-700', icon: GitMerge },
-      { label: '待审批 Pending', value: pending, color: 'bg-amber-100 text-amber-700', icon: ClipboardList },
-      { label: '已分配 Assigned', value: allocated, color: 'bg-green-100 text-green-700', icon: CheckCircle },
-    ];
-  }, [workflowCounts.assigned, workflowCounts.pendingApproval]);
-
-  const focusMilestones = upcomingTasks;
+function ProgressTooltip({ active, payload, label, zeroInitialGap }: {
+  active?: boolean;
+  payload?: ProgressTooltipEntry[];
+  label?: string | number;
+  zeroInitialGap: boolean;
+}) {
+  if (!active) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-lg">
+      <p className="font-medium text-gray-900">{label}</p>
+      {(payload || []).map(entry => (
+        <p key={String(entry.dataKey)} style={{ color: entry.color }}>
+          {entry.name}：{entry.dataKey === 'closeRate'
+            ? formatCloseRate(typeof entry.value === 'number' ? entry.value : null)
+            : formatGap(typeof entry.value === 'number' ? entry.value : null)}
+        </p>
+      ))}
+      {zeroInitialGap && (
+        <p className="mt-1 text-amber-700">年初 GAP 为 0，关闭率不适用</p>
+      )}
+    </div>
+  );
+}
+
+export function Dashboard() {
+  const { isAdmin } = useNewAuth();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedModule, setSelectedModule] = useState<number | null>(null);
+
+  const yearsQuery = useQuery({ queryKey: ['competency-progress-years'], queryFn: getCompetencyProgressYears });
+  const modulesQuery = useQuery({ queryKey: ['competency-progress-modules'], queryFn: getCompetencyModules });
+  const progressQuery = useQuery({
+    queryKey: ['competency-progress', selectedYear, selectedMonth, selectedModule],
+    queryFn: () => getCompetencyProgress(selectedYear, selectedMonth, selectedModule),
+    retry: 1,
+  });
+
+  const years = useMemo(() => {
+    const values = new Set(yearsQuery.data || [currentYear]);
+    values.add(currentYear);
+    return Array.from(values).sort((a, b) => b - a);
+  }, [yearsQuery.data]);
+  const months = Array.from(
+    { length: selectedYear === currentYear ? currentMonth : 12 },
+    (_, index) => index + 1,
+  );
+  const responseMatchesSelection = progressQuery.data
+    ? progressQuery.data.year === selectedYear
+      && progressQuery.data.month === selectedMonth
+      && (progressQuery.data.moduleId ?? null) === selectedModule
+    : true;
+  const progress = responseMatchesSelection ? progressQuery.data : undefined;
+  const progressError = progressQuery.isError || !responseMatchesSelection;
+  const moduleName = selectedModule == null
+    ? '全部模块'
+    : modulesQuery.data?.find(item => item.module_id === selectedModule)?.module_name || `模块 ${selectedModule}`;
+  const monthText = `${selectedMonth}`.padStart(2, '0');
+  const cutoffText = progress?.cutoff
+    ? new Date(progress.cutoff).toLocaleString('zh-CN', { hour12: false })
+    : null;
+
+  const openBaselineAdmin = () => {
+    window.location.assign(`/?page=admin&adminTab=baselines&year=${selectedYear}`);
+  };
+
+  return (
+    <div className="space-y-6" data-testid="competency-progress-dashboard">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-900">BPS 能力与任务全景驾驶舱</h2>
-          <p className="text-sm text-gray-500">快速识别短板 · 即时掌握饱和度 · 监控流程进度</p>
+          <h2 className="text-2xl font-semibold text-gray-900">能力发展总览</h2>
+          <p className="mt-1 text-sm text-gray-500">年度 Level、GAP 总分与 GAP 关闭率</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <Filter className="w-4 h-4 text-blue-900" />
-            <span className="text-sm text-gray-600">评估年度</span>
-            <select
-              value={effectiveYear}
-              onChange={(event) => setSelectedYear(Number(event.target.value))}
-              className="bg-transparent text-sm font-medium text-gray-900 focus:outline-none"
-            >
-              {(assessmentYears.length > 0 ? assessmentYears : [effectiveYear]).map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <CalendarDays className="h-4 w-4 text-blue-900" />
+            <span className="text-sm text-gray-600">年度</span>
+            <select aria-label="统计年度" value={selectedYear} onChange={event => {
+              const year = Number(event.target.value);
+              setSelectedYear(year);
+              setSelectedMonth(selectedMonthForYear(year));
+            }} className="min-w-16 bg-transparent text-sm font-medium focus:outline-none">
+              {years.map(year => <option key={year} value={year}>{year}</option>)}
             </select>
-          </div>
+          </label>
+          <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <Filter className="h-4 w-4 text-blue-900" />
+            <span className="text-sm text-gray-600">月份</span>
+            <select aria-label="统计月份" value={selectedMonth} onChange={event => setSelectedMonth(Number(event.target.value))} className="min-w-16 bg-transparent text-sm font-medium focus:outline-none">
+              {months.map(month => <option key={month} value={month}>{`${month}`.padStart(2, '0')} 月</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <BarChart3 className="h-4 w-4 text-blue-900" />
+            <span className="text-sm text-gray-600">模块</span>
+            <select aria-label="能力模块" value={selectedModule ?? ''} onChange={event => setSelectedModule(event.target.value ? Number(event.target.value) : null)} className="min-w-36 bg-transparent text-sm font-medium focus:outline-none">
+              <option value="">全部模块</option>
+              {(modulesQuery.data || []).map(module => <option key={module.module_id} value={module.module_id}>{module.module_name}</option>)}
+            </select>
+          </label>
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-6">
-        <KpiCard
-          title="本月平均饱和度"
-          subtitle="Monthly Avg Saturation"
-          value={`${latestSaturation}%`}
-          icon={TrendingUp}
-          color="green"
-        />
-        <KpiCard
-          title="关键差距≥2人数"
-          subtitle="Critical Gaps ≥2"
-          value={gapCount}
-          icon={AlertCircle}
-          color="amber"
-        />
-        <KpiCard
-          title="待审批任务数"
-          subtitle="Pending Tasks"
-          value={workflowCounts.pendingApproval}
-          icon={CheckCircle}
-          color="blue"
-        />
-        <KpiCard
-          title="团队成员数"
-          subtitle="Team Members"
-          value={employees?.length || 0}
-          icon={Users}
-          color="green"
-        />
+      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        统计范围：{selectedYear} 年 {monthText} 月｜{moduleName}｜
+        {progress?.status === 'not_started'
+          ? '尚未开始'
+          : progress?.isPartial
+            ? `截至当前${cutoffText ? `（${cutoffText}）` : ''}，非月末数据`
+            : `截至 ${selectedYear}-${monthText} 月末`}
+        {progress?.cellCount ? `｜${progress.cellCount} 个基线单元` : ''}
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">能力等级分布 Level Distribution</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={competencyDistribution} layout="vertical">
-              <CartesianGrid stroke="#e5e7eb" />
-              <XAxis type="number" />
-              <YAxis dataKey="name" type="category" width={48} interval={0} />
-              <Tooltip />
-              <Bar dataKey="count" fill="#3B82F6" radius={[0, 8, 8, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      {progressQuery.isLoading && <div className="rounded-2xl border bg-white p-10 text-center text-gray-500">正在加载年度能力数据…</div>}
+      {progressError && (
+        <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700">
+          <AlertCircle className="h-5 w-5" />年度能力数据加载失败，请稍后重试。
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">团队能力雷达图 Team Competency Radar</h3>
-          <ResponsiveContainer width="100%" height={350}>
-            <RadarChart data={radarData}>
-              <PolarGrid stroke="#e5e7eb" />
-              <PolarAngleAxis dataKey="module" tick={{ fontSize: 12 }} />
-              <Radar name="Current" dataKey="current" stroke="#1E3A8A" fill="#1E3A8A" fillOpacity={0.3} />
-              <Radar name="Target" dataKey="target" stroke="#B91C1C" fill="#B91C1C" fillOpacity={0.2} />
-              <Legend />
-            </RadarChart>
-          </ResponsiveContainer>
+      )}
+      {!progressQuery.isLoading && !progressError && progress?.status === 'missing_baseline' && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center">
+          <AlertCircle className="mx-auto h-9 w-9 text-amber-600" />
+          <h3 className="mt-3 text-lg font-semibold text-amber-900">{selectedYear} 年初基线未设置</h3>
+          <p className="mt-1 text-sm text-amber-800">不会使用 2026-07-03 迁移快照或当前数据代替年初基线。</p>
+          {isAdmin ? (
+            <button onClick={openBaselineAdmin} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-800">
+              <Settings className="h-4 w-4" />设置年初基线
+            </button>
+          ) : <p className="mt-3 text-sm font-medium text-amber-900">请联系管理员设置年初基线。</p>}
         </div>
-
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">差距Top 5 Top Gaps</h3>
-          <ResponsiveContainer width="100%" height={350}>
-            <BarChart data={gapData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="gaps" fill="#B45309" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      )}
+      {!progressQuery.isLoading && !progressError && progress?.status === 'empty_scope' && (
+        <div className="rounded-2xl border bg-white p-8 text-center text-gray-600">该模块无基线数据。</div>
+      )}
+      {!progressQuery.isLoading && !progressError && progress?.status === 'not_started' && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-8 text-center text-blue-900">
+          {selectedYear} 年尚未开始，不生成能力进度值。
         </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">任务类型分布 Task Type</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={typeDistribution}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name }) => name}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {typeDistribution.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={TOPICS[index % TOPICS.length].colorHex} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">任务地点占比 Location Mix</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={locationDistribution}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(value) => `${value}h`} />
-              <Bar dataKey="value" fill="#2563EB" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">最近活动 Recent Activity</h3>
-          <div className="space-y-2">
-            {recentActivities.map((activity) => {
-              const Icon = activity.type === 'pending_approval' ? Zap : activity.type === 'completed' ? CheckCircle : Upload;
-              const color = activity.type === 'pending_approval'
-                ? 'bg-amber-100 text-amber-600'
-                : activity.type === 'completed'
-                  ? 'bg-green-100 text-green-600'
-                  : 'bg-blue-100 text-blue-600';
-              return (
-                <div key={activity.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors">
-                  <div className={cn('p-2 rounded-lg flex-shrink-0', color)}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{activity.desc}</p>
-                    <p className="text-xs text-gray-500">{activity.time}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-6">
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">重点模块差距 Top Modules</h3>
-          <div className="space-y-3">
-            {moduleGapRanking.slice(0, 4).map((module, index) => (
-              <div key={module.module} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-900 font-semibold flex items-center justify-center">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{module.module}</p>
-                    <p className="text-xs text-gray-500">重点提升 {module.gap2Plus} 项能力</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-amber-700">Avg Gap {module.avgGap}</p>
-                  <p className="text-xs text-gray-400">Total {module.totalGap.toFixed(1)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">差距排行榜 Gap Ranking</h3>
-          <div className="space-y-3">
-            {personalGapRanking.map((user, index) => (
-              <div key={user.userId} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={cn('w-2 h-12 rounded-full', index < 2 ? 'bg-amber-500' : 'bg-gray-200')}></div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{user.name}</p>
-                    <p className="text-xs text-gray-500">Gap Total</p>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-blue-900">{user.totalGap}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">任务流程监控 Workflow</h3>
-          <div className="space-y-3">
-            {workflowSummary.map(({ label, value, color, icon: Icon }) => (
-              <div key={label} className="flex items-center justify-between p-3 rounded-xl border border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', color)}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <p className="text-sm font-semibold text-gray-900">{label}</p>
-                </div>
-                <span className="text-lg font-bold text-gray-900">{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {abilityGapDistribution.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">能力类型差距 Top Competency Types</h3>
-              <p className="text-xs text-gray-500">展示差距总分最高的 8 个能力类型，支持识别重点训练主题</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-6">
-            <div className="col-span-2">
-              <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={abilityGapDistribution}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={80} />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `${value} 分`} labelFormatter={(label, payload) => {
-                    const item = payload && payload[0]?.payload;
-                    return `${label} · ${item?.module}`;
-                  }} />
-                  <Bar dataKey="totalGap" fill="#1E3A8A" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4">
-              <h4 className="text-sm font-semibold text-blue-900 mb-3">Gap≥2 提醒</h4>
-              <ul className="space-y-2 text-xs text-blue-900">
-                {abilityGapDistribution
-                  .filter(item => item.gap2Plus > 0)
-                  .slice(0, 4)
-                  .map(item => (
-                    <li key={item.name} className="flex items-center justify-between gap-2">
-                      <span className="font-medium truncate">{item.name}</span>
-                      <span className="px-2 py-0.5 bg-white/70 rounded-full text-[11px]">
-                        Gap≥2 {item.gap2Plus}
-                      </span>
-                    </li>
-                  ))}
-                {abilityGapDistribution.filter(item => item.gap2Plus > 0).length === 0 && (
-                  <li className="text-xs text-blue-700">当前无 Gap≥2 的能力类型</li>
-                )}
-              </ul>
-            </div>
-          </div>
+      )}
+      {!progressQuery.isLoading && !progressError && progress?.status === 'data_quality_error' && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-800">
+          <div className="flex items-center gap-2 font-semibold"><AlertCircle className="h-5 w-5" />年度基线数据质量异常</div>
+          {(progress.dataQualityWarnings || []).map(message => <p key={message} className="mt-2 text-sm">{message}</p>)}
         </div>
       )}
 
-      <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-2xl p-6 border border-blue-200">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">项目里程碑 Milestones</h3>
-            <p className="text-sm text-gray-600 mb-4">与时间表同步，掌握平台交付节奏</p>
-            <div className="space-y-3">
-              {focusMilestones.map(milestone => (
-                <div key={milestone.title} className="p-3 bg-white/60 rounded-xl border border-white/70">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{milestone.title}</p>
-                      <p className="text-xs text-gray-500">{milestone.status}</p>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <Target className="w-3 h-3" />
-                      <span>{milestone.progress}%</span>
-                    </div>
-                  </div>
-                  <div className="mt-2 h-2 bg-blue-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-700" style={{ width: `${milestone.progress}%` }}></div>
-                  </div>
-                </div>
-              ))}
-            </div>
+      {!progressQuery.isLoading && !progressError && progress && (
+        <>
+          <div data-testid="kpi-grid" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <MetricCard title={`${selectedYear} 年初 Level`} value={formatLevel(progress.kpis?.initialLevel)} tone="blue" />
+            <MetricCard title={`${selectedYear} 目标 Level`} value={formatLevel(progress.kpis?.targetLevel)} tone="green" />
+            <MetricCard title={`现状 Level（${selectedYear} YTD${monthText}）`} value={formatLevel(progress.kpis?.currentLevel)} tone="blue" />
+            <MetricCard title={`${selectedYear} 年初 GAP 总分`} value={formatGap(progress.kpis?.initialGap)} tone="amber" />
+            <MetricCard title={`GAP YTD${monthText}`} value={formatGap(progress.kpis?.currentGap)} tone="amber" />
+            <MetricCard title={`GAP 关闭率（${selectedYear} YTD${monthText}）`} value={formatCloseRate(progress.kpis?.closeRate)} tone="green" />
           </div>
-          <div className="ml-6 w-48">
-            <div className="bg-white rounded-2xl shadow-sm border border-blue-100 p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <BarChart2 className="w-5 h-5 text-blue-700" />
-                <p className="text-sm font-semibold text-gray-900">能力短板提醒</p>
-              </div>
-              <ul className="space-y-2 text-xs text-gray-600">
-                {moduleGapRanking.slice(0, 3).map(module => (
-                  <li key={module.module} className="flex items-center justify-between">
-                    <span>{module.module}</span>
-                    <span className="text-amber-600 font-semibold">{module.avgGap}</span>
-                  </li>
-                ))}
-              </ul>
+
+          {progress.status === 'ready' && (
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900">GAP 关闭趋势</h3>
+              <p className="mb-4 text-sm text-gray-500">月末 GAP 总分与 YTD GAP 关闭率</p>
+              {progress.kpis?.initialGap === 0 && (
+                <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  年初 GAP 为 0，GAP 关闭率不适用；折线及其提示值显示为 —。
+                </p>
+              )}
+              <ResponsiveContainer width="100%" height={360}>
+                <ComposedChart data={progress.monthly} margin={{ top: 10, right: 12, left: 4, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis yAxisId="gap" allowDecimals={false} />
+                  <YAxis yAxisId="rate" orientation="right" domain={[0, 100]} tickFormatter={value => `${value}%`} />
+                  <Tooltip content={<ProgressTooltip zeroInitialGap={progress.kpis?.initialGap === 0} />} />
+                  <Legend />
+                  <Bar yAxisId="gap" dataKey="gap" name="GAP 总分" fill="#166985" radius={[5, 5, 0, 0]} />
+                  <Line yAxisId="rate" type="monotone" dataKey="closeRate" name="GAP 关闭率" stroke="#f97316" strokeWidth={2.5} connectNulls={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
             </div>
-          </div>
-        </div>
-      </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

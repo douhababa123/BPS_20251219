@@ -11,13 +11,13 @@ import {
   averageAssessmentValues,
   getAssessmentMatrix,
   getAllAssessments,
-  saveAssessment,
+  saveAssessmentBatch,
 } from '../lib/competencyApi';
 import MatrixView from '../components/MatrixView';
 import { cn } from '../lib/utils';
 import type {
   AssessmentFull,
-  AssessmentSaveInput,
+  AssessmentBatchSaveInput,
   AssessmentStats,
   MatrixColumn,
   MatrixFilters,
@@ -58,6 +58,8 @@ export function CompetencyAssessment() {
     rows: MatrixRow[];
     columns: MatrixColumn[];
     stats: AssessmentStats;
+    editableModuleIds?: number[] | null;
+    permissionWarnings?: string[];
   } | null>(null);
   const [assessments, setAssessments] = useState<AssessmentFull[]>([]);
   const [summaries, setSummaries] = useState<EmployeeSummary[]>([]);
@@ -71,10 +73,12 @@ export function CompetencyAssessment() {
   const [expandAll, setExpandAll] = useState(false);
 
   // 加载数据
-  const loadData = async (filters?: MatrixFilters) => {
+  const loadData = async (filters?: MatrixFilters, keepPageMounted = false) => {
     console.log('📥 CompetencyAssessment: 开始加载数据', filters);
-    setIsLoading(true);
-    setError(null);
+    if (!keepPageMounted) {
+      setIsLoading(true);
+      setError(null);
+    }
     try {
       // 只加载一次评估数据，避免重复调用
       console.log('  🔄 加载评估数据...');
@@ -98,9 +102,13 @@ export function CompetencyAssessment() {
       calculateSummaries(assessmentData);
     } catch (err) {
       console.error('❌ CompetencyAssessment: 数据加载失败:', err);
-      setError(err instanceof Error ? err.message : '加载数据失败');
+      if (!keepPageMounted) {
+        setError(err instanceof Error ? err.message : '加载数据失败');
+      } else {
+        throw err;
+      }
     } finally {
-      setIsLoading(false);
+      if (!keepPageMounted) setIsLoading(false);
     }
   };
 
@@ -170,13 +178,9 @@ export function CompetencyAssessment() {
     loadData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSaveAssessment = async (
-    employeeId: string,
-    skillId: number,
-    input: AssessmentSaveInput,
-  ) => {
-    await saveAssessment(employeeId, skillId, input);
-    await loadData();
+  const handleSaveAssessments = async (cells: AssessmentBatchSaveInput[]) => {
+    await saveAssessmentBatch(cells);
+    await loadData(undefined, true);
   };
 
   // 卡片展开/收起
@@ -455,6 +459,17 @@ export function CompetencyAssessment() {
           )}
         </div>
 
+        {(matrixData?.permissionWarnings?.length || 0) > 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+            <div className="flex items-center gap-2 font-semibold">
+              <AlertTriangle className="h-5 w-5" />模块 Owner 配置需要处理
+            </div>
+            {matrixData!.permissionWarnings!.map(message => (
+              <p key={message} className="mt-1 text-sm">{message}</p>
+            ))}
+          </div>
+        )}
+
         {/* 能力级别说明 */}
         {(viewMode === 'card' || viewMode === 'table') && (
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-200">
@@ -480,7 +495,9 @@ export function CompetencyAssessment() {
             rows={matrixData.rows}
             columns={matrixData.columns}
             stats={matrixData.stats}
-            onSaveAssessment={handleSaveAssessment}
+            editableModuleIds={matrixData.editableModuleIds}
+            onSaveAssessments={handleSaveAssessments}
+            onConflictReload={() => loadData(undefined, true)}
           />
         )}
 

@@ -36,7 +36,7 @@ function renderForm() {
 }
 
 function selectUnder(label: string): HTMLSelectElement {
-  const labelNode = screen.getByText(label, { exact: false });
+  const labelNode = screen.getByText(label, { exact: false, selector: 'label' });
   const select = labelNode.parentElement?.querySelector('select');
   if (!select) throw new Error(`No select found under ${label}`);
   return select;
@@ -77,5 +77,18 @@ describe('schedule task form', () => {
     expect(dateInputs).toHaveLength(2);
     dateInputs.forEach((input) => expect(input).not.toBeDisabled());
     expect(screen.getByText('上午', { exact: true }).closest('button')).not.toBeDisabled();
+  });
+
+  it('offers Others without requiring a competence item', () => {
+    renderForm();
+    const competence = selectUnder('能力域 Competence');
+    const item = selectUnder('Competence Item');
+
+    expect(Array.from(competence.options).filter(option => option.value === 'Others')).toHaveLength(1);
+    fireEvent.change(competence, { target: { value: 'Others' } });
+
+    expect(item).toBeDisabled();
+    expect(item).not.toBeRequired();
+    expect(item.options[0].text).toBe('不适用');
   });
 });

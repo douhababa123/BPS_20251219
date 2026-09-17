@@ -446,6 +446,7 @@ export interface MatrixRow {
     currentLevel: number
     targetLevel: number
     gap: number
+    updatedAt?: string | null
   }>
 }
 
@@ -482,6 +483,12 @@ export interface AssessmentSaveInput {
   current_level: number
   target_level: number
   notes?: string
+}
+
+export interface AssessmentBatchSaveInput extends AssessmentSaveInput {
+  employee_id: string
+  skill_id: number
+  expected_updated_at?: string | null
 }
 
 export interface AssessmentHistoryRecord {

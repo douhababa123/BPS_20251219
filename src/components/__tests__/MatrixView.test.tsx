@@ -88,6 +88,96 @@ describe('MatrixView fullscreen mode', () => {
 });
 
 describe('MatrixView competency editing', () => {
+  it('stages a module-authorized edit and sends it only on unified save', async () => {
+    const user = userEvent.setup();
+    const onSaveAssessments = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MatrixView
+        rows={rows}
+        columns={columns}
+        stats={stats}
+        editableModuleIds={[1]}
+        onSaveAssessments={onSaveAssessments}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Gu Xuan.*WAS.*编辑能力评估/ }));
+    await user.selectOptions(screen.getByLabelText('能力现状'), '2');
+    await user.selectOptions(screen.getByLabelText('能力目标'), '4');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '保存' }));
+
+    expect(onSaveAssessments).not.toHaveBeenCalled();
+    expect(screen.getByText('1 项未保存修改')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    expect(onSaveAssessments).toHaveBeenCalledWith([{
+      employee_id: 'employee-1', skill_id: 1, current_level: 2, target_level: 4,
+      notes: undefined, expected_updated_at: null,
+    }]);
+  });
+
+  it('discards a staged edit without calling the persistence callback', async () => {
+    const user = userEvent.setup();
+    const onSaveAssessments = vi.fn();
+    render(
+      <MatrixView
+        rows={rows}
+        columns={columns}
+        stats={stats}
+        editableModuleIds={[1]}
+        onSaveAssessments={onSaveAssessments}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Gu Xuan.*WAS.*编辑能力评估/ }));
+    await user.selectOptions(screen.getByLabelText('能力现状'), '2');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '保存' }));
+    expect(screen.getByText('1 项未保存修改')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '放弃修改' }));
+
+    expect(screen.queryByText('1 项未保存修改')).not.toBeInTheDocument();
+    expect(screen.getByText('3/4')).toBeInTheDocument();
+    expect(onSaveAssessments).not.toHaveBeenCalled();
+  });
+
+  it('keeps every module read-only for a normal user with no owned modules', () => {
+    render(
+      <MatrixView
+        rows={[{ ...rows[0], canEdit: true }]}
+        columns={columns}
+        stats={stats}
+        editableModuleIds={[]}
+        onSaveAssessments={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /编辑能力评估/ })).not.toBeInTheDocument();
+  });
+
+  it('reloads a conflicting cell while preserving the local draft', async () => {
+    const user = userEvent.setup();
+    const conflict = { response: { status: 409, data: { detail: '能力数据已被其他人修改' } } };
+    const onConflictReload = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MatrixView
+        rows={rows}
+        columns={columns}
+        stats={stats}
+        editableModuleIds={[1]}
+        onSaveAssessments={vi.fn().mockRejectedValue(conflict)}
+        onConflictReload={onConflictReload}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /编辑能力评估/ }));
+    await user.selectOptions(screen.getByLabelText('能力现状'), '2');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '保存' }));
+    await user.click(screen.getByRole('button', { name: '保存' }));
+
+    expect(await screen.findByText('能力数据已被其他人修改')).toBeInTheDocument();
+    expect(screen.getByText('1 项未保存修改')).toBeInTheDocument();
+    expect(onConflictReload).toHaveBeenCalledOnce();
+  });
+
   it('opens an authorized assessment cell with the keyboard', async () => {
     const user = userEvent.setup();
     const onSaveAssessment = vi.fn().mockResolvedValue(undefined);

@@ -162,6 +162,12 @@ jobs:
           docker compose run --rm --no-deps backend \
             python run_migration.py migrations/007_self_schedule_approval.sql
 
+          # 年度能力基线与批量能力版本表；迁移仅新增表、列、索引和约束，
+          # 不改写现有能力评估、历史、员工、账号、Owner 或任务数据。
+          echo "🔧 应用能力治理与年度基线数据库结构..."
+          docker compose run --rm --no-deps backend \
+            python run_migration.py migrations/008_capability_governance.sql
+
           # 启动新容器
           echo "🚀 启动新容器..."
           docker compose up -d

@@ -6,13 +6,14 @@ import {
   getAssessmentMatrix,
   getCompetencyGapTrend,
   getMatrixData,
-  saveAssessment,
+  saveAssessmentBatch,
 } from '../competencyApi';
 
 vi.mock('../api-client', () => ({
   apiClient: {
     get: vi.fn(),
     put: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
@@ -63,19 +64,20 @@ describe('competencyApi', () => {
     expect(averageAssessmentValues([])).toBe(0);
   });
 
-  it('sends the unified employee-skill save request', async () => {
-    vi.mocked(apiClient.put).mockResolvedValue({ data: { id: 'a1' } });
+  it('sends changed cells in one explicit batch request', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { versionId: 'v1', savedCount: 1 } });
 
-    await saveAssessment('e1', 7, {
-      current_level: 0,
-      target_level: 3,
-      notes: 'Q3',
+    await saveAssessmentBatch([{
+      employee_id: 'e1', skill_id: 7, current_level: 0, target_level: 3,
+      expected_updated_at: null, notes: 'Q3',
+    }]);
+
+    expect(apiClient.post).toHaveBeenCalledWith('/competency-assessments/batch-save', {
+      cells: [{
+        employee_id: 'e1', skill_id: 7, current_level: 0, target_level: 3,
+        expected_updated_at: null, notes: 'Q3',
+      }],
     });
-
-    expect(apiClient.put).toHaveBeenCalledWith(
-      '/competency-assessments/employee/e1/skill/7',
-      { current_level: 0, target_level: 3, notes: 'Q3' },
-    );
   });
 
   it('loads the dedicated complete matrix endpoint', async () => {

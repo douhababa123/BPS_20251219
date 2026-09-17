@@ -11,6 +11,9 @@ from . import skills
 from . import employees
 from . import competency_definitions
 from . import competency_assessments
+from . import competency_assessment_versions
+from . import annual_baselines
+from . import dashboard_progress
 from . import tasks
 from . import resource_task_types
 from . import resource_planning_tasks
@@ -26,6 +29,9 @@ __all__ = [
     "employees",
     "competency_definitions",
     "competency_assessments",
+    "competency_assessment_versions",
+    "annual_baselines",
+    "dashboard_progress",
     "tasks",
     "resource_task_types",
     "resource_planning_tasks",

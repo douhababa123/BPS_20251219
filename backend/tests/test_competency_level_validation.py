@@ -45,7 +45,7 @@ def test_admin_create_payload_rejects_level_five():
         )
 
 
-def test_legacy_partial_update_rejects_current_above_stored_target(monkeypatch):
+def test_legacy_partial_update_is_disabled(monkeypatch):
     assessment_id = uuid4()
     existing = SimpleNamespace(current_level=2, target_level=2)
     cursor = MagicMock()
@@ -63,7 +63,7 @@ def test_legacy_partial_update_rejects_current_above_stored_target(monkeypatch):
             current_user={"role": "admin"},
         )
 
-    assert error.value.status_code == 422
+    assert error.value.status_code == 410
     cursor.execute.assert_not_called()
 
 
@@ -177,3 +177,17 @@ def test_admin_partial_update_merges_values_then_appends_history(monkeypatch):
     assert result["target_level"] == 3
     payload = save.call_args.args[3]
     assert (payload.current_level, payload.target_level, payload.notes) == (3, 3, "old")
+
+
+def test_admin_delete_is_disabled_without_opening_a_database_cursor(monkeypatch):
+    get_cursor = MagicMock()
+    monkeypatch.setattr(admin_competency_assessments.db, "get_cursor", get_cursor)
+
+    with pytest.raises(HTTPException) as error:
+        admin_competency_assessments.delete_assessment(
+            assessment_id=str(uuid4()),
+            current_user={"role": "admin", "user_id": str(uuid4())},
+        )
+
+    assert error.value.status_code == 410
+    get_cursor.assert_not_called()

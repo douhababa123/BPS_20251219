@@ -253,20 +253,6 @@ def update_assessment(
 
 @router.delete("/competency-assessments/{assessment_id}", dependencies=[Depends(verify_admin)])
 def delete_assessment(assessment_id: str, current_user: dict = Depends(get_current_user)):
-    """删除能力评估"""
-    try:
-        with db.get_cursor() as cursor:
-            # 检查评估是否存在
-            cursor.execute("SELECT id FROM competency_assessments WHERE id = ?", (assessment_id,))
-            if not cursor.fetchone():
-                raise HTTPException(status_code=404, detail="Assessment not found")
-            
-            # 删除评估
-            cursor.execute("DELETE FROM competency_assessments WHERE id = ?", (assessment_id,))
-            
-            return {"message": "Assessment deleted successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    """Deletion would bypass append-only business-version governance."""
+    del assessment_id, current_user
+    raise HTTPException(status_code=410, detail="能力评估历史不可删除，请通过统一保存更新能力值")

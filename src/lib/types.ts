@@ -64,14 +64,14 @@ export interface MatchingRequest {
   type: TaskType;
   location: Location;
   topic: Topic;
-  suggestedUserId?: number;
+  suggestedUserId?: string;
 }
 
 export interface MatchingCandidate {
-  userId: number;
+  userId: string;
   name: string;
   dept: string;
-  homeLocation: Location;
+  homeLocation: string;
   skillScore: number;
   timeScore: number;
   finalScore: number;
@@ -93,7 +93,8 @@ export interface MatchingCandidate {
     sumW: number;
     skillScore: number;
     time: {
-      workSlots: number;
+      totalSlots: number;
+      occupiedSlots: number;
       freeSlots: number;
       timeScore: number;
     };

@@ -155,6 +155,7 @@ from routers import competency_definitions, competency_assessments, tasks as tas
 from routers import resource_task_types, resource_planning_tasks
 from routers import schedule_change_notifications, views, matching, admin_test, audit, audit_logs
 from routers import notifications as notifications_router
+from routers import annual_baselines, competency_assessment_versions, dashboard_progress
 from routers import admin_departments, admin_employees, admin_skills, admin_factories, admin_task_types, admin_tasks, admin_competency_definitions, admin_competency_assessments, admin_resource_task_types, admin_resource_planning_tasks, admin_schedule_change_notifications, admin_accounts
 
 app.include_router(auth.router, prefix="/api/auth", tags=["认证"])
@@ -165,6 +166,7 @@ app.include_router(skills.router, prefix="/api/skills", tags=["技能"])
 app.include_router(employees.router, prefix="/api/employees", tags=["员工"])
 app.include_router(competency_definitions.router, prefix="/api/competency-definitions", tags=["能力定义"])
 app.include_router(competency_assessments.router, prefix="/api/competency-assessments", tags=["能力评估"])
+app.include_router(competency_assessment_versions.router, prefix="/api/competency-assessment-versions", tags=["能力评估版本"])
 app.include_router(tasks_router.router, prefix="/api/tasks", tags=["任务"])
 app.include_router(resource_task_types.router, prefix="/api/resource-task-types", tags=["资源任务类型"])
 app.include_router(resource_planning_tasks.router, prefix="/api/resource-planning-tasks", tags=["资源规划任务"])
@@ -187,6 +189,8 @@ app.include_router(admin_resource_task_types.router, prefix="/api", tags=["资�
 app.include_router(admin_resource_planning_tasks.router, prefix="/api", tags=["资源规划任务管理"])
 app.include_router(admin_schedule_change_notifications.router, prefix="/api", tags=["计划变更通知管理"])
 app.include_router(admin_accounts.router, prefix="/api", tags=["账号管理"])
+app.include_router(annual_baselines.router, prefix="/api/admin/competency-annual-baselines", tags=["年度能力基线"])
+app.include_router(dashboard_progress.router, prefix="/api/dashboard/competency-progress", tags=["能力发展总览"])
 
 
 # ============================================================================

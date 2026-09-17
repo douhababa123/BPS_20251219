@@ -6,6 +6,7 @@ import { apiClient } from './api-client'; // 重用项目的 API 客户端
 import type {
   AssessmentFull,
   AssessmentSaveInput,
+  AssessmentBatchSaveInput,
   MatrixRow,
   MatrixColumn,
   AssessmentStats,
@@ -67,8 +68,19 @@ export async function getAssessmentMatrix(): Promise<{
   rows: MatrixRow[];
   columns: MatrixColumn[];
   stats: AssessmentStats;
+  editableModuleIds?: number[] | null;
+  permissionWarnings?: string[];
 }> {
   const response = await apiClient.get('/competency-assessments/matrix');
+  return response.data;
+}
+
+export async function saveAssessmentBatch(cells: AssessmentBatchSaveInput[]): Promise<{
+  versionId: string;
+  savedCount: number;
+  savedAt: string;
+}> {
+  const response = await apiClient.post('/competency-assessments/batch-save', { cells });
   return response.data;
 }
 

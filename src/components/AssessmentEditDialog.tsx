@@ -100,7 +100,7 @@ export default function AssessmentEditDialog({
             <h2 id="assessment-dialog-title" className="text-lg font-semibold text-gray-900">
               编辑能力评估
             </h2>
-            <p className="mt-1 text-sm text-gray-500">修改将保存到季度历史记录</p>
+            <p className="mt-1 text-sm text-gray-500">修改先加入页面草稿，点击统一保存后才写入版本历史</p>
           </div>
 
           <div className="space-y-4 px-6 py-5">

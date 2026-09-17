@@ -106,4 +106,26 @@ describe('CompetencyAssessment 0-4 presentation', () => {
     expect(within(row!).getAllByText('L0')).toHaveLength(2);
     expect(within(row!).getByText('0')).toHaveClass('text-green-600', 'bg-green-100');
   });
+
+  it('shows module Owner configuration warnings returned for administrators', async () => {
+    vi.mocked(getAssessmentMatrix).mockResolvedValue({
+      rows: [],
+      columns: [],
+      stats: {
+        totalEmployees: 1,
+        totalSkills: 2,
+        totalAssessments: 2,
+        avgCurrentLevel: 1,
+        avgTargetLevel: 1.5,
+        avgGap: 0.5,
+        totalGapScore: 1,
+      },
+      permissionWarnings: ['TPM 的模块 Owner 配置缺失或不一致'],
+    });
+
+    render(<CompetencyAssessment />);
+
+    expect(await screen.findByText('模块 Owner 配置需要处理')).toBeInTheDocument();
+    expect(screen.getByText('TPM 的模块 Owner 配置缺失或不一致')).toBeInTheDocument();
+  });
 });

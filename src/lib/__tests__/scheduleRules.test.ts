@@ -91,6 +91,17 @@ describe('schedule chart and form rules', () => {
     ]);
   });
 
+  it('aggregates canonical Others hours as an independent schedule category', () => {
+    expect(buildCompetenceHourStats([
+      { competence: 'Others', total_hours: 3.5 },
+      { competence: 'BPS elements', total_hours: 2 },
+      { competence: 'Others', total_hours: 4.5 },
+    ]).map(({ name, value }) => ({ name, value }))).toEqual([
+      { name: 'Others', value: 8 },
+      { name: 'BPS elements', value: 2 },
+    ]);
+  });
+
   it('sorts hour statistics descending with a stable name tie-break', () => {
     expect(sortHourStats([
       { name: 'Beta', value: 4, color: '#222222' },

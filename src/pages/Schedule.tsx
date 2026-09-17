@@ -1289,16 +1289,19 @@ export function TaskFormModal({ employees, editingTask, prefilledData, onClose, 
         }
       });
 
-    return Array.from(moduleMap.entries())
+    const modules = Array.from(moduleMap.entries())
       .map(([value, moduleId]) => {
         const cfg = getCompetenceConfig(value);
         return { value, label: value, moduleId, color: cfg.color, colorKey: cfg.colorKey };
       })
       .sort((left, right) => left.moduleId - right.moduleId || left.label.localeCompare(right.label, 'zh-CN'));
+    const others = getCompetenceConfig('Others');
+    const businessModules = modules.filter(module => module.value.trim().toLowerCase() !== 'others');
+    return [...businessModules, { value: 'Others', label: 'Others', moduleId: 9999, color: others.color, colorKey: others.colorKey }];
   }, [competencyDefinitions]);
 
   const competenceItems = useMemo(() => {
-    if (!formData.competence_module) return [];
+    if (!formData.competence_module || formData.competence_module === 'Others') return [];
 
     const rows = competencyDefinitions
       .filter((item: any) => item.module_name === formData.competence_module && item.competency_type)
@@ -1392,7 +1395,9 @@ export function TaskFormModal({ employees, editingTask, prefilledData, onClose, 
       : 1;
     const totalHours = daysCount * hoursPerDay;
 
-    const competenceValue = formData.competence_module && formData.competence_type
+    const competenceValue = formData.competence_module === 'Others'
+      ? 'Others'
+      : formData.competence_module && formData.competence_type
       ? `${formData.competence_module}${COMPETENCE_SEPARATOR}${formData.competence_type}`
       : formData.competence_type || formData.competence || null;
 
@@ -1498,7 +1503,7 @@ export function TaskFormModal({ employees, editingTask, prefilledData, onClose, 
                   ...formData,
                   competence_module: e.target.value,
                   competence_type: '',
-                  competence: '',
+                  competence: e.target.value === 'Others' ? 'Others' : '',
                 });
               }}
               disabled={isLeave}
@@ -1525,10 +1530,10 @@ export function TaskFormModal({ employees, editingTask, prefilledData, onClose, 
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Competence Item <span className="text-red-500">*</span>
+              Competence Item {formData.competence_module !== 'Others' && <span className="text-red-500">*</span>}
             </label>
             <select
-              required={!isLeave}
+              required={!isLeave && formData.competence_module !== 'Others'}
               value={formData.competence_type}
               onChange={(e) => {
                 const competenceType = e.target.value;
@@ -1540,10 +1545,10 @@ export function TaskFormModal({ employees, editingTask, prefilledData, onClose, 
                     : '',
                 });
               }}
-              disabled={isLeave || !formData.competence_module}
+              disabled={isLeave || !formData.competence_module || formData.competence_module === 'Others'}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
             >
-              <option value="">Select competence item...</option>
+              <option value="">{formData.competence_module === 'Others' ? '不适用' : 'Select competence item...'}</option>
               {competenceItems.map((item) => (
                 <option key={item.value} value={item.value}>{item.label}</option>
               ))}

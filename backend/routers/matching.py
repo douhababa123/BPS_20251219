@@ -39,6 +39,41 @@ def count_work_slots(start_date: datetime, end_date: datetime) -> int:
     return count
 
 
+def meets_required_levels(candidate_assessments: List[Dict], required_items: List[Dict]) -> bool:
+    """Missing assessments and levels below the request are hard failures."""
+
+    levels_by_skill = {
+        int(item['skill_id']): int(item['current_level'])
+        for item in candidate_assessments
+    }
+    return bool(required_items) and all(
+        int(req['skill_id']) in levels_by_skill
+        and levels_by_skill[int(req['skill_id'])] >= int(req['required_level'])
+        for req in required_items
+    )
+
+
+def matching_candidate_sort_key(candidate: Dict[str, Any]):
+    return (
+        -candidate['finalScore'],
+        0 if 'suggested' in candidate['badges'] else 1,
+        candidate['name'].casefold(),
+    )
+
+
+def candidate_passes_hard_gates(
+    candidate_assessments: List[Dict],
+    required_items: List[Dict],
+    conflict_count: int,
+    role_gate: str,
+) -> bool:
+    return (
+        conflict_count == 0
+        and meets_required_levels(candidate_assessments, required_items)
+        and role_gate == 'OK'
+    )
+
+
 def calculate_skill_score(candidate_assessments: List[Dict], required_items: List[Dict]) -> Dict[str, Any]:
     """
     计算候选人的技能匹配评分
@@ -86,11 +121,11 @@ def calculate_skill_score(candidate_assessments: List[Dict], required_items: Lis
         si = (base + bonus) * w
         
         items.append({
-            'skill_id': item_id,
+            'itemId': item_id,
             'Ci': Ci,
             'Ri': Ri,
             'Ti': Ti,
-            'is_key': is_key,
+            'isKey': is_key,
             'base': round(base, 2),
             'bonus': bonus,
             'w': w,
@@ -325,10 +360,35 @@ def preview_matching(
         # 解析请求参数
         role = request.get('role')
         module_id = request.get('moduleId')
+        if not request.get('startDate') or not request.get('endDate'):
+            raise HTTPException(status_code=422, detail="必须提供任务开始和结束日期")
         start_date = datetime.fromisoformat(request.get('startDate'))
         end_date = datetime.fromisoformat(request.get('endDate'))
+        if end_date < start_date:
+            raise HTTPException(status_code=422, detail="任务结束日期不能早于开始日期")
         required_items = request.get('required', [])
         suggested_user_id = request.get('suggestedUserId')
+
+        if not required_items:
+            raise HTTPException(status_code=422, detail="至少需要一个能力要求")
+        try:
+            skill_ids = [int(req.get('skill_id')) for req in required_items]
+            required_levels = [int(req.get('required_level')) for req in required_items]
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="能力要求格式无效")
+        if len(skill_ids) != len(set(skill_ids)):
+            raise HTTPException(status_code=422, detail="能力要求不能重复")
+        if any(level < 0 or level > 4 for level in required_levels):
+            raise HTTPException(status_code=422, detail="能力要求等级必须在 0 到 4 之间")
+        required_items = [
+            {
+                **req,
+                'skill_id': skill_ids[index],
+                'required_level': required_levels[index],
+                'is_key': bool(req.get('is_key')),
+            }
+            for index, req in enumerate(required_items)
+        ]
 
         if required_items:
             requested_skill_ids = tuple(req['skill_id'] for req in required_items)
@@ -339,6 +399,8 @@ def preview_matching(
                 WHERE id IN ({placeholders})
             """, *requested_skill_ids)
             skill_names_by_id = {row[0]: row[1] for row in cursor.fetchall()}
+            if len(skill_names_by_id) != len(requested_skill_ids):
+                raise HTTPException(status_code=422, detail="能力要求中包含不存在的技能")
             required_items = [
                 {
                     **req,
@@ -355,6 +417,8 @@ def preview_matching(
         
         # 计算任务时段数
         total_slots = count_work_slots(start_date, end_date)
+        if total_slots == 0:
+            raise HTTPException(status_code=422, detail="所选日期范围不包含工作日")
         
         # 获取所有活跃员工
         cursor.execute("""
@@ -362,7 +426,16 @@ def preview_matching(
                    d.name as dept_name
             FROM dbo.employees e
             LEFT JOIN dbo.departments d ON e.department_id = d.id
-            WHERE e.is_active = 1
+            WHERE ISNULL(e.is_active, 1) = 1
+              AND EXISTS (
+                  SELECT 1
+                  FROM dbo.users u
+                  WHERE ISNULL(u.is_active, 1) = 1
+                    AND (
+                        u.id = e.auth_user_id
+                        OR (u.email IS NOT NULL AND e.email IS NOT NULL AND LOWER(u.email) = LOWER(e.email))
+                    )
+              )
         """)
         
         employees = []
@@ -381,23 +454,23 @@ def preview_matching(
             employee_id = emp['id']
             
             # 1. 获取员工的能力评估
-            skill_names = tuple([req.get('skill_name') for req in required_items if req.get('skill_name')])
-            if not skill_names:
+            requested_ids = tuple(int(req['skill_id']) for req in required_items)
+            if not requested_ids:
                 continue
                 
-            placeholders = ','.join(['?' for _ in skill_names])
+            placeholders = ','.join(['?' for _ in requested_ids])
             cursor.execute(f"""
                 SELECT
-                    MIN(ca.skill_id) as skill_id,
+                    ca.skill_id,
                     s.skill_name,
-                    MAX(ca.current_level) as current_level,
-                    MAX(ca.target_level) as target_level
+                    ca.current_level,
+                    ca.target_level
                 FROM dbo.competency_assessments ca
                 JOIN dbo.skills s ON s.id = ca.skill_id
                 WHERE ca.employee_id = ?
-                  AND s.skill_name IN ({placeholders})
-                GROUP BY s.skill_name
-            """, employee_id, *skill_names)
+                  AND ca.skill_id IN ({placeholders})
+                  AND ISNULL(s.is_active, 1) = 1
+            """, employee_id, *requested_ids)
             
             assessments = []
             for row in cursor.fetchall():
@@ -408,65 +481,32 @@ def preview_matching(
                     'target_level': row[3]
                 })
             
-            # 2. 计算技能评分
-            skill_result = calculate_skill_score(assessments, required_items)
+            if not meets_required_levels(assessments, required_items):
+                continue
             
             # 3. 计算时间可用性（从任务表查询已占用时段）
             # 查询该员工在任务时间段内的已分配任务
             cursor.execute("""
-                SELECT COUNT(*) as task_count
+                SELECT COUNT(*)
                 FROM dbo.tasks
                 WHERE assigned_employee_id = ?
-                  AND (
-                      (start_date <= ? AND end_date >= ?)
-                      OR
-                      (start_date >= ? AND end_date <= ?)
-                      OR
-                      (start_date <= ? AND end_date >= ?)
-                  )
+                  AND start_date <= ?
+                  AND end_date >= ?
                   AND status NOT IN ('cancelled', 'completed')
-            """, employee_id, 
-                request.get('endDate'), request.get('startDate'),  # 任务开始在时间段内
-                request.get('startDate'), request.get('endDate'),  # 任务完全在时间段内
-                request.get('startDate'), request.get('endDate'))  # 任务结束在时间段内
+            """, employee_id, request.get('endDate'), request.get('startDate'))
             
-            cursor.fetchone()  # 消费结果集（occupied_tasks 不直接使用，由下方精确查询替代）
-            
-            # 优化：查询实际占用的工时，而不是简单乘以2
-            # 如果有time_slot字段，可以更精确计算
-            cursor.execute("""
-                SELECT COALESCE(SUM(
-                    CASE 
-                        WHEN time_slot = 'FULL_DAY' THEN 2
-                        WHEN time_slot = 'AM' THEN 1
-                        WHEN time_slot = 'PM' THEN 1
-                        ELSE 2
-                    END
-                ), 0) as occupied_slots
-                FROM dbo.tasks
-                WHERE assigned_employee_id = ?
-                  AND (
-                      (start_date <= ? AND end_date >= ?)
-                      OR
-                      (start_date >= ? AND end_date <= ?)
-                      OR
-                      (start_date <= ? AND end_date >= ?)
-                  )
-                  AND status NOT IN ('cancelled', 'completed')
-            """, employee_id, 
-                request.get('endDate'), request.get('startDate'),
-                request.get('startDate'), request.get('endDate'),
-                request.get('startDate'), request.get('endDate'))
-            
-            occupied_slots_result = cursor.fetchone()
-            occupied_slots = occupied_slots_result[0] if occupied_slots_result else 0
-            
-            free_slots = max(total_slots - occupied_slots, 0)
-            time_score = min(free_slots / total_slots, 1.0) if total_slots > 0 else 0
-            
-            # 时间完全不可用的候选人，时间分数为0
-            if free_slots <= 0:
-                time_score = 0
+            conflict_result = cursor.fetchone()
+            conflict_count = int(conflict_result[0] or 0) if conflict_result else 0
+
+            role_gate = check_role_gate(role, assessments, required_items, role_thresholds)
+            if not candidate_passes_hard_gates(assessments, required_items, conflict_count, role_gate):
+                continue
+
+            # All hard gates passed; calculate the score used only for ranking.
+            skill_result = calculate_skill_score(assessments, required_items)
+            occupied_slots = 0
+            free_slots = total_slots
+            time_score = 1.0
             
             # 4. 计算综合评分（按规范：0.5匹配程度 + 0.5可用时间率）
             skill_weight = 0.5
@@ -475,11 +515,7 @@ def preview_matching(
             # 匹配得分 = 0.5 * 匹配程度 + 0.5 * 可用时间率
             final_score = skill_result['skill_score'] * skill_weight + time_score * time_weight
             
-            # 合格标准：能力匹配>=70% 且 时间可用率>=50%
-            qualified = skill_result['skill_score'] >= 0.7 and time_score >= 0.5
-            
-            # 5. 角色门槛检查
-            role_gate = check_role_gate(role, assessments, required_items, role_thresholds)
+            qualified = True
             
             # 6. 标签
             badges = []
@@ -522,23 +558,14 @@ def preview_matching(
             })
         
         # 排序候选人
-        def sort_key(c):
-            # 建议人选优先
-            if 'suggested' in c['badges']:
-                return (0, -c['finalScore'])
-            # 合格人选优先
-            if c['qualified']:
-                return (1, -c['finalScore'])
-            # 其他按分数排序
-            return (2, -c['finalScore'])
+        candidates.sort(key=matching_candidate_sort_key)
         
-        candidates.sort(key=sort_key)
-        top5 = candidates[:5]
+        logger.info(f"✅ 任务匹配完成: 共 {len(candidates)} 位合格候选人")
         
-        logger.info(f"✅ 任务匹配完成: 共 {len(candidates)} 位候选人，返回 Top {len(top5)} 位")
+        return candidates
         
-        return top5
-        
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ 任务匹配失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

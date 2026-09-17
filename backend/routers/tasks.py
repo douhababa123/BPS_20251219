@@ -312,6 +312,7 @@ def create_task(
             current_employee_id,
         )
 
+        competence = "Others" if str(task.competence or "").strip().lower() == "others" else task.competence
         cursor.execute("""
             INSERT INTO dbo.tasks 
             (task_name, task_type, task_location, assigned_employee_id,
@@ -331,7 +332,7 @@ def create_task(
             status,
             task.notes,
             task.time_slot,
-            task.competence,
+            competence,
             _user_id(current_user)
         ))
         
@@ -419,7 +420,7 @@ def update_task(
         params.append(task.time_slot)
     if task.competence is not None:
         update_fields.append("competence = ?")
-        params.append(task.competence)
+        params.append("Others" if task.competence.strip().lower() == "others" else task.competence)
     
     if not update_fields:
         return existing

@@ -6,7 +6,7 @@ from models import TaskCreate
 from routers import tasks
 
 
-def _task_create(assigned_employee_id, status="planned"):
+def _task_create(assigned_employee_id, status="planned", competence=None):
     return TaskCreate(
         task_name="Self-entered schedule",
         task_type="Leave",
@@ -16,6 +16,7 @@ def _task_create(assigned_employee_id, status="planned"):
         end_date="2026-07-16",
         time_slot="FULL_DAY",
         status=status,
+        competence=competence,
     )
 
 
@@ -110,3 +111,27 @@ def test_requester_can_modify_self_entered_planned_schedule():
             "employee_id": str(employee_id),
         },
     ) is True
+
+
+def test_others_is_saved_as_one_canonical_value(monkeypatch):
+    user_id, employee_id, inserted_id = uuid4(), uuid4(), uuid4()
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [(employee_id,), (inserted_id,)]
+
+    def fake_get_task(*_args, **_kwargs):
+        insert_call = next(call for call in cursor.execute.call_args_list if "INSERT INTO dbo.tasks" in call.args[0])
+        values = insert_call.args[1]
+        created = SimpleNamespace(status=values[8], requester_id=values[12], competence=values[11])
+        created.dict = lambda: {"status": created.status, "requester_id": created.requester_id, "competence": created.competence}
+        return created
+
+    monkeypatch.setattr(tasks, "get_task", fake_get_task)
+    monkeypatch.setattr(tasks, "_safe_log_task_audit", lambda *_args, **_kwargs: None)
+
+    created = tasks.create_task(
+        _task_create(employee_id, competence="  others "),
+        cursor=cursor,
+        current_user={"user_id": str(user_id), "email": "self@bshg.com", "role": "user"},
+    )
+
+    assert created.competence == "Others"
