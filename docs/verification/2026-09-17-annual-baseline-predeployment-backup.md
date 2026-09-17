@@ -59,3 +59,18 @@ WITH CHECKSUM;
 - 年度基线明细所需的4个关键外键均已建立。
 
 结论：迁移仅增加结构，现有评估、历史值、任务、员工、账号、技能和模块 Owner 数据均未改变。
+
+## GitHub Actions 部署后核对
+
+- 提交：`7c2099e feat: add annual competency baseline governance`
+- 工作流：`Jetson CI/CD Pipeline #85`
+- GitHub Actions 运行：`35225506164`
+- 结果：2026-09-17 21:16（Asia/Shanghai）完成，`success`
+- Jetson 前端：`http://10.70.80.183:3000/` 返回 HTTP 200。
+- Jetson 健康检查：`/api/health` 返回 HTTP 200、`status=healthy`、`database=connected`。
+- 现网 OpenAPI 已包含年度基线预览/生效接口及能力进度总览接口。
+- 现网前端构建包已包含年初基线管理面板、模板下载和 `GAP YTD` 总览逻辑。
+- 部署后再次核对核心表行数与校验值，仍与迁移前基线一致。
+- 三张新增表仍为 0 行，`is_active = 1` 的年度基线为 0；未上传、未激活任何 Excel。
+
+已完成代码、迁移和部署验收。为避免测试登录改变用户最后登录时间，并遵守不修改现有记录的要求，本次未执行管理员/Owner/普通用户的现网登录验收；OpenSpec 任务 8.3 保持未完成。

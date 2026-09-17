@@ -52,4 +52,4 @@
 - [x] 8.1 Run backend unit/integration tests and focused frontend tests.
 - [x] 8.2 Compare pre/post migration data checksums and row counts.
 - [ ] 8.3 Run authenticated browser acceptance checks for admin, each Owner scope and normal user.
-- [ ] 8.4 Deploy through the existing DEV GitHub Actions workflow only after proposal approval.
+- [x] 8.4 Deploy through the existing DEV GitHub Actions workflow only after proposal approval.
