@@ -207,6 +207,25 @@ def test_duplicate_active_employee_name_makes_owner_ambiguous_and_warns_admin():
         "Waste-free, stable flow_TPM 的模块 Owner 无法唯一匹配启用员工和账号"
     ]
 
+
+def test_owner_configuration_does_not_require_missing_active_flag_on_definitions():
+    cursor = MagicMock()
+    cursor.fetchall.side_effect = [
+        [(4, "Waste-free, stable flow_TPM")],
+        [(4, "Chen Jianjun")],
+        [("Chen Jianjun",)],
+    ]
+
+    assert owner_configuration_warnings(cursor) == []
+
+    definition_query = next(
+        call.args[0]
+        for call in cursor.execute.call_args_list
+        if "FROM dbo.competency_definitions" in call.args[0]
+    )
+    assert "is_active" not in definition_query.lower()
+
+
 def test_batch_save_creates_one_version_for_all_cells(monkeypatch):
     employee_one, employee_two = uuid4(), uuid4()
     assessment_one, new_assessment, version_id = uuid4(), uuid4(), uuid4()

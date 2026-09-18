@@ -40,7 +40,6 @@ def _owner_configuration(cursor):
         """
         SELECT module_id, owner_engineer
         FROM dbo.competency_definitions
-        WHERE ISNULL(is_active, 1) = 1
         ORDER BY module_id
         """
     )
