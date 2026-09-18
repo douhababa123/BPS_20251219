@@ -83,6 +83,11 @@ def _normalized_text(value: Any) -> str:
     )
 
 
+def _normalized_skill_name(value: Any) -> str:
+    normalized = _normalized_text(value)
+    return RAW_SKILL_ALIASES.get(normalized, normalized)
+
+
 def _header_indexes(header_values: Iterable[Any]) -> Tuple[Dict[str, int], List[Dict[str, Any]]]:
     normalized = [_normalized_header(value) for value in header_values]
     indexes: Dict[str, int] = {}
@@ -236,7 +241,7 @@ def _raw_module_name(column: int) -> Optional[str]:
 def _resolve_raw_skills(worksheet, skills_by_id):
     by_key: Dict[Tuple[str, str], List[Tuple[int, Mapping[str, Any]]]] = {}
     for skill_id, skill in skills_by_id.items():
-        key = (_normalized_text(skill.get("module_name")), _normalized_text(skill.get("skill_name")))
+        key = (_normalized_text(skill.get("module_name")), _normalized_skill_name(skill.get("skill_name")))
         by_key.setdefault(key, []).append((int(skill_id), skill))
 
     resolved = {}
@@ -250,7 +255,7 @@ def _resolve_raw_skills(worksheet, skills_by_id):
             ignored += 1
             continue
         module_name = _raw_module_name(column)
-        target_name = RAW_SKILL_ALIASES.get(source_name, source_name)
+        target_name = _normalized_skill_name(source_name)
         matches = by_key.get((_normalized_text(module_name), target_name), [])
         if len(matches) != 1:
             errors.append({

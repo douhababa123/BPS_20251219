@@ -130,6 +130,32 @@ def test_original_wide_sheet_is_converted_with_source_metadata():
     assert preview["rowsTruncated"] is False
 
 
+def test_original_material_supply_header_accepts_current_name_with_or_without_closing_parenthesis():
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Current_Target states"
+    sheet["C6"] = "C"
+    sheet["D6"] = "T"
+    sheet["AW5"] = "Material supply(POUP, Milkrun AGV)"
+    sheet["AW6"] = "C"
+    sheet["AX6"] = "T"
+    sheet["A7"] = "TEST"
+    sheet["B7"] = "Employee One"
+    sheet["AW7"] = 1
+    sheet["AX7"] = 2
+    output = BytesIO()
+    workbook.save(output)
+    workbook.close()
+    employees = {"E001": {"id": "employee-uuid", "name": "Employee One", "code": "E001"}}
+
+    for skill_name in ("Material supply(POUP, Milkrun AGV", "Material supply(POUP, Milkrun AGV)"):
+        parsed = parse_baseline_workbook(output.getvalue(), employees, {
+            50: {"module_id": 5, "module_name": "Waste-free, stable flow_LBP", "skill_name": skill_name}
+        }, year=2026)
+        assert parsed["errors"] == []
+        assert len(parsed["cells"]) == 1
+
+
 def test_wide_sheet_blank_pair_is_omitted_not_zero_filled():
     employees = {"E001": {"id": "employee-uuid", "name": "Employee One", "code": "E001"}}
     skills = {
