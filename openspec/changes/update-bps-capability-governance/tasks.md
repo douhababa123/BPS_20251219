@@ -16,6 +16,7 @@
 - [x] 3.2 Remove normal-user self-edit authorization at the backend and UI boundaries.
 - [x] 3.3 Add draft tracking, discard and one atomic batch-save endpoint.
 - [x] 3.4 Add optimistic conflict detection and tests.
+- [x] 3.5 Record immutable modification time, modifier and explicit before/after Levels for every successful save; add administrator/all and Owner/module-scoped change-log review without rewriting legacy history.
 
 ## 4. Annual baseline administration
 
@@ -27,6 +28,7 @@
 - [x] 4.6 Test non-admin API rejection, invalid/duplicate/missing rows, valid zero, canceled preview, year/file changes, rollback, concurrent activation and refusal to use the July migration snapshot as the 2026 baseline.
 - [x] 4.7 Verify upload/activation leaves current assessments, history, employees, module Owners, accounts and tasks unchanged; refresh year-specific Dashboard results only after successful activation.
 - [x] 4.8 Require the exact `Current_Target states` sheet, automatically convert its confirmed wide C/T layout, show complete paginated preview metadata, allow pending-file removal and surface actionable validation errors instead of generic 422 messages.
+- [x] 4.9 Add a guided active-baseline replacement workflow with populated current-baseline download, explicit edit/preview/confirm steps and retained immutable revisions.
 
 ## 5. Dashboard
 

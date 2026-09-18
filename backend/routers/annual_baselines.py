@@ -10,7 +10,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from annual_baseline import build_template, file_sha256, parse_baseline_workbook, preview_payload
+from annual_baseline import (
+    build_baseline_export,
+    build_template,
+    file_sha256,
+    parse_baseline_workbook,
+    preview_payload,
+)
 from config import settings
 from database import get_db
 
@@ -205,6 +211,50 @@ def download_template(
           AND LOWER(LTRIM(RTRIM(e.name))) NOT IN ('tyler tan', 'tong zhifeng')
         ORDER BY e.name, s.module_id, ISNULL(s.display_order, 0), s.id
         """
+    )
+
+
+@router.get("/export")
+def download_active_baseline(
+    year: int = Query(..., ge=2000, le=2100),
+    cursor=Depends(get_db),
+    current_user: dict = Depends(verify_admin),
+):
+    """Download the active baseline with populated values for safe replacement editing."""
+
+    del current_user
+    cursor.execute(
+        """
+        SELECT TOP 1 id
+        FROM dbo.competency_annual_baselines
+        WHERE baseline_year = ? AND is_active = 1
+        """,
+        year,
+    )
+    active = cursor.fetchone()
+    if not active:
+        raise HTTPException(status_code=404, detail=f"{year} 年尚未设置生效基线")
+
+    cursor.execute(
+        """
+        SELECT e.employee_id, e.name, s.id, s.module_name, s.skill_name,
+               i.initial_current_level, i.annual_target_level
+        FROM dbo.competency_annual_baseline_items i
+        INNER JOIN dbo.employees e ON e.id = i.employee_id
+        INNER JOIN dbo.skills s ON s.id = i.skill_id
+        WHERE i.baseline_id = ?
+        ORDER BY e.name, s.module_id, ISNULL(s.display_order, 0), s.id
+        """,
+        str(active[0]),
+    )
+    contents = build_baseline_export(cursor.fetchall())
+    return StreamingResponse(
+        BytesIO(contents),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="bps-{year}-active-baseline.xlsx"'
+        },
     )
     contents = build_template(cursor.fetchall())
     return StreamingResponse(

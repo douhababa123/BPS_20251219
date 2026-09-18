@@ -199,7 +199,7 @@ def save_latest_assessment(
     )
     cursor.execute(
         """
-        SELECT id
+        SELECT id, current_level, target_level
         FROM dbo.competency_assessments WITH (UPDLOCK, HOLDLOCK)
         WHERE employee_id = ? AND skill_id = ?
         """,
@@ -207,6 +207,8 @@ def save_latest_assessment(
         skill_id,
     )
     row = cursor.fetchone()
+    previous_current_level = row[1] if row else None
+    previous_target_level = row[2] if row else None
 
     if row:
         assessment_id = str(row[0])
@@ -265,6 +267,8 @@ def save_latest_assessment(
             assessment_id,
             employee_id,
             skill_id,
+            previous_current_level,
+            previous_target_level,
             current_level,
             target_level,
             assessment_date,
@@ -275,11 +279,13 @@ def save_latest_assessment(
             changed_by_user_id,
             change_source,
             version_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'WEB_BATCH_SAVE', ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'WEB_BATCH_SAVE', ?)
         """,
         assessment_id,
         str(employee_id),
         skill_id,
+        previous_current_level,
+        previous_target_level,
         payload.current_level,
         payload.target_level,
         now,
@@ -478,7 +484,7 @@ def save_assessment_batch(cursor, cells, notes: str | None, current_user: dict) 
             raise HTTPException(status_code=404, detail="员工不存在")
         cursor.execute(
             """
-            SELECT id, updated_at
+            SELECT id, updated_at, current_level, target_level
             FROM dbo.competency_assessments WITH (UPDLOCK, HOLDLOCK)
             WHERE employee_id = ? AND skill_id = ?
             """,
@@ -537,12 +543,15 @@ def save_assessment_batch(cursor, cells, notes: str | None, current_user: dict) 
         cursor.execute(
             """
             INSERT INTO dbo.competency_assessment_history (
-                assessment_id, employee_id, skill_id, current_level, target_level,
+                assessment_id, employee_id, skill_id,
+                previous_current_level, previous_target_level,
+                current_level, target_level,
                 assessment_date, assessment_year, assessment_quarter, notes,
                 changed_at, changed_by_user_id, change_source, version_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'WEB_BATCH_SAVE', ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'WEB_BATCH_SAVE', ?)
             """,
             assessment_id, str(cell.employee_id), cell.skill_id,
+            row[2] if row else None, row[3] if row else None,
             cell.current_level, cell.target_level, now, now.year,
             quarter_for(now), cell.notes, now, current_user.get("user_id"), version_id,
         )

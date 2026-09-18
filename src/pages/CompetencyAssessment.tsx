@@ -4,16 +4,19 @@ import {
   LayoutGrid, Table, Grid3x3, ChevronDown, ChevronUp,
   Download, Filter, Maximize2, Minimize2, TrendingUp,
   Target, Award, Users2, BarChart3, Wrench, TrendingDown,
-  Lightbulb, Zap, Gauge
+  Lightbulb, Zap, Gauge, History
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
   averageAssessmentValues,
+  getCompetencyChangeLog,
   getAssessmentMatrix,
   getAllAssessments,
   saveAssessmentBatch,
 } from '../lib/competencyApi';
+import type { CompetencyChangeRecord } from '../lib/competencyApi';
 import MatrixView from '../components/MatrixView';
+import CompetencyChangeLogDialog from '../components/CompetencyChangeLogDialog';
 import { cn } from '../lib/utils';
 import type {
   AssessmentFull,
@@ -65,6 +68,10 @@ export function CompetencyAssessment() {
   const [summaries, setSummaries] = useState<EmployeeSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showChangeLog, setShowChangeLog] = useState(false);
+  const [changeLog, setChangeLog] = useState<CompetencyChangeRecord[]>([]);
+  const [changeLogLoading, setChangeLogLoading] = useState(false);
+  const [changeLogError, setChangeLogError] = useState<string | null>(null);
   
   // 卡片视图状态
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
@@ -181,6 +188,20 @@ export function CompetencyAssessment() {
   const handleSaveAssessments = async (cells: AssessmentBatchSaveInput[]) => {
     await saveAssessmentBatch(cells);
     await loadData(undefined, true);
+  };
+
+  const openChangeLog = async () => {
+    setShowChangeLog(true);
+    setChangeLogLoading(true);
+    setChangeLogError(null);
+    try {
+      setChangeLog(await getCompetencyChangeLog());
+    } catch (err) {
+      const candidate = err as { response?: { data?: { detail?: string } }; message?: string };
+      setChangeLogError(candidate.response?.data?.detail || candidate.message || '修改记录加载失败');
+    } finally {
+      setChangeLogLoading(false);
+    }
   };
 
   // 卡片展开/收起
@@ -349,6 +370,16 @@ export function CompetencyAssessment() {
               <p className="text-gray-600 mt-1">查看和分析团队能力评估数据</p>
             </div>
             <div className="flex gap-3">
+              {matrixData && (matrixData.editableModuleIds === null || (matrixData.editableModuleIds?.length || 0) > 0) && (
+                <button
+                  type="button"
+                  onClick={openChangeLog}
+                  className="flex items-center space-x-2 rounded-lg border border-gray-300 bg-white px-4 py-2 transition-colors hover:bg-gray-50"
+                >
+                  <History className="h-4 w-4" />
+                  <span>修改记录</span>
+                </button>
+              )}
               <button
                 onClick={() => loadData()}
                 disabled={isLoading}
@@ -793,6 +824,14 @@ export function CompetencyAssessment() {
               <p className="text-sm text-gray-600 mt-1">需重点提升项</p>
             </div>
           </div>
+        )}
+        {showChangeLog && (
+          <CompetencyChangeLogDialog
+            records={changeLog}
+            isLoading={changeLogLoading}
+            error={changeLogError}
+            onClose={() => setShowChangeLog(false)}
+          />
         )}
       </div>
     </div>

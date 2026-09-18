@@ -46,6 +46,8 @@ def test_history_route_returns_latest_row_per_quarter_with_bound_filters():
             assessment_id,
             employee_id,
             7,
+            0,
+            2,
             1,
             3,
             2,
@@ -55,6 +57,9 @@ def test_history_route_returns_latest_row_per_quarter_with_bound_filters():
             changed_at,
             None,
             "MIGRATION_BASELINE",
+            None,
+            None,
+            None,
         )
     ]
 
@@ -73,6 +78,37 @@ def test_history_route_returns_latest_row_per_quarter_with_bound_filters():
     assert history_call.args[1] == [str(employee_id), 7, 2026, 3]
     assert result[0]["gap"] == 2
     assert result[0]["assessment_quarter"] == 3
+    assert result[0]["previous_current_level"] == 0
+    assert result[0]["previous_target_level"] == 2
+
+
+def test_change_log_scopes_module_owner_and_returns_audit_details(monkeypatch):
+    history_id, version_id, employee_id, user_id = uuid4(), uuid4(), uuid4(), uuid4()
+    changed_at = datetime(2026, 9, 18, 11, 30)
+    cursor = MagicMock()
+    monkeypatch.setattr(
+        competency_assessments,
+        "resolve_editable_module_ids",
+        lambda _cursor, _user: {4},
+    )
+    cursor.fetchall.return_value = [(
+        history_id, version_id, changed_at, employee_id, "Chen Jianjun",
+        4, "Waste-free, stable flow_TPM", 15, "TPM program management",
+        1, 2, 3, 4, "Q3 update", user_id, "Admin", "admin@bosch.com",
+    )]
+
+    result = competency_assessments.get_competency_change_log(
+        limit=100,
+        cursor=cursor,
+        current_user={"role": "user", "user_id": str(user_id)},
+    )
+
+    sql_call = cursor.execute.call_args
+    assert "s.module_id IN (?)" in sql_call.args[0]
+    assert sql_call.args[1] == [100, 4]
+    assert result["records"][0]["previousCurrentLevel"] == 1
+    assert result["records"][0]["currentLevel"] == 2
+    assert result["records"][0]["changedByEmail"] == "admin@bosch.com"
 
 
 def test_static_routes_are_registered_before_uuid_route():
@@ -80,6 +116,7 @@ def test_static_routes_are_registered_before_uuid_route():
 
     assert paths.index("/matrix") < paths.index("/{assessment_id}")
     assert paths.index("/history") < paths.index("/{assessment_id}")
+    assert paths.index("/change-log") < paths.index("/{assessment_id}")
     assert "/employee/{employee_id}/skill/{skill_id}" in paths
 
 

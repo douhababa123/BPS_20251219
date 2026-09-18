@@ -12,6 +12,7 @@ vi.mock('../../lib/annualBaselineApi', () => ({
   activateBaseline: vi.fn(),
   activateBaselineFromVersion: vi.fn(),
   downloadBaselineTemplate: vi.fn(),
+  downloadActiveBaseline: vi.fn(),
 }));
 
 function renderPanel() {
@@ -107,5 +108,37 @@ describe('Admin annual baseline preview safety', () => {
 
     expect(await screen.findByText('file：Field required')).toBeInTheDocument();
     expect(screen.queryByText('Request failed with status code 422')).not.toBeInTheDocument();
+  });
+
+  it('explains and enables the immutable replacement workflow for an active baseline', async () => {
+    vi.mocked(baselineApi.getBaselineStatus).mockResolvedValue({
+      year: 2026,
+      active: {
+        id: 'baseline-1', year: 2026, source: 'EXCEL_IMPORT', filename: 'original.xlsx',
+        sourceVersionId: null, isActive: true, selectedByUserId: 'admin-1',
+        selectedByEmail: 'admin@bosch.com', selectedAt: '2026-09-18T09:00:00',
+        cellCount: 427, employeeCount: 17, skillCount: 38,
+      },
+      revisions: [],
+    });
+    vi.mocked(baselineApi.downloadActiveBaseline).mockResolvedValue(new Blob(['xlsx']));
+    const createObjectURL = vi.fn().mockReturnValue('blob:baseline');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+
+    renderPanel();
+
+    expect(await screen.findByText('修改/替换 2026 年初基线')).toBeInTheDocument();
+    expect(screen.getByText(/下载当前基线并修改数值/)).toBeInTheDocument();
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    fireEvent.click(screen.getByRole('button', { name: '下载当前基线（用于修改）' }));
+    await waitFor(() => expect(baselineApi.downloadActiveBaseline).toHaveBeenCalledWith(2026));
+
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:baseline');
+    anchorClick.mockRestore();
+    delete (URL as unknown as { createObjectURL?: unknown }).createObjectURL;
+    delete (URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL;
   });
 });

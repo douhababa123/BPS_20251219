@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '../api-client';
-import { activateBaseline, activateBaselineFromVersion, previewBaseline } from '../annualBaselineApi';
+import {
+  activateBaseline,
+  activateBaselineFromVersion,
+  downloadActiveBaseline,
+  previewBaseline,
+} from '../annualBaselineApi';
 
 
 vi.mock('../api-client', () => ({ apiClient: { get: vi.fn(), post: vi.fn() } }));
@@ -46,6 +51,17 @@ describe('annual baseline API', () => {
       source_version_id: 'version-1',
       replace: false,
       expected_active_baseline_id: null,
+    });
+  });
+
+  it('downloads the active baseline for editing', async () => {
+    const blob = new Blob(['xlsx']);
+    vi.mocked(apiClient.get).mockResolvedValue({ data: blob });
+
+    await expect(downloadActiveBaseline(2026)).resolves.toBe(blob);
+    expect(apiClient.get).toHaveBeenCalledWith('/admin/competency-annual-baselines/export', {
+      params: { year: 2026 },
+      responseType: 'blob',
     });
   });
 });

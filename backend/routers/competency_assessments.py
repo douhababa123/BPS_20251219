@@ -272,61 +272,71 @@ def get_assessment_history(
     """Return full or quarterly-final history within the caller's scope."""
 
     resolve_employee_scope(cursor, current_user, employee_id)
-    filters = ["employee_id = ?"]
+    filters = ["h.employee_id = ?"]
     params = [str(employee_id)]
     if skill_id is not None:
-        filters.append("skill_id = ?")
+        filters.append("h.skill_id = ?")
         params.append(skill_id)
     if year is not None:
-        filters.append("assessment_year = ?")
+        filters.append("h.assessment_year = ?")
         params.append(year)
     if quarter is not None:
-        filters.append("assessment_quarter = ?")
+        filters.append("h.assessment_quarter = ?")
         params.append(quarter)
 
     where_sql = " AND ".join(filters)
-    columns = """
-        id,
-        assessment_id,
-        employee_id,
-        skill_id,
-        current_level,
-        target_level,
-        gap,
-        assessment_year,
-        assessment_quarter,
-        notes,
-        changed_at,
-        changed_by_user_id,
-        change_source
+    history_columns = """
+        h.id,
+        h.assessment_id,
+        h.employee_id,
+        h.skill_id,
+        h.previous_current_level,
+        h.previous_target_level,
+        h.current_level,
+        h.target_level,
+        h.gap,
+        h.assessment_year,
+        h.assessment_quarter,
+        h.notes,
+        h.changed_at,
+        h.changed_by_user_id,
+        h.change_source,
+        h.version_id
+    """
+    output_columns = f"""
+        {history_columns},
+        u.name AS changed_by_name,
+        u.email AS changed_by_email
     """
     if latest_per_quarter:
         sql = f"""
             WITH ranked AS (
                 SELECT
-                    {columns},
+                    h.*,
                     ROW_NUMBER() OVER (
                         PARTITION BY
-                            employee_id,
-                            skill_id,
-                            assessment_year,
-                            assessment_quarter
-                        ORDER BY changed_at DESC, id DESC
+                            h.employee_id,
+                            h.skill_id,
+                            h.assessment_year,
+                            h.assessment_quarter
+                        ORDER BY h.changed_at DESC, h.id DESC
                     ) AS rn
-                FROM dbo.competency_assessment_history
+                FROM dbo.competency_assessment_history h
                 WHERE {where_sql}
             )
-            SELECT {columns}
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY changed_at DESC, id DESC
+            SELECT {output_columns}
+            FROM ranked h
+            LEFT JOIN dbo.users u ON u.id = h.changed_by_user_id
+            WHERE h.rn = 1
+            ORDER BY h.changed_at DESC, h.id DESC
         """
     else:
         sql = f"""
-            SELECT {columns}
-            FROM dbo.competency_assessment_history
+            SELECT {output_columns}
+            FROM dbo.competency_assessment_history h
+            LEFT JOIN dbo.users u ON u.id = h.changed_by_user_id
             WHERE {where_sql}
-            ORDER BY changed_at DESC, id DESC
+            ORDER BY h.changed_at DESC, h.id DESC
         """
 
     cursor.execute(sql, params)
@@ -336,18 +346,97 @@ def get_assessment_history(
             "assessment_id": row[1],
             "employee_id": row[2],
             "skill_id": row[3],
-            "current_level": row[4],
-            "target_level": row[5],
-            "gap": row[6],
-            "assessment_year": row[7],
-            "assessment_quarter": row[8],
-            "notes": row[9],
-            "changed_at": row[10],
-            "changed_by_user_id": row[11],
-            "change_source": row[12],
+            "previous_current_level": row[4],
+            "previous_target_level": row[5],
+            "current_level": row[6],
+            "target_level": row[7],
+            "gap": row[8],
+            "assessment_year": row[9],
+            "assessment_quarter": row[10],
+            "notes": row[11],
+            "changed_at": row[12],
+            "changed_by_user_id": row[13],
+            "change_source": row[14],
+            "version_id": row[15],
+            "changed_by_name": row[16],
+            "changed_by_email": row[17],
         }
         for row in cursor.fetchall()
     ]
+
+
+@router.get("/change-log")
+def get_competency_change_log(
+    limit: int = Query(100, ge=1, le=500),
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Return recent competency edits within the caller's editable module scope."""
+
+    editable_module_ids = resolve_editable_module_ids(cursor, current_user)
+    if editable_module_ids == set():
+        raise HTTPException(status_code=403, detail="没有查看能力修改记录的权限")
+
+    filters = ["h.change_source = 'WEB_BATCH_SAVE'"]
+    params = [limit]
+    if editable_module_ids is not None:
+        placeholders = ", ".join("?" for _ in editable_module_ids)
+        filters.append(f"s.module_id IN ({placeholders})")
+        params.extend(sorted(editable_module_ids))
+
+    cursor.execute(
+        f"""
+        SELECT TOP (?)
+            h.id,
+            h.version_id,
+            h.changed_at,
+            h.employee_id,
+            e.name AS employee_name,
+            s.module_id,
+            s.module_name,
+            h.skill_id,
+            s.skill_name,
+            h.previous_current_level,
+            h.current_level,
+            h.previous_target_level,
+            h.target_level,
+            h.notes,
+            h.changed_by_user_id,
+            u.name AS changed_by_name,
+            u.email AS changed_by_email
+        FROM dbo.competency_assessment_history h
+        INNER JOIN dbo.employees e ON e.id = h.employee_id
+        INNER JOIN dbo.skills s ON s.id = h.skill_id
+        LEFT JOIN dbo.users u ON u.id = h.changed_by_user_id
+        WHERE {' AND '.join(filters)}
+        ORDER BY h.changed_at DESC, h.id DESC
+        """,
+        params,
+    )
+    return {
+        "records": [
+            {
+                "id": str(row[0]),
+                "versionId": str(row[1]) if row[1] else None,
+                "changedAt": row[2].isoformat() if row[2] else None,
+                "employeeId": str(row[3]),
+                "employeeName": row[4],
+                "moduleId": int(row[5]),
+                "moduleName": row[6],
+                "skillId": int(row[7]),
+                "skillName": row[8],
+                "previousCurrentLevel": row[9],
+                "currentLevel": row[10],
+                "previousTargetLevel": row[11],
+                "targetLevel": row[12],
+                "notes": row[13],
+                "changedByUserId": str(row[14]) if row[14] else None,
+                "changedByName": row[15],
+                "changedByEmail": row[16],
+            }
+            for row in cursor.fetchall()
+        ]
+    }
 
 
 @router.get("/gap-trend")

@@ -36,6 +36,33 @@ The system SHALL keep edits as client-side drafts until Save is selected and SHA
 - **WHEN** the user discards unsaved changes
 - **THEN** the page restores persisted values and creates no database record
 
+### Requirement: Traceable competency changes
+
+The system SHALL record every successful competency save with the modification time, authenticated modifier and explicit before/after current and target Levels. Administrators SHALL be able to review all competency changes, while module Owners SHALL only be able to review changes in their owned modules. Ordinary users SHALL not have access to the change log.
+
+#### Scenario: Save a changed cell
+- **WHEN** an authorized user successfully changes a persisted competency cell
+- **THEN** its immutable history row records the save time, modifier user ID, business version ID, previous current/target Levels and new current/target Levels
+
+#### Scenario: Create a previously missing cell
+- **WHEN** an authorized user saves an employee-skill cell that did not previously exist
+- **THEN** the history row records NULL previous Levels and the submitted new Levels so the UI identifies the change as a new entry
+
+#### Scenario: Review change content
+- **WHEN** an administrator opens the competency change log
+- **THEN** the page shows the modification time, affected employee, module and skill, current/target before-and-after content, and modifier name/email
+- **WHEN** a module Owner opens the competency change log
+- **THEN** it contains only changes for modules currently owned by that user
+
+#### Scenario: Preserve pre-audit history
+- **WHEN** the audit schema is added to a database with existing history
+- **THEN** no existing row is updated or deleted
+- **AND** unavailable previous values remain NULL and are presented as legacy or unknown values
+
+#### Scenario: Rejected save creates no audit record
+- **WHEN** a batch fails validation, authorization or optimistic concurrency checks
+- **THEN** no version, latest projection or audit-history row is committed
+
 ### Requirement: Immutable annual competency baseline
 
 The system SHALL allow only administrators to create an annual baseline from a validated Excel import or, for years after 2026, a selected saved competency version and SHALL retain immutable baseline detail rows. The 2026 baseline MUST come from a business-confirmed year-start Excel, never from the 2026-07-03 migration snapshot.
@@ -155,3 +182,21 @@ The administrator UI SHALL warn uploaders to verify the exact `Current_Target st
 - **WHEN** an administrator previews a new valid workbook and explicitly confirms replacement
 - **THEN** the new version becomes the only active baseline for the year
 - **AND** the former active version and its immutable details remain available as history
+
+### Requirement: Guided active-baseline replacement
+
+The administrator UI SHALL make modification of an active annual baseline an explicit immutable replacement workflow. It SHALL allow the administrator to download the complete active baseline as a populated, re-importable `Current_Target states` workbook and SHALL explain the required download, edit, preview and confirm steps.
+
+#### Scenario: Download the active baseline for editing
+- **WHEN** an administrator selects “下载当前基线” for a year with an active baseline
+- **THEN** the system downloads only that active version's employee-skill cells with existing initial-current and annual-target values
+- **AND** the workbook can be uploaded through the same validation-preview process after editing
+
+#### Scenario: Start replacement from the current-status card
+- **WHEN** an administrator selects “修改/替换年初基线”
+- **THEN** the page directs focus to the upload area and shows the replacement steps
+- **AND** no persisted data changes until a valid preview is explicitly confirmed
+
+#### Scenario: Confirm replacement
+- **WHEN** an administrator confirms a valid replacement preview while the expected active version is still current
+- **THEN** the replacement becomes active, the previous version becomes historical and current assessments/history remain unchanged

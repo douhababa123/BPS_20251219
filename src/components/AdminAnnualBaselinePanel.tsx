@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Pencil, Trash2, Upload } from 'lucide-react';
 import {
   activateBaseline, activateBaselineFromVersion, downloadBaselineTemplate,
-  getAssessmentVersions, getBaselineStatus, previewBaseline, type BaselinePreview,
+  downloadActiveBaseline, getAssessmentVersions, getBaselineStatus, previewBaseline, type BaselinePreview,
 } from '../lib/annualBaselineApi';
 import { formatGap, formatLevel } from '../lib/dashboardProgressApi';
 
@@ -41,6 +41,7 @@ export function AdminAnnualBaselinePanel() {
   const [previewPage, setPreviewPage] = useState(1);
   const [fileInputKey, setFileInputKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadSectionRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const statusQuery = useQuery({ queryKey: ['annual-baseline-status', year], queryFn: () => getBaselineStatus(year) });
   const versionsQuery = useQuery({
@@ -101,6 +102,25 @@ export function AdminAnnualBaselinePanel() {
     } catch (error) {
       setMessage(apiError(error));
     }
+  };
+
+  const downloadCurrentBaseline = async () => {
+    try {
+      const blob = await downloadActiveBaseline(year);
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.download = `bps-${year}-active-baseline.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(href);
+    } catch (error) {
+      setMessage(apiError(error));
+    }
+  };
+
+  const startReplacement = () => {
+    uploadSectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    fileInputRef.current?.focus();
   };
 
   const clearPendingFile = () => {
@@ -166,13 +186,28 @@ export function AdminAnnualBaselinePanel() {
                 className="ml-2 w-24 rounded-lg border border-gray-300 px-3 py-2"
               />
             </label>
+            {statusQuery.data?.active && (
+              <button onClick={downloadCurrentBaseline} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800">
+                <Download className="h-4 w-4" />下载当前基线（用于修改）
+              </button>
+            )}
             <button onClick={downloadTemplate} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100">
-              <Download className="h-4 w-4" />下载模板
+              <Download className="h-4 w-4" />{statusQuery.data?.active ? '下载空白模板' : '下载模板'}
             </button>
           </div>
         </div>
 
-        <div className="mt-5 rounded-xl border border-dashed border-gray-300 p-5">
+        <div ref={uploadSectionRef} className="mt-5 rounded-xl border border-dashed border-gray-300 p-5">
+          <div className="mb-4">
+            <h4 className="font-semibold text-gray-900">
+              {statusQuery.data?.active ? `修改/替换 ${year} 年初基线` : `设置 ${year} 年初基线`}
+            </h4>
+            <ol className="mt-2 grid gap-2 text-sm text-gray-600 md:grid-cols-3">
+              <li><b>1.</b> {statusQuery.data?.active ? '下载当前基线并修改数值' : '下载空白模板并填写数值'}</li>
+              <li><b>2.</b> 选择修改后的 Excel，上传并检查完整预览</li>
+              <li><b>3.</b> 确认生效；旧版本保留，不覆盖当前能力和历史</li>
+            </ol>
+          </div>
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             上传前请检查工作表名称：系统只识别名称完全为 <code className="font-semibold">Current_Target states</code> 的工作表，其他工作表不会读取。
           </div>
@@ -243,7 +278,16 @@ export function AdminAnnualBaselinePanel() {
       {message && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">{message}</div>}
 
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
-        <h4 className="font-semibold text-gray-900">{year} 年当前状态</h4>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h4 className="font-semibold text-gray-900">{year} 年当前状态</h4>
+          {statusQuery.data?.active && (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={startReplacement} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-sm font-medium text-white hover:bg-blue-800">
+                <Pencil className="h-4 w-4" />修改/替换年初基线
+              </button>
+            </div>
+          )}
+        </div>
         {statusQuery.isLoading ? <p className="mt-3 text-sm text-gray-500">加载中…</p> : statusQuery.data?.active ? (
           <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
             <div><span className="text-gray-500">状态：</span><span className="font-medium text-green-700">已生效</span></div>
@@ -318,7 +362,11 @@ export function AdminAnnualBaselinePanel() {
               <div className="mt-5 flex justify-end gap-3">
                 <button onClick={clearPendingFile} className="rounded-lg border px-4 py-2 text-sm">取消</button>
                 <button disabled={activateMutation.isPending} onClick={confirmActivation} className="rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                  {activateMutation.isPending ? '生效中…' : `确认设为 ${year} 年初基线`}
+                  {activateMutation.isPending
+                    ? '生效中…'
+                    : statusQuery.data?.active
+                      ? `确认替换为 ${year} 年初基线`
+                      : `确认设为 ${year} 年初基线`}
                 </button>
               </div>
             </>

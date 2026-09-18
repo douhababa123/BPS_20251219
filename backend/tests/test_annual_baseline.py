@@ -3,7 +3,7 @@ from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
 
-from annual_baseline import build_template, parse_baseline_workbook, preview_payload
+from annual_baseline import build_baseline_export, build_template, parse_baseline_workbook, preview_payload
 
 
 MIGRATION = Path(__file__).resolve().parents[1] / "migrations" / "008_capability_governance.sql"
@@ -87,6 +87,23 @@ def test_template_has_blank_scores_instead_of_current_values():
     assert sheet["F2"].value is None
     assert sheet["G2"].value is None
     workbook.close()
+
+
+def test_active_baseline_export_contains_values_and_can_be_reimported():
+    contents = build_baseline_export([
+        ("E001", "Employee One", 7, "Module", "Skill", 1, 3),
+    ])
+    workbook = load_workbook(BytesIO(contents), data_only=True)
+    sheet = workbook["Current_Target states"]
+    assert sheet["A2"].value == "E001"
+    assert sheet["F2"].value == 1
+    assert sheet["G2"].value == 3
+    workbook.close()
+
+    parsed = parse_baseline_workbook(contents, EMPLOYEES, SKILLS, year=2026)
+    assert parsed["errors"] == []
+    assert parsed["cells"][0].initial_current == 1
+    assert parsed["cells"][0].annual_target == 3
 
 
 def test_missing_exact_current_target_sheet_lists_detected_sheets():

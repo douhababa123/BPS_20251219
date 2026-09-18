@@ -7,6 +7,7 @@ import {
   getCompetencyGapTrend,
   getMatrixData,
   saveAssessmentBatch,
+  getCompetencyChangeLog,
 } from '../competencyApi';
 
 vi.mock('../api-client', () => ({
@@ -46,6 +47,17 @@ const assessment = (
 describe('competencyApi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('loads scoped competency change records', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { records: [{ id: 'h1' }] } });
+
+    const records = await getCompetencyChangeLog(50);
+
+    expect(apiClient.get).toHaveBeenCalledWith('/competency-assessments/change-log', {
+      params: { limit: 50 },
+    });
+    expect(records).toEqual([{ id: 'h1' }]);
   });
 
   it('includes assessed zero values in averages and GAP', async () => {

@@ -428,13 +428,18 @@ class CompetencyAssessmentHistoryResponse(BaseModel):
     skill_id: int
     current_level: int
     target_level: int
+    previous_current_level: Optional[int] = None
+    previous_target_level: Optional[int] = None
     gap: int
     assessment_year: int
     assessment_quarter: int
     notes: Optional[str] = None
     changed_at: datetime
     changed_by_user_id: Optional[UUID] = None
+    changed_by_name: Optional[str] = None
+    changed_by_email: Optional[str] = None
     change_source: str
+    version_id: Optional[UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -75,6 +75,26 @@ export async function getAssessmentMatrix(): Promise<{
   return response.data;
 }
 
+export interface CompetencyChangeRecord {
+  id: string;
+  versionId: string | null;
+  changedAt: string | null;
+  employeeId: string;
+  employeeName: string;
+  moduleId: number;
+  moduleName: string;
+  skillId: number;
+  skillName: string;
+  previousCurrentLevel: number | null;
+  currentLevel: number;
+  previousTargetLevel: number | null;
+  targetLevel: number;
+  notes: string | null;
+  changedByUserId: string | null;
+  changedByName: string | null;
+  changedByEmail: string | null;
+}
+
 export async function saveAssessmentBatch(cells: AssessmentBatchSaveInput[]): Promise<{
   versionId: string;
   savedCount: number;
@@ -82,6 +102,13 @@ export async function saveAssessmentBatch(cells: AssessmentBatchSaveInput[]): Pr
 }> {
   const response = await apiClient.post('/competency-assessments/batch-save', { cells });
   return response.data;
+}
+
+export async function getCompetencyChangeLog(limit = 100): Promise<CompetencyChangeRecord[]> {
+  const response = await apiClient.get('/competency-assessments/change-log', {
+    params: { limit },
+  });
+  return (response.data as { records: CompetencyChangeRecord[] }).records;
 }
 
 export async function saveAssessment(

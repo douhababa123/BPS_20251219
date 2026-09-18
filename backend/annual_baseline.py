@@ -496,3 +496,30 @@ def build_template(rows: Iterable[Tuple[str, str, int, str, str]]) -> bytes:
     workbook.save(output)
     workbook.close()
     return output.getvalue()
+
+
+def build_baseline_export(rows: Iterable[Tuple[str, str, int, str, str, int, int]]) -> bytes:
+    """Build a populated long-form workbook that can be edited and re-imported."""
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = SOURCE_SHEET_NAME
+    worksheet.append([
+        "Employee ID",
+        "Employee Name",
+        "Skill ID",
+        "Module",
+        "Skill",
+        "Initial Current",
+        "Annual Target",
+    ])
+    for row in rows:
+        worksheet.append(list(row))
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = worksheet.dimensions
+    for column, width in {"A": 18, "B": 24, "C": 12, "D": 34, "E": 50, "F": 18, "G": 18}.items():
+        worksheet.column_dimensions[column].width = width
+    output = BytesIO()
+    workbook.save(output)
+    workbook.close()
+    return output.getvalue()

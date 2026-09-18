@@ -15,6 +15,7 @@ from routers.annual_baselines import (
     _preview_token,
     activate_import,
     activate_saved_version,
+    download_active_baseline,
     preview_import,
 )
 from test_annual_baseline import workbook_bytes
@@ -50,6 +51,41 @@ def test_preview_validates_without_writing_any_business_table():
     assert not any("competency_annual_baselines" in sql for sql in statements)
     assert not any("competency_assessment_history" in sql for sql in statements)
     assert not cursor.commit.called
+
+
+def test_download_active_baseline_exports_only_the_selected_active_version():
+    baseline_id = uuid4()
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (baseline_id,)
+    cursor.fetchall.return_value = [
+        ("E001", "Employee One", 7, "Module", "Skill", 1, 3),
+    ]
+
+    response = download_active_baseline(
+        year=2026,
+        cursor=cursor,
+        current_user={"role": "admin"},
+    )
+
+    statements = [call.args[0] for call in cursor.execute.call_args_list]
+    assert "filename=\"bps-2026-active-baseline.xlsx\"" in response.headers["content-disposition"]
+    assert any("WHERE baseline_year = ? AND is_active = 1" in sql for sql in statements)
+    assert any("WHERE i.baseline_id = ?" in sql for sql in statements)
+    assert cursor.execute.call_args_list[-1].args[1] == str(baseline_id)
+
+
+def test_download_active_baseline_rejects_year_without_active_version():
+    cursor = MagicMock()
+    cursor.fetchone.return_value = None
+
+    with pytest.raises(HTTPException) as error:
+        download_active_baseline(
+            year=2026,
+            cursor=cursor,
+            current_user={"role": "admin"},
+        )
+
+    assert error.value.status_code == 404
 
 
 def test_activation_rejects_a_preview_token_from_another_year_before_database_writes():

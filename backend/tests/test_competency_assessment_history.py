@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -79,7 +79,7 @@ def test_existing_save_updates_projection_and_appends_one_history(monkeypatch):
         (1,),
         (str(employee_id),),
         (str(uuid4()),),
-        (str(assessment_id),),
+        (str(assessment_id), 2, 4),
     ]
     now = datetime(2026, 7, 15, 9, 30, tzinfo=timezone.utc)
     monkeypatch.setattr(
@@ -227,12 +227,12 @@ def test_owner_configuration_does_not_require_missing_active_flag_on_definitions
 
 
 def test_batch_save_creates_one_version_for_all_cells(monkeypatch):
-    employee_one, employee_two = uuid4(), uuid4()
+    employee_one, employee_two = UUID(int=1), UUID(int=2)
     assessment_one, new_assessment, version_id = uuid4(), uuid4(), uuid4()
     now = datetime(2026, 9, 11, 9, 30)
     cursor = MagicMock()
     cursor.fetchone.side_effect = [
-        (1,), (str(employee_one),), (str(assessment_one), None),
+        (1,), (str(employee_one),), (str(assessment_one), None, 1, 3),
         (1,), (str(employee_two),), None,
         (str(version_id),),
         (str(new_assessment),),
@@ -255,6 +255,16 @@ def test_batch_save_creates_one_version_for_all_cells(monkeypatch):
     assert sum("INSERT INTO dbo.competency_assessment_versions" in sql for sql in statements) == 1
     assert sum("INSERT INTO dbo.competency_assessment_history" in sql for sql in statements) == 2
     assert not cursor.commit.called
+
+    history_calls = [
+        call for call in cursor.execute.call_args_list
+        if "INSERT INTO dbo.competency_assessment_history" in call.args[0]
+    ]
+    history_by_employee = {call.args[2]: call.args for call in history_calls}
+    assert history_by_employee[str(employee_one)][1:6] == (
+        str(assessment_one), str(employee_one), 7, 1, 3,
+    )
+    assert history_by_employee[str(employee_two)][4:6] == (None, None)
 
 
 def test_batch_conflict_rejects_before_any_version_or_update():

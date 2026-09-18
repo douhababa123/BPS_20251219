@@ -168,6 +168,11 @@ jobs:
           docker compose run --rm --no-deps backend \
             python run_migration.py migrations/008_capability_governance.sql
 
+          # 能力修改审计：仅增加可空的保存前值字段，不改写现有历史记录。
+          echo "🔧 应用能力修改审计数据库结构..."
+          docker compose run --rm --no-deps backend \
+            python run_migration.py migrations/009_competency_change_audit.sql
+
           # 启动新容器
           echo "🚀 启动新容器..."
           docker compose up -d

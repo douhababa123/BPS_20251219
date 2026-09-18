@@ -80,6 +80,14 @@ export async function downloadBaselineTemplate(): Promise<Blob> {
   return response.data as Blob;
 }
 
+export async function downloadActiveBaseline(year: number): Promise<Blob> {
+  const response = await apiClient.get('/admin/competency-annual-baselines/export', {
+    params: { year },
+    responseType: 'blob',
+  });
+  return response.data as Blob;
+}
+
 export async function previewBaseline(year: number, file: File): Promise<BaselinePreview> {
   const form = new FormData();
   form.append('year', String(year));
