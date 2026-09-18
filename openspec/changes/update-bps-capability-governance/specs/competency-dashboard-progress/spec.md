@@ -19,6 +19,10 @@ The system SHALL display year-start Level, target Level, current Level, year-sta
 - **WHEN** the selected year has no active annual baseline
 - **THEN** the system displays a missing-baseline state and does not substitute migration history
 
+#### Scenario: Resource-only employees are outside competency development KPIs
+- **WHEN** Tyler Tan or Tong Zhifeng has current competency assessments for resource matching
+- **THEN** those assessments do not enter annual Level, GAP, close-rate or trend calculations because neither employee is present in the annual baseline scope
+
 ### Requirement: Monthly GAP and close-rate trend
 
 The system SHALL display month-end total GAP as bars and YTD GAP close rate as a line in one dual-axis chart with consecutive natural months from January through the selected statistical month.

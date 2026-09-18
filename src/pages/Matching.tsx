@@ -745,7 +745,7 @@ export function Matching() {
                 <span>最佳候选综合得分 {matchingSummary.topScore}%</span>
               </div>
               <div className="text-xs text-gray-500 leading-relaxed">
-                系统先排除时间冲突、能力现状低于要求、缺少评估或角色不达标的人员，再按能力评分排序。
+                系统先应用时间、能力和角色门槛，再按能力评分排序；Tyler Tan 和 Tong Zhifeng 作为资源匹配专用人员不检查日程冲突。
               </div>
               <div
                 className={cn(
@@ -757,7 +757,7 @@ export function Matching() {
               >
                 {hasQualifiedCandidate ? (
                   <div className="space-y-2">
-                    <p>系统已识别 {qualifiedCandidates.length} 位同时满足时间、能力和角色硬条件的合适人选。</p>
+                    <p>系统已识别 {qualifiedCandidates.length} 位满足适用的时间、能力和角色硬条件的合适人选。</p>
                     <div className="flex flex-wrap gap-2 text-xs">
                       {qualifiedCandidates.slice(0, 4).map(candidate => (
                         <span key={candidate.userId} className="px-2 py-1 bg-white/70 rounded-full">

@@ -19,6 +19,11 @@ from .auth import get_current_user
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+SCHEDULE_EXEMPT_EMPLOYEE_CODES = frozenset({
+    '15001437',
+    'sch_tyler_tan',
+})
+
 
 # ============================================================================
 # 辅助函数
@@ -61,14 +66,19 @@ def matching_candidate_sort_key(candidate: Dict[str, Any]):
     )
 
 
+def is_schedule_exempt_employee(employee_code: str) -> bool:
+    return str(employee_code or '').strip().casefold() in SCHEDULE_EXEMPT_EMPLOYEE_CODES
+
+
 def candidate_passes_hard_gates(
     candidate_assessments: List[Dict],
     required_items: List[Dict],
     conflict_count: int,
     role_gate: str,
+    schedule_exempt: bool = False,
 ) -> bool:
     return (
-        conflict_count == 0
+        (schedule_exempt or conflict_count == 0)
         and meets_required_levels(candidate_assessments, required_items)
         and role_gate == 'OK'
     )
@@ -422,8 +432,9 @@ def preview_matching(
         
         # 获取所有活跃员工
         cursor.execute("""
-            SELECT e.id, e.name, 
-                   d.name as dept_name
+            SELECT e.id, e.name,
+                   d.name as dept_name,
+                   e.employee_id
             FROM dbo.employees e
             LEFT JOIN dbo.departments d ON e.department_id = d.id
             WHERE ISNULL(e.is_active, 1) = 1
@@ -444,7 +455,8 @@ def preview_matching(
                 'id': str(row[0]),
                 'name': row[1],
                 'dept': row[2] or 'Unknown',
-                'homeLocation': 'N/A'  # 工厂信息暂不可用
+                'homeLocation': 'N/A',  # 工厂信息暂不可用
+                'employeeCode': row[3] or '',
             })
         
         candidates = []
@@ -486,20 +498,29 @@ def preview_matching(
             
             # 3. 计算时间可用性（从任务表查询已占用时段）
             # 查询该员工在任务时间段内的已分配任务
-            cursor.execute("""
-                SELECT COUNT(*)
-                FROM dbo.tasks
-                WHERE assigned_employee_id = ?
-                  AND start_date <= ?
-                  AND end_date >= ?
-                  AND status NOT IN ('cancelled', 'completed')
-            """, employee_id, request.get('endDate'), request.get('startDate'))
-            
-            conflict_result = cursor.fetchone()
-            conflict_count = int(conflict_result[0] or 0) if conflict_result else 0
+            schedule_exempt = is_schedule_exempt_employee(emp['employeeCode'])
+            conflict_count = 0
+            if not schedule_exempt:
+                cursor.execute("""
+                    SELECT COUNT(*)
+                    FROM dbo.tasks
+                    WHERE assigned_employee_id = ?
+                      AND start_date <= ?
+                      AND end_date >= ?
+                      AND status NOT IN ('cancelled', 'completed')
+                """, employee_id, request.get('endDate'), request.get('startDate'))
+
+                conflict_result = cursor.fetchone()
+                conflict_count = int(conflict_result[0] or 0) if conflict_result else 0
 
             role_gate = check_role_gate(role, assessments, required_items, role_thresholds)
-            if not candidate_passes_hard_gates(assessments, required_items, conflict_count, role_gate):
+            if not candidate_passes_hard_gates(
+                assessments,
+                required_items,
+                conflict_count,
+                role_gate,
+                schedule_exempt=schedule_exempt,
+            ):
                 continue
 
             # All hard gates passed; calculate the score used only for ranking.

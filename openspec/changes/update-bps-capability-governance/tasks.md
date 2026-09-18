@@ -19,7 +19,7 @@
 
 ## 4. Annual baseline administration
 
-- [ ] 4.1 Obtain the confirmed year-start Excel and verify its layout against the proposed employee/skill ID and score template.
+- [x] 4.1 Obtain the confirmed year-start Excel and verify its layout against the proposed employee/skill ID and score template.
 - [x] 4.2 Add the Admin “年初基线管理” tab with year selection, active-baseline metadata, template download and revision inspection; link the Dashboard missing-baseline action with the selected year.
 - [x] 4.3 Add Excel upload validation and row-level errors plus detail/aggregate preview without business-data persistence; never populate baseline scores from current values or fill missing cells with zero.
 - [x] 4.4 Add administrator-confirmed atomic activation with server revalidation of previewed content and year; require Excel for 2026 and permit saved-version selection for later years.
@@ -46,6 +46,8 @@
 - [x] 7.1 Apply availability, assessment, level and role hard gates before ranking.
 - [x] 7.2 Return all eligible candidates with stable score/name ordering.
 - [x] 7.3 Add controlled L2/L3/L4 and conflicting-date tests for Huang Lanping's Logistic index scenario.
+- [x] 7.4 Exempt Tyler Tan and Tong Zhifeng from schedule-conflict matching gates while retaining active-account, competency and role gates.
+- [x] 7.5 Verify both resource-only employees remain available in the suggested-user selector and are excluded from annual KPI baseline rows.
 
 ## 8. Verification and release
 
@@ -53,3 +55,4 @@
 - [x] 8.2 Compare pre/post migration data checksums and row counts.
 - [ ] 8.3 Run authenticated browser acceptance checks for admin, each Owner scope and normal user.
 - [x] 8.4 Deploy through the existing DEV GitHub Actions workflow only after proposal approval.
+- [x] 8.5 Generate the confirmed 427-row 2026 baseline workbook without activating it or modifying current business data.

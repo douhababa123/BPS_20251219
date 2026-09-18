@@ -103,3 +103,27 @@ The system SHALL preview uploaded year-start Excel without writing business reco
 - **WHEN** baseline creation fails or the expected active version changed after preview
 - **THEN** the complete activation is rejected or rolled back, retaining the previous active baseline
 - **AND** a concurrency conflict requires the administrator to review the updated state before confirming again
+
+### Requirement: Confirmed 2026 source-workbook conversion
+
+The 2026 baseline conversion SHALL read only the visible C/T values in `Current_Target states`, map only uniquely identified active employees and active skills, omit resource-only employees Tyler Tan and Tong Zhifeng, and produce the standard long-form upload without modifying the source workbook or any database record.
+
+#### Scenario: Convert each C/T value combination
+- **WHEN** both C and T contain values
+- **THEN** the pair is included subject to `0 <= C <= T <= 4`
+- **WHEN** C is blank and T contains a value
+- **THEN** the pair is included with C equal to 0
+- **WHEN** C and T are both blank
+- **THEN** the pair is treated as not applicable and omitted
+- **WHEN** C contains a value and T is blank
+- **THEN** conversion fails validation unless the missing target has been explicitly confirmed
+
+#### Scenario: Apply the confirmed Xu Qingyue provisional target
+- **WHEN** the converter reaches Xu Qingyue / Ship to line with C equal to 1 and blank T
+- **THEN** it includes the row with annual target 2
+- **AND** later edits to the current assessment target do not retroactively change the immutable 2026 baseline target
+
+#### Scenario: Exclude resource-only employees from baseline
+- **WHEN** the 2026 standard upload workbook is generated
+- **THEN** it contains no baseline row for Tyler Tan or Tong Zhifeng
+- **AND** their current competency data, if later entered, remains available to resource matching
