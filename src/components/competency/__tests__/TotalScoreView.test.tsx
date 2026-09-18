@@ -11,13 +11,13 @@ vi.mock('recharts', () => {
     PolarGrid: Box,
     PolarAngleAxis: Box,
     CartesianGrid: Box,
-    XAxis: Box,
+    XAxis: ({ domain }: { domain?: unknown }) => domain ? <div data-testid="bar-domain">{JSON.stringify(domain)}</div> : <div />,
     Tooltip: Box,
     Legend: Box,
     RadarChart: ({ data, children }: { data: unknown; children?: React.ReactNode }) => <div data-testid="radar-data" data-value={JSON.stringify(data)}>{children}</div>,
-    BarChart: ({ data, children }: { data: unknown; children?: React.ReactNode }) => <div data-testid="bar-data" data-value={JSON.stringify(data)}>{children}</div>,
+    BarChart: ({ data, children, layout }: { data: unknown; children?: React.ReactNode; layout?: string }) => <div data-testid="bar-data" data-value={JSON.stringify(data)} data-layout={layout}>{children}</div>,
     PolarRadiusAxis: ({ domain }: { domain: unknown }) => <div data-testid="radar-domain">{JSON.stringify(domain)}</div>,
-    YAxis: ({ domain }: { domain: unknown }) => <div data-testid="bar-domain">{JSON.stringify(domain)}</div>,
+    YAxis: Box,
     Radar: ({ dataKey, label }: { dataKey: string; label?: (props: object) => React.ReactElement }) => {
       // Recharts' Radar label list exposes Cartesian x/y coordinates, but no
       // radar centre (cx/cy). Keep this mock aligned with the real contract.
@@ -42,6 +42,7 @@ describe('TotalScoreView', () => {
     expect(screen.getByTestId('bar-data')).toHaveAttribute('data-value', expect.stringContaining('"targetAverage":3'));
     expect(screen.getByTestId('radar-domain')).toHaveTextContent('[0,4]');
     expect(screen.getByTestId('bar-domain')).toHaveTextContent('[0,4]');
+    expect(screen.getByTestId('bar-data')).toHaveAttribute('data-layout', 'vertical');
     expect(screen.getByTestId('bar-currentAverage')).toHaveTextContent('2.0');
     expect(screen.getByTestId('bar-targetAverage')).toHaveTextContent('2.0');
     expect(screen.getByTestId('radar-currentAverage')).toHaveTextContent('2.0');
@@ -55,5 +56,13 @@ describe('TotalScoreView', () => {
     expect(screen.getByText('总实际分数')).toBeInTheDocument();
     expect(screen.getByText('总差距')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /模块总分详情/ })).toBeInTheDocument();
+  });
+
+  it('shows explicit empty states instead of empty chart axes', () => {
+    render(<TotalScoreView moduleStats={[]} />);
+
+    expect(screen.getAllByText('暂无模块平均分数据')).toHaveLength(2);
+    expect(screen.queryByTestId('radar-data')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('bar-data')).not.toBeInTheDocument();
   });
 });

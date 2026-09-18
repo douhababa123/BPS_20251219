@@ -13,6 +13,8 @@ vi.mock('recharts', () => ({
     <div data-testid="chart-data" data-points={JSON.stringify(data)}>{children}</div>
   ),
   Bar: () => <div data-testid="gap-bar" />,
+  Cell: () => null,
+  LabelList: () => null,
   Line: () => <div data-testid="rate-line" />,
   CartesianGrid: () => null,
   Legend: () => null,
@@ -76,6 +78,7 @@ describe('Dashboard annual competency KPIs', () => {
     expect(screen.getByText('GAP 关闭率（2026 YTD06）').parentElement).toHaveTextContent('20%');
     const chartPoints = JSON.parse(screen.getByTestId('chart-data').getAttribute('data-points') || '[]');
     expect(chartPoints.at(-1)).toMatchObject({ label: '202606', gap: 160, closeRate: 20 });
+    expect(screen.getByTestId('dashboard-gap-chart')).toHaveAccessibleName(/2026 年截至 06 月全部模块/);
     expect(vi.mocked(progressApi.getCompetencyProgress)).toHaveBeenCalledWith(2026, 6, null);
   });
 

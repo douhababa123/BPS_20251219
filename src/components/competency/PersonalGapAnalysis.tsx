@@ -15,6 +15,14 @@ import {
   YAxis,
 } from 'recharts';
 
+import {
+  CHART_AXIS_TICK,
+  CHART_COLORS,
+  CHART_TOOLTIP_LABEL_STYLE,
+  CHART_TOOLTIP_STYLE,
+  horizontalChartHeight,
+} from '../charts/chartTheme';
+import { ChartEmptyState } from '../charts/ChartEmptyState';
 import { formatNumber, type PersonalModuleStats, type PersonalSkillStats } from '../../lib/competencyAggregation';
 import { cn } from '../../lib/utils';
 
@@ -25,6 +33,8 @@ interface PersonalGapAnalysisProps {
   moduleStats: PersonalModuleStats[];
   skillStats: PersonalSkillStats[];
 }
+
+const formatPositiveGap = (value: unknown) => Number(value) > 0 ? formatNumber(Number(value)) : '';
 
 export function PersonalGapAnalysis({ employeeName, chartType, setChartType, moduleStats, skillStats }: PersonalGapAnalysisProps) {
   const radarData = chartType === 'module'
@@ -44,15 +54,54 @@ export function PersonalGapAnalysis({ employeeName, chartType, setChartType, mod
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
           <h3 className="text-lg font-bold text-gray-900 mb-4">{employeeName} - 能力雷达图</h3>
-          <ResponsiveContainer width="100%" height={430}>
-            <RadarChart data={radarData}><PolarGrid /><PolarAngleAxis dataKey="module" tick={{ fontSize: chartType === 'skill' ? 8 : 10 }} /><PolarRadiusAxis domain={[0, 4]} /><Radar name="现状" dataKey="current" stroke="#2563EB" fill="#2563EB" fillOpacity={0.3} /><Radar name="目标" dataKey="target" stroke="#F97316" fill="#F97316" fillOpacity={0.2} /><Legend /></RadarChart>
-          </ResponsiveContainer>
+          {radarData.length === 0 ? (
+            <ChartEmptyState message="暂无个人能力数据" />
+          ) : chartType === 'skill' ? (
+            <ResponsiveContainer width="100%" height={430}>
+              <RadarChart data={radarData}><PolarGrid /><PolarAngleAxis dataKey="module" tick={{ fontSize: 8 }} /><PolarRadiusAxis domain={[0, 4]} /><Radar name="现状" dataKey="current" stroke="#2563EB" fill="#2563EB" fillOpacity={0.3} /><Radar name="目标" dataKey="target" stroke="#F97316" fill="#F97316" fillOpacity={0.2} /><Legend /></RadarChart>
+            </ResponsiveContainer>
+          ) : (
+            <figure aria-label={`${employeeName} 的九大能力模块现状与目标雷达图`}>
+              <ResponsiveContainer width="100%" height={430}>
+                <RadarChart data={radarData} outerRadius="59%" cx="50%" cy="51%" margin={{ top: 24, right: 54, bottom: 30, left: 54 }}>
+                  <PolarGrid stroke={CHART_COLORS.grid} />
+                  <PolarAngleAxis dataKey="module" tick={{ fontSize: 9, fill: CHART_COLORS.axis }} tickLine={false} />
+                  <PolarRadiusAxis domain={[0, 4]} tick={{ fontSize: 9, fill: CHART_COLORS.axis }} axisLine={false} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} />
+                  <Radar name="现状" dataKey="current" stroke={CHART_COLORS.current} fill={CHART_COLORS.current} fillOpacity={0.24} strokeWidth={2.5} isAnimationActive={false} />
+                  <Radar name="目标" dataKey="target" stroke={CHART_COLORS.target} fill={CHART_COLORS.target} fillOpacity={0.12} strokeWidth={2.5} isAnimationActive={false} />
+                  <Legend verticalAlign="top" height={30} iconType="line" />
+                </RadarChart>
+              </ResponsiveContainer>
+              <figcaption className="sr-only">蓝色表示当前 Level，橙色表示目标 Level，最高为 4。</figcaption>
+            </figure>
+          )}
         </section>
         <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">差距分布 Gap Distribution</h3>
-          <ResponsiveContainer width="100%" height={430}>
-            <BarChart data={barData} margin={{ top: 24, bottom: 80, left: 10, right: 10 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" angle={-40} textAnchor="end" interval={0} height={100} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="Gap" fill="#EF4444" radius={[6, 6, 0, 0]}><LabelList dataKey="Gap" position="top" /></Bar></BarChart>
-          </ResponsiveContainer>
+          <h3 className="text-lg font-bold text-gray-900">差距分布 <span className="ml-1 text-sm font-medium text-gray-500">Gap Distribution</span></h3>
+          <p className="mb-4 mt-1 text-sm text-gray-500">按 GAP 从高到低显示，优先识别提升重点</p>
+          {barData.length === 0 ? (
+            <ChartEmptyState message="暂无个人 GAP 数据" />
+          ) : (
+            <figure aria-label={`${employeeName} 按${chartType === 'module' ? '模块' : '技能'}显示的 GAP 分布`}>
+              <div className="max-h-[430px] overflow-y-auto pr-1">
+                <div style={{ height: horizontalChartHeight(barData.length, 38, 380) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart layout="vertical" data={barData} margin={{ top: 8, bottom: 8, left: 8, right: 52 }}>
+                      <CartesianGrid horizontal={false} strokeDasharray="3 4" stroke={CHART_COLORS.grid} />
+                      <XAxis type="number" allowDecimals={false} tick={CHART_AXIS_TICK} tickLine={false} axisLine={{ stroke: CHART_COLORS.grid }} />
+                      <YAxis type="category" dataKey="name" width={190} interval={0} tick={{ ...CHART_AXIS_TICK, fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} formatter={(value) => [formatNumber(Number(value)), 'GAP']} />
+                      <Bar dataKey="Gap" name="GAP" fill={CHART_COLORS.gap} radius={[0, 5, 5, 0]} maxBarSize={20} isAnimationActive={false}>
+                        <LabelList dataKey="Gap" position="right" fill="#475569" fontSize={11} formatter={formatPositiveGap} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <figcaption className="sr-only">每个条形末端显示对应模块或技能的 GAP 数值。</figcaption>
+            </figure>
+          )}
         </section>
       </div>
 

@@ -16,6 +16,14 @@ import {
   YAxis,
 } from 'recharts';
 
+import {
+  CHART_AXIS_TICK,
+  CHART_COLORS,
+  CHART_TOOLTIP_LABEL_STYLE,
+  CHART_TOOLTIP_STYLE,
+  horizontalChartHeight,
+} from '../charts/chartTheme';
+import { ChartEmptyState } from '../charts/ChartEmptyState';
 import { formatNumber, type ModuleStats } from '../../lib/competencyAggregation';
 import { cn } from '../../lib/utils';
 
@@ -41,8 +49,34 @@ function radarValueLabel(color: string, yOffset: number) {
 }
 
 const currentRadarLabel = radarValueLabel('#2563EB', -7);
-const targetRadarLabel = radarValueLabel('#F97316', 14);
+const targetRadarLabel = radarValueLabel(CHART_COLORS.target, 14);
 const oneDecimal = (value: unknown) => Number(value).toFixed(1);
+
+interface RadarAxisTickProps {
+  x?: number;
+  y?: number;
+  textAnchor?: 'start' | 'middle' | 'end';
+  payload?: { value?: string };
+}
+
+function splitRadarLabel(value: string) {
+  if (value.length <= 19) return [value];
+  const words = value.split(/(?=[_])|\s+/).filter(Boolean);
+  if (words.length < 2) return [value];
+  const midpoint = Math.ceil(words.length / 2);
+  return [words.slice(0, midpoint).join(' '), words.slice(midpoint).join(' ')];
+}
+
+function RadarAxisTick({ x = 0, y = 0, textAnchor = 'middle', payload }: RadarAxisTickProps) {
+  const lines = splitRadarLabel(payload?.value || '');
+  return (
+    <text x={x} y={y} textAnchor={textAnchor} fill={CHART_COLORS.axis} fontSize={10}>
+      {lines.map((line, index) => (
+        <tspan key={`${line}-${index}`} x={x} dy={index === 0 ? 0 : 13}>{line}</tspan>
+      ))}
+    </text>
+  );
+}
 
 export function TotalScoreView({ moduleStats }: TotalScoreViewProps) {
   const chartData = moduleStats.map((module) => ({
@@ -66,32 +100,55 @@ export function TotalScoreView({ moduleStats }: TotalScoreViewProps) {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">9大能力模块平均分雷达图 Module Average Radar</h3>
-          <ResponsiveContainer width="100%" height={450}>
-            <RadarChart data={chartData}>
-              <PolarGrid stroke="#e5e7eb" />
-              <PolarAngleAxis dataKey="module" tick={{ fontSize: 10, fill: '#374151' }} tickLine={false} />
-              <PolarRadiusAxis angle={90} domain={[0, 4]} tick={{ fontSize: 9 }} />
-              <Radar name="平均现状" dataKey="currentAverage" stroke="#2563EB" fill="#2563EB" fillOpacity={0.3} strokeWidth={2} label={currentRadarLabel} />
-              <Radar name="平均目标" dataKey="targetAverage" stroke="#F97316" fill="#F97316" fillOpacity={0.2} strokeWidth={2} label={targetRadarLabel} />
-              <Legend />
-            </RadarChart>
-          </ResponsiveContainer>
+          <h3 className="text-lg font-bold text-gray-900">9大能力模块平均分雷达图</h3>
+          <p className="mt-1 text-sm text-gray-500">Module Average Radar · 评分范围 0–4</p>
+          {chartData.length === 0 ? (
+            <ChartEmptyState message="暂无模块平均分数据" />
+          ) : (
+            <figure aria-label="九大能力模块平均现状与平均目标雷达图">
+              <ResponsiveContainer width="100%" height={450}>
+                <RadarChart data={chartData} outerRadius="61%" cx="50%" cy="53%" margin={{ top: 28, right: 58, bottom: 32, left: 58 }}>
+                  <PolarGrid stroke={CHART_COLORS.grid} />
+                  <PolarAngleAxis dataKey="module" tick={<RadarAxisTick />} tickLine={false} />
+                  <PolarRadiusAxis angle={90} domain={[0, 4]} tick={{ fontSize: 9, fill: CHART_COLORS.axis }} axisLine={false} />
+                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} formatter={oneDecimal} />
+                  <Legend verticalAlign="top" height={30} iconType="line" />
+                  <Radar name="平均现状" dataKey="currentAverage" stroke={CHART_COLORS.current} fill={CHART_COLORS.current} fillOpacity={0.24} strokeWidth={2.5} label={currentRadarLabel} isAnimationActive={false} />
+                  <Radar name="平均目标" dataKey="targetAverage" stroke={CHART_COLORS.target} fill={CHART_COLORS.target} fillOpacity={0.12} strokeWidth={2.5} label={targetRadarLabel} isAnimationActive={false} />
+                </RadarChart>
+              </ResponsiveContainer>
+              <figcaption className="sr-only">蓝色表示平均现状，橙色表示平均目标，各模块最高为 4 分。</figcaption>
+            </figure>
+          )}
         </section>
 
         <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">模块平均分对比 Module Average Comparison</h3>
-          <ResponsiveContainer width="100%" height={450}>
-            <BarChart data={chartData} margin={{ top: 24, bottom: 80, left: 10, right: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="module" angle={-40} textAnchor="end" interval={0} height={100} tick={{ fontSize: 9 }} />
-              <YAxis domain={[0, 4]} tick={{ fontSize: 10 }} />
-              <Tooltip formatter={oneDecimal} />
-              <Legend />
-              <Bar dataKey="targetAverage" name="平均目标" fill="#F97316" radius={[6, 6, 0, 0]}><LabelList dataKey="targetAverage" position="top" formatter={oneDecimal} /></Bar>
-              <Bar dataKey="currentAverage" name="平均现状" fill="#2563EB" radius={[6, 6, 0, 0]}><LabelList dataKey="currentAverage" position="top" formatter={oneDecimal} /></Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <h3 className="text-lg font-bold text-gray-900">模块平均分对比</h3>
+          <p className="mt-1 text-sm text-gray-500">Module Average Comparison · 评分范围 0–4</p>
+          {chartData.length === 0 ? (
+            <ChartEmptyState message="暂无模块平均分数据" />
+          ) : (
+            <figure aria-label="九大能力模块平均现状与平均目标水平对比图">
+              <div style={{ height: horizontalChartHeight(chartData.length, 40, 420) }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart layout="vertical" data={chartData} margin={{ top: 18, bottom: 8, left: 8, right: 44 }} barGap={3}>
+                    <CartesianGrid horizontal={false} strokeDasharray="3 4" stroke={CHART_COLORS.grid} />
+                    <XAxis type="number" domain={[0, 4]} tick={CHART_AXIS_TICK} tickLine={false} axisLine={{ stroke: CHART_COLORS.grid }} />
+                    <YAxis type="category" dataKey="module" width={178} interval={0} tick={{ ...CHART_AXIS_TICK, fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} formatter={oneDecimal} />
+                    <Legend verticalAlign="top" align="right" height={34} iconType="square" />
+                    <Bar dataKey="currentAverage" name="平均现状" fill={CHART_COLORS.current} radius={[0, 5, 5, 0]} maxBarSize={13} isAnimationActive={false}>
+                      <LabelList dataKey="currentAverage" position="right" fill="#475569" fontSize={11} formatter={oneDecimal} />
+                    </Bar>
+                    <Bar dataKey="targetAverage" name="平均目标" fill={CHART_COLORS.target} radius={[0, 5, 5, 0]} maxBarSize={13} isAnimationActive={false}>
+                      <LabelList dataKey="targetAverage" position="right" fill="#475569" fontSize={11} formatter={oneDecimal} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <figcaption className="sr-only">每个模块以蓝色条表示平均现状，以橙色条表示平均目标。</figcaption>
+            </figure>
+          )}
         </section>
       </div>
 

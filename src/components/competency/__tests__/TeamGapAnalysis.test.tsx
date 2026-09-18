@@ -10,7 +10,7 @@ vi.mock('recharts', () => {
   const Box = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
   return {
     ResponsiveContainer: Box,
-    BarChart: Box,
+    BarChart: ({ children, layout }: { children?: React.ReactNode; layout?: string }) => <div data-testid="team-bar-chart" data-layout={layout}>{children}</div>,
     Bar: Box,
     LineChart: Box,
     Line: Box,
@@ -80,6 +80,9 @@ describe('TeamGapAnalysis', () => {
     expect(screen.queryByText('平均 GAP')).not.toBeInTheDocument();
     expect(screen.queryByText('排名')).not.toBeInTheDocument();
     expect(screen.getByText(/No Data/, { selector: 'p' })).toHaveTextContent('暂无评估：');
+    expect(screen.getByText('2026 年暂无季度 GAP 历史数据')).toBeInTheDocument();
+    expect(screen.getAllByTestId('team-bar-chart')).toHaveLength(2);
+    expect(screen.getAllByTestId('team-bar-chart').every(chart => chart.dataset.layout === 'vertical')).toBe(true);
   });
 
   it('resets an incompatible trend skill when the module changes', () => {

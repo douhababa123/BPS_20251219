@@ -2,9 +2,13 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, BarChart3, CalendarDays, Filter, Settings } from 'lucide-react';
 import {
-  Bar, CartesianGrid, ComposedChart, Legend, Line,
+  Bar, CartesianGrid, Cell, ComposedChart, LabelList, Line,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
+import {
+  CHART_AXIS_TICK,
+  CHART_COLORS,
+} from '../components/charts/chartTheme';
 import { useNewAuth } from '../contexts/NewAuthContext';
 import {
   formatCloseRate, formatGap, formatLevel, getCompetencyModules,
@@ -61,6 +65,24 @@ function ProgressTooltip({ active, payload, label, zeroInitialGap }: {
       {zeroInitialGap && (
         <p className="mt-1 text-amber-700">年初 GAP 为 0，关闭率不适用</p>
       )}
+    </div>
+  );
+}
+
+function ProgressLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-slate-600" aria-label="图例">
+      <span className="inline-flex items-center gap-2">
+        <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: CHART_COLORS.gapPrimary }} aria-hidden="true" />
+        GAP 总分
+      </span>
+      <span className="inline-flex items-center gap-2">
+        <span className="relative h-2.5 w-5" aria-hidden="true">
+          <span className="absolute left-0 right-0 top-1/2 border-t-2" style={{ borderColor: CHART_COLORS.closeRate }} />
+          <span className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-white" style={{ borderColor: CHART_COLORS.closeRate }} />
+        </span>
+        GAP 关闭率
+      </span>
     </div>
   );
 }
@@ -200,25 +222,89 @@ export function Dashboard() {
 
           {progress.status === 'ready' && (
             <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900">GAP 关闭趋势</h3>
-              <p className="mb-4 text-sm text-gray-500">月末 GAP 总分与 YTD GAP 关闭率</p>
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">GAP 关闭趋势</h3>
+                  <p className="mt-1 text-sm text-gray-500">月末 GAP 总分与 YTD GAP 关闭率</p>
+                </div>
+                <ProgressLegend />
+              </div>
               {progress.kpis?.initialGap === 0 && (
                 <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                   年初 GAP 为 0，GAP 关闭率不适用；折线及其提示值显示为 —。
                 </p>
               )}
-              <ResponsiveContainer width="100%" height={360}>
-                <ComposedChart data={progress.monthly} margin={{ top: 10, right: 12, left: 4, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                  <YAxis yAxisId="gap" allowDecimals={false} />
-                  <YAxis yAxisId="rate" orientation="right" domain={[0, 100]} tickFormatter={value => `${value}%`} />
-                  <Tooltip content={<ProgressTooltip zeroInitialGap={progress.kpis?.initialGap === 0} />} />
-                  <Legend />
-                  <Bar yAxisId="gap" dataKey="gap" name="GAP 总分" fill="#166985" radius={[5, 5, 0, 0]} />
-                  <Line yAxisId="rate" type="monotone" dataKey="closeRate" name="GAP 关闭率" stroke="#f97316" strokeWidth={2.5} connectNulls={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
+              <figure
+                aria-label={`${selectedYear} 年截至 ${monthText} 月${moduleName}的月末 GAP 总分和累计 GAP 关闭率趋势`}
+                data-testid="dashboard-gap-chart"
+              >
+                <ResponsiveContainer width="100%" height={360}>
+                  <ComposedChart data={progress.monthly} margin={{ top: 26, right: 18, left: 12, bottom: 8 }}>
+                    <CartesianGrid vertical={false} strokeDasharray="3 4" stroke={CHART_COLORS.grid} />
+                    <XAxis
+                      dataKey="label"
+                      tick={CHART_AXIS_TICK}
+                      tickLine={false}
+                      axisLine={{ stroke: CHART_COLORS.grid }}
+                      dy={8}
+                    />
+                    <YAxis
+                      yAxisId="gap"
+                      allowDecimals={false}
+                      tick={CHART_AXIS_TICK}
+                      tickLine={false}
+                      axisLine={false}
+                      width={48}
+                      label={{ value: 'GAP 总分', angle: -90, position: 'insideLeft', fill: CHART_COLORS.axis, fontSize: 11 }}
+                    />
+                    <YAxis
+                      yAxisId="rate"
+                      orientation="right"
+                      domain={[0, 100]}
+                      tick={CHART_AXIS_TICK}
+                      tickLine={false}
+                      axisLine={false}
+                      width={52}
+                      tickFormatter={value => `${value}%`}
+                      label={{ value: '关闭率', angle: 90, position: 'insideRight', fill: CHART_COLORS.axis, fontSize: 11 }}
+                    />
+                    <Tooltip content={<ProgressTooltip zeroInitialGap={progress.kpis?.initialGap === 0} />} />
+                    <Bar
+                      yAxisId="gap"
+                      dataKey="gap"
+                      name="GAP 总分"
+                      fill={CHART_COLORS.gapPrimary}
+                      radius={[5, 5, 0, 0]}
+                      maxBarSize={72}
+                      isAnimationActive={false}
+                    >
+                      {progress.monthly.map((point, index) => (
+                        <Cell
+                          key={point.label}
+                          fill={index === progress.monthly.length - 1 ? '#0B4F6C' : CHART_COLORS.gapPrimary}
+                          fillOpacity={index === progress.monthly.length - 1 ? 1 : 0.78}
+                        />
+                      ))}
+                      <LabelList dataKey="gap" position="top" fill="#475569" fontSize={11} formatter={value => formatGap(Number(value))} />
+                    </Bar>
+                    <Line
+                      yAxisId="rate"
+                      type="monotone"
+                      dataKey="closeRate"
+                      name="GAP 关闭率"
+                      stroke={CHART_COLORS.closeRate}
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: '#FFFFFF', stroke: CHART_COLORS.closeRate, strokeWidth: 2 }}
+                      activeDot={{ r: 6, fill: CHART_COLORS.closeRate, stroke: '#FFFFFF', strokeWidth: 2 }}
+                      connectNulls={false}
+                      isAnimationActive={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <figcaption className="sr-only">
+                  柱形表示每月 GAP 总分，折线表示以年初 GAP 为基准的累计关闭率；深色柱表示当前选择的 YTD 月份。
+                </figcaption>
+              </figure>
             </div>
           )}
         </>

@@ -8,7 +8,7 @@ vi.mock('recharts', () => {
   const Box = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
   return {
     ResponsiveContainer: Box,
-    RadarChart: Box,
+    RadarChart: ({ data, children }: { data?: unknown; children?: React.ReactNode }) => <div data-testid="personal-radar-data" data-value={JSON.stringify(data)}>{children}</div>,
     Radar: Box,
     PolarGrid: Box,
     PolarAngleAxis: Box,
@@ -18,7 +18,7 @@ vi.mock('recharts', () => {
     XAxis: Box,
     YAxis: Box,
     Tooltip: Box,
-    BarChart: ({ data, children }: { data: unknown; children?: React.ReactNode }) => <div data-testid="personal-bar-data" data-value={JSON.stringify(data)}>{children}</div>,
+    BarChart: ({ data, children, layout }: { data: unknown; children?: React.ReactNode; layout?: string }) => <div data-testid="personal-bar-data" data-value={JSON.stringify(data)} data-layout={layout}>{children}</div>,
     Bar: Box,
     LabelList: Box,
   };
@@ -40,5 +40,13 @@ describe('PersonalGapAnalysis', () => {
     expect(screen.queryByRole('columnheader', { name: '平均 GAP' })).not.toBeInTheDocument();
     expect(screen.getByTestId('personal-module-gap-1')).toHaveTextContent('3');
     expect(screen.getByTestId('personal-bar-data')).toHaveAttribute('data-value', expect.stringContaining('"Gap":3'));
+    expect(screen.getByTestId('personal-bar-data')).toHaveAttribute('data-layout', 'vertical');
+  });
+
+  it('keeps skill mode as a radar chart', () => {
+    render(<PersonalGapAnalysis employeeName="Amy" chartType="skill" setChartType={vi.fn()} moduleStats={modules} skillStats={skills} />);
+
+    expect(screen.getByTestId('personal-radar-data')).toHaveAttribute('data-value', expect.stringContaining('"module":"Skill 1"'));
+    expect(screen.getByTestId('personal-bar-data')).toHaveAttribute('data-value', expect.stringContaining('"name":"Skill 1"'));
   });
 });
