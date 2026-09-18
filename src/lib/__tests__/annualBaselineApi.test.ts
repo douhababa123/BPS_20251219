@@ -18,6 +18,9 @@ describe('annual baseline API', () => {
     expect(body).toBeInstanceOf(FormData);
     expect((body as FormData).get('year')).toBe('2026');
     expect((body as FormData).get('file')).toBe(file);
+    expect(vi.mocked(apiClient.post).mock.calls[0][2]).toEqual({
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
   });
 
   it('binds activation to the preview hash and expected active baseline', async () => {
@@ -30,6 +33,9 @@ describe('annual baseline API', () => {
     expect(body.get('preview_token')).toBe('b'.repeat(64));
     expect(body.get('replace')).toBe('true');
     expect(body.get('expected_active_baseline_id')).toBe('old-baseline');
+    expect(vi.mocked(apiClient.post).mock.calls[0][2]).toEqual({
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
   });
 
   it('uses the independent saved-version activation endpoint for later years', async () => {

@@ -106,7 +106,16 @@ The system SHALL preview uploaded year-start Excel without writing business reco
 
 ### Requirement: Confirmed 2026 source-workbook conversion
 
-The 2026 baseline conversion SHALL read only the visible C/T values in `Current_Target states`, map only uniquely identified active employees and active skills, omit resource-only employees Tyler Tan and Tong Zhifeng, and produce the standard long-form upload without modifying the source workbook or any database record.
+The annual baseline importer SHALL require a worksheet named exactly `Current_Target states`, ignore every other worksheet, and automatically accept either the standard long-form template or the confirmed original wide C/T layout on that sheet. The 2026 wide-layout conversion SHALL read only the visible C/T values, map only uniquely identified active employees and active skills, omit resource-only employees Tyler Tan and Tong Zhifeng, and create preview rows without modifying the source workbook or any database record.
+
+#### Scenario: Exact source sheet is present
+- **WHEN** an administrator uploads a workbook containing `Current_Target states` and additional worksheets
+- **THEN** the system reads only `Current_Target states` and reports that sheet name in the preview
+
+#### Scenario: Exact source sheet is missing
+- **WHEN** an administrator uploads a workbook without a worksheet named exactly `Current_Target states`
+- **THEN** validation fails without writing business data
+- **AND** the response identifies the required name and the worksheet names that were detected
 
 #### Scenario: Convert each C/T value combination
 - **WHEN** both C and T contain values
@@ -127,3 +136,22 @@ The 2026 baseline conversion SHALL read only the visible C/T values in `Current_
 - **WHEN** the 2026 standard upload workbook is generated
 - **THEN** it contains no baseline row for Tyler Tan or Tong Zhifeng
 - **AND** their current competency data, if later entered, remains available to resource matching
+
+### Requirement: Complete removable baseline preview
+
+The administrator UI SHALL warn uploaders to verify the exact `Current_Target states` worksheet name before selection, SHALL display all converted rows through a paginated preview with source coordinates and conversion results, and SHALL allow an unconfirmed file and its preview to be removed without persistence. Validation failures SHALL be shown as actionable row, field and reason messages rather than a generic transport error.
+
+#### Scenario: Preview original wide workbook
+- **WHEN** an administrator uploads a valid confirmed wide workbook
+- **THEN** the preview shows the source sheet, source employee count, imported count, omitted not-applicable count, error count and KPI aggregates
+- **AND** every converted row is available in the paginated detail table before activation
+
+#### Scenario: Remove a pending upload
+- **WHEN** the administrator removes a selected file before activation
+- **THEN** the file control, preview and validation messages are cleared
+- **AND** no baseline or other business row is written
+
+#### Scenario: Replace an active baseline from a new upload
+- **WHEN** an administrator previews a new valid workbook and explicitly confirms replacement
+- **THEN** the new version becomes the only active baseline for the year
+- **AND** the former active version and its immutable details remain available as history

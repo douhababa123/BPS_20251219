@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Trash2, Upload } from 'lucide-react';
 import {
   activateBaseline, activateBaselineFromVersion, downloadBaselineTemplate,
   getAssessmentVersions, getBaselineStatus, previewBaseline, type BaselinePreview,
@@ -11,9 +11,24 @@ function apiError(error: unknown): string {
   const candidate = error as { response?: { data?: { detail?: unknown } }; message?: string };
   const detail = candidate.response?.data?.detail;
   if (typeof detail === 'string') return detail;
-  if (detail && typeof detail === 'object' && 'message' in detail) return String((detail as { message: unknown }).message);
+  if (Array.isArray(detail)) {
+    return detail.map(item => {
+      const value = item as { loc?: Array<string | number>; msg?: string };
+      const field = value.loc?.slice(1).join('.') || '请求';
+      return `${field}：${value.msg || '参数无效'}`;
+    }).join('；');
+  }
+  if (detail && typeof detail === 'object' && 'message' in detail) {
+    const value = detail as { message: unknown; errors?: Array<{ row?: number; field?: string; message?: string }> };
+    const first = value.errors?.[0];
+    return first
+      ? `${String(value.message)}：第 ${first.row || '-'} 行 ${first.field || ''} ${first.message || ''}`.trim()
+      : String(value.message);
+  }
   return candidate.message || '操作失败';
 }
+
+const PREVIEW_PAGE_SIZE = 50;
 
 export function AdminAnnualBaselinePanel() {
   const initialYear = Number(new URLSearchParams(window.location.search).get('year')) || new Date().getFullYear();
@@ -22,6 +37,10 @@ export function AdminAnnualBaselinePanel() {
   const [preview, setPreview] = useState<BaselinePreview | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [previewSearch, setPreviewSearch] = useState('');
+  const [previewPage, setPreviewPage] = useState(1);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const statusQuery = useQuery({ queryKey: ['annual-baseline-status', year], queryFn: () => getBaselineStatus(year) });
   const versionsQuery = useQuery({
@@ -31,7 +50,7 @@ export function AdminAnnualBaselinePanel() {
   });
   const previewMutation = useMutation({
     mutationFn: () => previewBaseline(year, file!),
-    onSuccess: value => { setPreview(value); setMessage(null); },
+    onSuccess: value => { setPreview(value); setPreviewSearch(''); setPreviewPage(1); setMessage(null); },
     onError: error => { setPreview(null); setMessage(apiError(error)); },
   });
   const activateMutation = useMutation({
@@ -45,6 +64,8 @@ export function AdminAnnualBaselinePanel() {
     onSuccess: async () => {
       setPreview(null);
       setFile(null);
+      setFileInputKey(value => value + 1);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setMessage(`${year} 年初基线已生效；当前能力和历史数据未被覆盖。`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['annual-baseline-status', year] }),
@@ -82,6 +103,30 @@ export function AdminAnnualBaselinePanel() {
     }
   };
 
+  const clearPendingFile = () => {
+    setFile(null);
+    setFileInputKey(value => value + 1);
+    setPreview(null);
+    setPreviewSearch('');
+    setPreviewPage(1);
+    setMessage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const filteredPreviewRows = useMemo(() => {
+    const query = previewSearch.trim().toLocaleLowerCase();
+    if (!preview || !query) return preview?.rows || [];
+    return preview.rows.filter(row => [
+      row.employeeId, row.employeeName, row.moduleName, row.skillName,
+      row.sourceCells, row.conversionRule,
+    ].some(value => String(value).toLocaleLowerCase().includes(query)));
+  }, [preview, previewSearch]);
+  const previewPageCount = Math.max(1, Math.ceil(filteredPreviewRows.length / PREVIEW_PAGE_SIZE));
+  const previewRows = filteredPreviewRows.slice(
+    (previewPage - 1) * PREVIEW_PAGE_SIZE,
+    previewPage * PREVIEW_PAGE_SIZE,
+  );
+
   const confirmActivation = () => {
     if (!preview?.valid || !file) return;
     const replacement = statusQuery.data?.active;
@@ -117,7 +162,7 @@ export function AdminAnnualBaselinePanel() {
                 min={2000}
                 max={2100}
                 value={year}
-                onChange={event => { setYear(Number(event.target.value)); setPreview(null); setFile(null); setSelectedVersionId(''); setMessage(null); }}
+                onChange={event => { setYear(Number(event.target.value)); clearPendingFile(); setSelectedVersionId(''); }}
                 className="ml-2 w-24 rounded-lg border border-gray-300 px-3 py-2"
               />
             </label>
@@ -128,18 +173,31 @@ export function AdminAnnualBaselinePanel() {
         </div>
 
         <div className="mt-5 rounded-xl border border-dashed border-gray-300 p-5">
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            上传前请检查工作表名称：系统只识别名称完全为 <code className="font-semibold">Current_Target states</code> 的工作表，其他工作表不会读取。
+          </div>
           <label className="flex cursor-pointer flex-col items-center gap-2 text-center">
             <FileSpreadsheet className="h-9 w-9 text-green-600" />
             <span className="text-sm font-medium text-gray-800">选择经业务确认的年初 Excel（.xlsx）</span>
             <span className="text-xs text-gray-500">2026-07-03 迁移快照不会被自动作为年初基线</span>
             <input
+              key={fileInputKey}
+              ref={fileInputRef}
               aria-label="上传年初基线 Excel"
               type="file"
               accept=".xlsx"
               className="mt-2 text-sm"
-              onChange={event => { setFile(event.target.files?.[0] || null); setPreview(null); setMessage(null); }}
+              onChange={event => { setFile(event.target.files?.[0] || null); setPreview(null); setPreviewSearch(''); setPreviewPage(1); setMessage(null); }}
             />
           </label>
+          {file && (
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-sm">
+              <span className="max-w-full truncate text-gray-700" title={file.name}>{file.name}</span>
+              <button type="button" onClick={clearPendingFile} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-red-700 hover:bg-red-50">
+                <Trash2 className="h-4 w-4" />移除文件
+              </button>
+            </div>
+          )}
           <div className="mt-4 flex justify-center">
             <button
               disabled={!file || previewMutation.isPending}
@@ -214,22 +272,51 @@ export function AdminAnnualBaselinePanel() {
             <div>目标 Level <b>{formatLevel(preview.summary.targetLevel)}</b></div>
             <div>年初 GAP <b>{formatGap(preview.summary.initialGap)}</b></div>
           </div>
+          <div className="mt-4 grid gap-2 rounded-lg bg-gray-50 p-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>工作表 <b>{preview.source.sheetName}</b></div>
+            <div>格式 <b>{preview.source.layout === 'WIDE_CT' ? '原始 C/T 宽表' : '标准长表'}</b></div>
+            <div>源员工行 <b>{preview.source.sourceEmployeeCount}</b></div>
+            <div>不适用省略 <b>{preview.source.omittedCellCount}</b></div>
+            <div>排除人员 <b>{preview.source.excludedEmployeeCount}</b></div>
+            <div>忽略旧列 <b>{preview.source.ignoredSkillColumnCount}</b></div>
+            <div>错误 <b className={preview.source.errorCount ? 'text-red-700' : 'text-green-700'}>{preview.source.errorCount}</b></div>
+            <div>可预览明细 <b>{preview.rows.length}</b></div>
+          </div>
           {preview.errors.length > 0 && (
             <div className="mt-4 max-h-56 overflow-auto rounded-lg border border-red-200 bg-red-50 p-3">
               {preview.errors.map((error, index) => <p key={`${error.row}-${error.field}-${index}`} className="text-sm text-red-700">第 {error.row || '-'} 行 · {error.field}：{error.message}</p>)}
             </div>
           )}
-          {preview.valid && (
+          {preview.rows.length > 0 && (
             <>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <input
+                  aria-label="筛选基线预览"
+                  value={previewSearch}
+                  onChange={event => { setPreviewSearch(event.target.value); setPreviewPage(1); }}
+                  placeholder="搜索员工、模块、技能或来源单元格"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm sm:max-w-md"
+                />
+                <span className="text-xs text-gray-500">共 {filteredPreviewRows.length} 条，第 {previewPage}/{previewPageCount} 页</span>
+              </div>
               <div className="mt-4 max-h-80 overflow-auto rounded-lg border">
                 <table className="w-full text-left text-xs">
-                  <thead className="sticky top-0 bg-gray-50"><tr><th className="p-2">行</th><th>员工</th><th>模块 / 技能</th><th>年初</th><th>目标</th><th>GAP</th></tr></thead>
-                  <tbody>{preview.rows.map(row => <tr key={row.row} className="border-t"><td className="p-2">{row.row}</td><td>{row.employeeName} ({row.employeeId})</td><td>{row.moduleName} / {row.skillName}</td><td>{row.initialCurrent}</td><td>{row.annualTarget}</td><td>{row.gap}</td></tr>)}</tbody>
+                  <thead className="sticky top-0 bg-gray-50"><tr><th className="p-2">行</th><th>来源</th><th>员工</th><th>模块 / 技能</th><th>年初</th><th>目标</th><th>GAP</th><th>转换规则</th></tr></thead>
+                  <tbody>{previewRows.map(row => <tr key={`${row.row}-${row.skillId}`} className="border-t"><td className="p-2">{row.row}</td><td>{row.sourceCells || '—'}</td><td>{row.employeeName} ({row.employeeId})</td><td>{row.moduleName} / {row.skillName}</td><td>{row.initialCurrent}</td><td>{row.annualTarget}</td><td>{row.gap}</td><td className="pr-2">{row.conversionRule || '—'}</td></tr>)}</tbody>
                 </table>
               </div>
-              {preview.rowsTruncated && <p className="mt-2 text-xs text-gray-500">明细较多，页面只展示前 200 行；全部行均已校验。</p>}
+              {previewPageCount > 1 && (
+                <div className="mt-3 flex justify-end gap-2">
+                  <button disabled={previewPage === 1} onClick={() => setPreviewPage(page => Math.max(1, page - 1))} className="rounded-lg border px-3 py-1.5 text-sm disabled:opacity-40">上一页</button>
+                  <button disabled={previewPage === previewPageCount} onClick={() => setPreviewPage(page => Math.min(previewPageCount, page + 1))} className="rounded-lg border px-3 py-1.5 text-sm disabled:opacity-40">下一页</button>
+                </div>
+              )}
+            </>
+          )}
+          {preview.valid && (
+            <>
               <div className="mt-5 flex justify-end gap-3">
-                <button onClick={() => setPreview(null)} className="rounded-lg border px-4 py-2 text-sm">取消</button>
+                <button onClick={clearPendingFile} className="rounded-lg border px-4 py-2 text-sm">取消</button>
                 <button disabled={activateMutation.isPending} onClick={confirmActivation} className="rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
                   {activateMutation.isPending ? '生效中…' : `确认设为 ${year} 年初基线`}
                 </button>

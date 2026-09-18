@@ -112,7 +112,7 @@ def _master_data(cursor):
         """
     )
     employees = {
-        str(row[1]).strip(): {"id": str(row[0]), "name": row[2] or ""}
+        str(row[1]).strip(): {"id": str(row[0]), "code": str(row[1]).strip(), "name": row[2] or ""}
         for row in cursor.fetchall()
     }
     cursor.execute(
@@ -124,6 +124,7 @@ def _master_data(cursor):
     )
     skills = {
         int(row[0]): {
+            "id": int(row[0]),
             "module_id": int(row[1]),
             "module_name": row[2] or "",
             "skill_name": row[3] or "",
@@ -201,6 +202,7 @@ def download_template(
         CROSS JOIN dbo.skills s
         WHERE ISNULL(e.is_active, 1) = 1
           AND ISNULL(s.is_active, 1) = 1
+          AND LOWER(LTRIM(RTRIM(e.name))) NOT IN ('tyler tan', 'tong zhifeng')
         ORDER BY e.name, s.module_id, ISNULL(s.display_order, 0), s.id
         """
     )
@@ -222,7 +224,7 @@ async def preview_import(
     del current_user
     contents = await _read_xlsx(file)
     employees, skills = _master_data(cursor)
-    parsed = parse_baseline_workbook(contents, employees, skills)
+    parsed = parse_baseline_workbook(contents, employees, skills, year=year)
     preview = preview_payload(contents, parsed, file.filename or "baseline.xlsx")
     return {
         "year": year,
@@ -250,7 +252,7 @@ async def activate_import(
         raise HTTPException(status_code=409, detail="预览年度或文件已变化，请重新预览")
 
     employees, skills = _master_data(cursor)
-    parsed = parse_baseline_workbook(contents, employees, skills)
+    parsed = parse_baseline_workbook(contents, employees, skills, year=year)
     preview = preview_payload(contents, parsed, file.filename or "baseline.xlsx")
     if not preview["valid"]:
         raise HTTPException(status_code=422, detail={"message": "年初基线校验失败", "errors": preview["errors"]})

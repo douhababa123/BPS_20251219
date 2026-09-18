@@ -37,6 +37,15 @@ export interface BaselinePreview {
   previewToken: string;
   valid: boolean;
   errors: Array<{ row: number; field: string; message: string }>;
+  source: {
+    sheetName: string;
+    layout: 'LONG_FORM' | 'WIDE_CT' | 'UNKNOWN';
+    sourceEmployeeCount: number;
+    omittedCellCount: number;
+    excludedEmployeeCount: number;
+    ignoredSkillColumnCount: number;
+    errorCount: number;
+  };
   summary: {
     employeeCount: number;
     skillCount: number;
@@ -55,6 +64,8 @@ export interface BaselinePreview {
     initialCurrent: number;
     annualTarget: number;
     gap: number;
+    sourceCells: string;
+    conversionRule: string;
   }>;
   rowsTruncated: boolean;
 }
@@ -73,7 +84,9 @@ export async function previewBaseline(year: number, file: File): Promise<Baselin
   const form = new FormData();
   form.append('year', String(year));
   form.append('file', file);
-  const response = await apiClient.post('/admin/competency-annual-baselines/import-preview', form);
+  const response = await apiClient.post('/admin/competency-annual-baselines/import-preview', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return response.data as BaselinePreview;
 }
 
@@ -91,7 +104,9 @@ export async function activateBaseline(
   form.append('replace', activeBaselineId ? 'true' : 'false');
   if (activeBaselineId) form.append('expected_active_baseline_id', activeBaselineId);
   form.append('file', file);
-  await apiClient.post('/admin/competency-annual-baselines', form);
+  await apiClient.post('/admin/competency-annual-baselines', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
 }
 
 export async function getAssessmentVersions(): Promise<AssessmentVersion[]> {

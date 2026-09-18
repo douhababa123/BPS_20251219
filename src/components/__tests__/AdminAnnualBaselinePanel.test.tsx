@@ -36,9 +36,14 @@ describe('Admin annual baseline preview safety', () => {
       previewToken: 'b'.repeat(64),
       valid: true,
       errors: [],
+      source: {
+        sheetName: 'Current_Target states', layout: 'WIDE_CT', sourceEmployeeCount: 1,
+        omittedCellCount: 0, excludedEmployeeCount: 0, ignoredSkillColumnCount: 0, errorCount: 0,
+      },
       rows: [{
         row: 2, employeeId: 'E001', employeeName: 'Employee One', skillId: 7,
         moduleName: 'Module', skillName: 'Skill', initialCurrent: 0, annualTarget: 3, gap: 3,
+        sourceCells: 'C7/D7', conversionRule: 'C 为空，按 0 导入',
       }],
       rowsTruncated: false,
       summary: { employeeCount: 1, skillCount: 1, cellCount: 1, initialLevel: 0, targetLevel: 3, initialGap: 3 },
@@ -60,6 +65,21 @@ describe('Admin annual baseline preview safety', () => {
     expect(baselineApi.activateBaseline).not.toHaveBeenCalled();
   });
 
+  it('warns about the exact sheet name and removes the selected pending file', async () => {
+    renderPanel();
+    expect(screen.getByText(/Current_Target states/)).toBeInTheDocument();
+    const input = screen.getByLabelText('上传年初基线 Excel') as HTMLInputElement;
+    const file = new File(['xlsx'], 'baseline.xlsx');
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(screen.getByText('baseline.xlsx')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '移除文件' }));
+
+    expect((screen.getByLabelText('上传年初基线 Excel') as HTMLInputElement).files).toHaveLength(0);
+    expect(screen.queryByText('baseline.xlsx')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '上传并预览' })).toBeDisabled();
+  });
+
   it('invalidates the file and preview when the selected year changes', async () => {
     renderPanel();
     const file = new File(['xlsx'], 'baseline.xlsx');
@@ -72,5 +92,20 @@ describe('Admin annual baseline preview safety', () => {
     await waitFor(() => expect(screen.queryByText('预览结果：校验通过')).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: '上传并预览' })).toBeDisabled();
     expect(baselineApi.activateBaseline).not.toHaveBeenCalled();
+  });
+
+  it('renders FastAPI field validation details instead of a generic 422 message', async () => {
+    vi.mocked(baselineApi.previewBaseline).mockRejectedValue({
+      message: 'Request failed with status code 422',
+      response: { data: { detail: [{ loc: ['body', 'file'], msg: 'Field required' }] } },
+    });
+    renderPanel();
+    fireEvent.change(screen.getByLabelText('上传年初基线 Excel'), {
+      target: { files: [new File(['xlsx'], 'baseline.xlsx')] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '上传并预览' }));
+
+    expect(await screen.findByText('file：Field required')).toBeInTheDocument();
+    expect(screen.queryByText('Request failed with status code 422')).not.toBeInTheDocument();
   });
 });

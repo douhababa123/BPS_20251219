@@ -26,6 +26,7 @@
 - [x] 4.5 Require explicit replacement confirmation and active-version concurrency checks; retain immutable prior revisions and record source, filename, confirmer and time.
 - [x] 4.6 Test non-admin API rejection, invalid/duplicate/missing rows, valid zero, canceled preview, year/file changes, rollback, concurrent activation and refusal to use the July migration snapshot as the 2026 baseline.
 - [x] 4.7 Verify upload/activation leaves current assessments, history, employees, module Owners, accounts and tasks unchanged; refresh year-specific Dashboard results only after successful activation.
+- [x] 4.8 Require the exact `Current_Target states` sheet, automatically convert its confirmed wide C/T layout, show complete paginated preview metadata, allow pending-file removal and surface actionable validation errors instead of generic 422 messages.
 
 ## 5. Dashboard
 
