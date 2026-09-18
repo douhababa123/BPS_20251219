@@ -12,6 +12,7 @@ def test_audit_migration_is_additive_and_idempotent():
     assert "COL_LENGTH('dbo.competency_assessment_history', 'previous_target_level')" in sql
     assert "previous_current_level INT NULL" in sql
     assert "previous_target_level INT NULL" in sql
+    assert sql.count("EXEC sp_executesql") == 2
     assert "UPDATE dbo.competency_assessment_history" not in sql
     assert "DELETE FROM dbo.competency_assessment_history" not in sql
 
