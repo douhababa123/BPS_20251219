@@ -34,4 +34,4 @@
 - [x] 6.2 Perform authenticated browser visual checks at 1440×1000 and 1024×768 for all in-scope chart modes.
 - [x] 6.3 Confirm `Schedule.tsx` and `Calendar.tsx` remain byte-for-byte unchanged.
 - [x] 6.4 Confirm the personal skill radar retains its existing chart type, layout, data and interaction.
-- [ ] 6.5 Deploy through the existing GitHub Actions Jetson workflow only when separately requested or confirmed.
+- [x] 6.5 Deploy through the existing GitHub Actions Jetson workflow only when separately requested or confirmed.
