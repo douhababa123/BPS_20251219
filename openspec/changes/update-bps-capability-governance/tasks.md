@@ -46,11 +46,13 @@
 
 ## 7. Matching
 
-- [x] 7.1 Apply availability, assessment, level and role hard gates before ranking.
-- [x] 7.2 Return all eligible candidates with stable score/name ordering.
-- [x] 7.3 Add controlled L2/L3/L4 and conflicting-date tests for Huang Lanping's Logistic index scenario.
-- [x] 7.4 Exempt Tyler Tan and Tong Zhifeng from schedule-conflict matching gates while retaining active-account, competency and role gates.
+- [x] 7.1 Apply active-account, assessment, competency-fit and role gates before ranking.
+- [x] 7.2 Return all eligible candidates with deterministic business-priority/name ordering.
+- [x] 7.3 Add controlled L2/L3/L4 and partial-conflict tests for Huang Lanping's Logistic index scenario.
+- [x] 7.4 Treat Tyler Tan and Tong Zhifeng as 100% time-available while retaining active-account, competency and role gates.
 - [x] 7.5 Verify both resource-only employees remain available in the suggested-user selector and are excluded from annual KPI baseline rows.
+- [x] 7.6 Replace blended matching score and schedule hard exclusion with time-first lexicographic ranking, including partial-availability fallback and target/current/overqualified competency ordering.
+- [x] 7.7 Show time fit, available/required hours, competency-fit category and schedule-conflict details in the matching UI; update automated tests.
 
 ## 8. Verification and release
 

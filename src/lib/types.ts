@@ -72,10 +72,13 @@ export interface MatchingCandidate {
   name: string;
   dept: string;
   homeLocation: string;
-  skillScore: number;
   timeScore: number;
-  finalScore: number;
+  targetMatchRate: number;
+  currentMatchRate: number;
+  overqualification: number;
+  matchCategory: 'target_match' | 'current_match' | 'overqualified';
   qualified: boolean;
+  fullyAvailable: boolean;
   roleGate: RoleGate;
   badges: string[];
   explain: {
@@ -85,19 +88,29 @@ export interface MatchingCandidate {
       Ri: number;
       Ti: number;
       isKey: boolean;
-      base: number;
-      bonus: number;
       w: number;
-      si: number;
+      fitType: 'target_match' | 'current_match' | 'overqualified';
     }>;
     sumW: number;
-    skillScore: number;
+    targetMatchRate: number;
+    currentMatchRate: number;
+    overqualification: number;
     time: {
       totalSlots: number;
       occupiedSlots: number;
       freeSlots: number;
+      totalHours: number;
+      occupiedHours: number;
+      freeHours: number;
       timeScore: number;
+      availability: string;
+      conflicts: Array<{
+        date: string;
+        slot: 'AM' | 'PM';
+        taskName: string;
+      }>;
     };
+    reason: string;
   };
 }
 

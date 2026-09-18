@@ -2,33 +2,55 @@
 
 ### Requirement: Matching eligibility gates
 
-The system SHALL apply employee/account status, full requested-slot availability, assessment presence, `current_level >= required_level`, and existing role thresholds before candidate ranking.
+The system SHALL require active employee/account status, assessment presence for every requested competency, a valid competency-fit category, and existing role thresholds before candidate ranking. A requested competency has a valid fit when its target Level equals the required Level or its current Level is at least the required Level. Schedule conflicts SHALL affect availability priority rather than exclude an otherwise eligible candidate.
 
-#### Scenario: Candidate meets a lower requirement
-- **WHEN** a candidate has current Level 3, the task requires Level 2 and all other gates pass
-- **THEN** the candidate is eligible for ranking
+#### Scenario: Development-target candidate is eligible
+- **WHEN** a candidate has current Level 2, target Level 3, the task requires Level 3 and all other gates pass
+- **THEN** the candidate is eligible as a target-matched development candidate
 
-#### Scenario: Candidate meets the exact requirement
-- **WHEN** a candidate has current Level 3, the task requires Level 3 and all other gates pass
-- **THEN** the candidate is eligible for ranking
+#### Scenario: Exact-current candidate is eligible
+- **WHEN** a candidate has current Level 3, target Level 4, the task requires Level 3 and all other gates pass
+- **THEN** the candidate is eligible as an exact-current candidate
 
-#### Scenario: Candidate is below the requirement
-- **WHEN** a candidate has current Level 3 and the task requires Level 4
-- **THEN** the candidate is excluded before scoring
+#### Scenario: Overqualified-current candidate is eligible
+- **WHEN** a candidate has current Level 4, target Level 4, the task requires Level 3 and all other gates pass
+- **THEN** the candidate is eligible as an overqualified-current candidate
 
-#### Scenario: Candidate has a time conflict
-- **WHEN** any required task slot conflicts with a non-cancelled, non-completed assignment
-- **THEN** the candidate is excluded regardless of competency Level
+#### Scenario: Candidate has no valid competency fit
+- **WHEN** a candidate has current Level 2, target Level 4 and the task requires Level 3
+- **THEN** the candidate is excluded before ranking
+
+#### Scenario: Candidate has a partial time conflict
+- **WHEN** an otherwise eligible candidate is available for only part of the requested working time
+- **THEN** the candidate remains visible with the calculated time-fit percentage and conflict details
 
 #### Scenario: Resource-only candidate is exempt from schedule conflicts
-- **WHEN** Tyler Tan or Tong Zhifeng is an active candidate with all requested assessments at or above the required Levels and passes the role gate
+- **WHEN** Tyler Tan or Tong Zhifeng is an active candidate with valid competency fits for all requested competencies and passes the role gate
 - **THEN** the candidate remains eligible regardless of existing schedule records
-- **AND** the candidate is treated as fully available for matching score and explanation
-- **AND** all other candidates continue to be excluded when their requested slots conflict
+- **AND** the candidate is treated as 100% available for matching priority and explanation
 
-### Requirement: Complete deterministic eligible ranking
+### Requirement: Time-first deterministic candidate ranking
 
-The system SHALL return all eligible candidates ordered by the existing weighted skill score with employee name as a stable tie-breaker, while a suggested-user preference SHALL NOT bypass eligibility gates.
+The system SHALL return all eligible candidates using lexicographic priority rather than a blended score. It SHALL compare time-fit percentage first; only equal time-fit candidates SHALL be compared by weighted target-Level exact-match rate, then weighted current-Level exact-match rate, then the smallest weighted current-Level overqualification. Key competencies SHALL have weight 2 and ordinary competencies weight 1. Suggested-user preference and employee name SHALL only break ties after all business priorities.
+
+#### Scenario: Time outranks a better competency fit
+- **WHEN** one candidate is 100% available but overqualified and another candidate is 80% available with target Level exactly matching the requirement
+- **THEN** the 100%-available candidate ranks first
+
+#### Scenario: All candidates have schedule conflicts
+- **WHEN** no eligible candidate is 100% available
+- **THEN** candidates are still returned in descending time-fit order
+- **AND** competency fit is considered only between candidates with the same time-fit percentage
+
+#### Scenario: Equal-time competency order
+- **WHEN** candidates have equal time-fit percentages
+- **THEN** a target-Level exact match ranks before a current-Level exact match
+- **AND** a current-Level exact match ranks before a current Level above the requirement
+- **AND** smaller overqualification ranks before larger overqualification
+
+#### Scenario: Suggested user cannot override business priority
+- **WHEN** the suggested user has a lower time-fit percentage than another eligible candidate
+- **THEN** the candidate with the higher time-fit percentage ranks first
 
 #### Scenario: More than five candidates qualify
 - **WHEN** more than five candidates pass every eligibility gate

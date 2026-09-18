@@ -25,6 +25,14 @@ const matchingSchema = z.object({
   suggestedUserId: z.string().optional(),
 });
 
+const competencyMatchLabels = {
+  target_match: '目标能力匹配',
+  current_match: '当前能力精准匹配',
+  overqualified: '当前能力高于要求',
+} as const;
+
+const slotLabels = { AM: '上午', PM: '下午' } as const;
+
 type WorkflowStatus = 'pending_approval' | 'planned' | 'confirmed' | 'in_progress' | 'completed' | 'rejected' | 'employee_rejected' | 'cancelled';
 
 type StatusFeedback = {
@@ -247,7 +255,7 @@ export function Matching() {
         location: data.taskInfo.location,
         startDate: data.taskInfo.startDate,
         endDate: data.taskInfo.endDate,
-        notes: `通过智能匹配系统分配 (综合评分: ${(data.candidate.finalScore * 100).toFixed(0)}%)`
+        notes: `通过智能匹配系统分配（时间符合度: ${(data.candidate.timeScore * 100).toFixed(0)}%；${competencyMatchLabels[data.candidate.matchCategory]}）`
       });
     },
     onSuccess: (response, variables) => {
@@ -290,7 +298,7 @@ export function Matching() {
         location: data.taskInfo.location,
         startDate: data.taskInfo.startDate,
         endDate: data.taskInfo.endDate,
-        notes: `强制指派(智能匹配系统) (综合评分: ${(data.candidate.finalScore * 100).toFixed(0)}%)`
+        notes: `强制指派（智能匹配系统；时间符合度: ${(data.candidate.timeScore * 100).toFixed(0)}%；${competencyMatchLabels[data.candidate.matchCategory]}）`
       });
     },
     onSuccess: (response, variables) => {
@@ -395,23 +403,20 @@ export function Matching() {
   const matchingSummary = useMemo(() => {
     if (candidates.length === 0) {
       return {
-        avgSkill: 0,
         avgTime: 0,
-        topScore: 0,
+        topTime: 0,
       };
     }
-    const avgSkill = candidates.reduce((sum, candidate) => sum + candidate.skillScore, 0) / candidates.length;
     const avgTime = candidates.reduce((sum, candidate) => sum + candidate.timeScore, 0) / candidates.length;
-    const topScore = candidates[0]?.finalScore || 0;
     return {
-      avgSkill: Math.round(avgSkill * 100),
       avgTime: Math.round(avgTime * 100),
-      topScore: Math.round(topScore * 100),
+      topTime: Math.round((candidates[0]?.timeScore || 0) * 100),
     };
   }, [candidates]);
 
   const qualifiedCandidates = useMemo(() => candidates.filter(candidate => candidate.qualified), [candidates]);
   const hasQualifiedCandidate = qualifiedCandidates.length > 0;
+  const fullyAvailableCandidates = useMemo(() => candidates.filter(candidate => candidate.fullyAvailable), [candidates]);
   const visibleCandidates = showAllCandidates ? candidates : candidates.slice(0, 5);
 
   const workflowSteps = useMemo(() => {
@@ -435,9 +440,10 @@ export function Matching() {
   const topReport = useMemo(() => candidates.slice(0, 3).map(candidate => ({
     name: candidate.name,
     dept: candidate.dept,
-    finalScore: Math.round(candidate.finalScore * 100),
-    skillScore: Math.round(candidate.skillScore * 100),
     timeScore: Math.round(candidate.timeScore * 100),
+    matchCategory: competencyMatchLabels[candidate.matchCategory],
+    targetMatchRate: Math.round(candidate.targetMatchRate * 100),
+    currentMatchRate: Math.round(candidate.currentMatchRate * 100),
   })), [candidates]);
 
   return (
@@ -738,14 +744,14 @@ export function Matching() {
             <div className="space-y-3 text-sm text-gray-600">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-blue-700" />
-                <span>平均技能匹配 {matchingSummary.avgSkill}% · 平均时间匹配 {matchingSummary.avgTime}%</span>
+                <span>平均时间符合度 {matchingSummary.avgTime}%</span>
               </div>
               <div className="flex items-center gap-2">
                 <ArrowRight className="w-4 h-4 text-amber-600" />
-                <span>最佳候选综合得分 {matchingSummary.topScore}%</span>
+                <span>首选候选人时间符合度 {matchingSummary.topTime}%</span>
               </div>
               <div className="text-xs text-gray-500 leading-relaxed">
-                系统先应用时间、能力和角色门槛，再按能力评分排序；Tyler Tan 和 Tong Zhifeng 作为资源匹配专用人员不检查日程冲突。
+                时间符合度是绝对第一优先级；只有时间相同时，才依次比较目标能力匹配、当前能力精准匹配和当前能力超配程度。Tyler Tan 和 Tong Zhifeng 不检查日程冲突。
               </div>
               <div
                 className={cn(
@@ -757,11 +763,16 @@ export function Matching() {
               >
                 {hasQualifiedCandidate ? (
                   <div className="space-y-2">
-                    <p>系统已识别 {qualifiedCandidates.length} 位满足适用的时间、能力和角色硬条件的合适人选。</p>
+                    <p>
+                      系统已识别 {qualifiedCandidates.length} 位能力和角色适用候选人；
+                      {fullyAvailableCandidates.length > 0
+                        ? `其中 ${fullyAvailableCandidates.length} 位时间完全匹配。`
+                        : '所有候选人均有时间冲突，当前按时间符合度从高到低推荐。'}
+                    </p>
                     <div className="flex flex-wrap gap-2 text-xs">
                       {qualifiedCandidates.slice(0, 4).map(candidate => (
                         <span key={candidate.userId} className="px-2 py-1 bg-white/70 rounded-full">
-                          {candidate.name} · {Math.round(candidate.finalScore * 100)}%
+                          {candidate.name} · 时间 {Math.round(candidate.timeScore * 100)}%
                         </span>
                       ))}
                       {qualifiedCandidates.length > 4 && (
@@ -770,7 +781,7 @@ export function Matching() {
                     </div>
                   </div>
                 ) : (
-                  <p>暂未找到同时满足时间、能力和角色硬条件的人选。</p>
+                  <p>暂未找到同时满足启用状态、能力资格和角色要求的人选。</p>
                 )}
               </div>
             </div>
@@ -782,7 +793,7 @@ export function Matching() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-lg font-bold text-gray-900">候选人排序 Ranked Candidates</h3>
-                <p className="text-sm text-gray-600 mt-1">按综合评分排序 Sorted by final score</p>
+                <p className="text-sm text-gray-600 mt-1">时间优先；时间相同时比较能力适配</p>
               </div>
               {candidates.length > 0 && (
                 <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
@@ -825,14 +836,14 @@ export function Matching() {
                                 建议人选
                               </span>
                             )}
-                            {candidate.qualified && (
+                            {candidate.fullyAvailable && (
                               <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                                合适人选
+                                时间完全匹配
                               </span>
                             )}
-                            {!candidate.qualified && !hasQualifiedCandidate && idx < 3 && (
+                            {!candidate.fullyAvailable && idx < 3 && (
                               <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
-                                推荐
+                                部分时间可用
                               </span>
                             )}
                           </div>
@@ -851,23 +862,23 @@ export function Matching() {
 
                         <div className="grid grid-cols-4 gap-3 mb-4">
                           <div className="bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-xs text-gray-600 mb-1">技能评分</p>
-                            <p className="text-xl font-bold text-blue-900">{(candidate.skillScore * 100).toFixed(0)}%</p>
-                            <div className="mt-1 h-1.5 bg-blue-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-blue-600" style={{ width: `${candidate.skillScore * 100}%` }}></div>
-                            </div>
-                          </div>
-                          <div className="bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-xs text-gray-600 mb-1">时间评分</p>
+                            <p className="text-xs text-gray-600 mb-1">时间符合度</p>
                             <p className="text-xl font-bold text-green-600">{(candidate.timeScore * 100).toFixed(0)}%</p>
                             <div className="mt-1 h-1.5 bg-green-100 rounded-full overflow-hidden">
                               <div className="h-full bg-green-500" style={{ width: `${candidate.timeScore * 100}%` }}></div>
                             </div>
                           </div>
-                          <div className="col-span-2 bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-3 text-white border border-blue-900">
-                            <p className="text-xs text-blue-100 mb-1">综合评分 Final Score</p>
-                            <p className="text-2xl font-bold">{(candidate.finalScore * 100).toFixed(0)}%</p>
-                            <p className="text-[11px] text-blue-100 mt-1">0.5×能力匹配 + 0.5×可用时间率</p>
+                          <div className="bg-white rounded-lg p-3 border border-gray-100">
+                            <p className="text-xs text-gray-600 mb-1">目标匹配</p>
+                            <p className="text-xl font-bold text-blue-900">{(candidate.targetMatchRate * 100).toFixed(0)}%</p>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 border border-gray-100">
+                            <p className="text-xs text-gray-600 mb-1">现状精准匹配</p>
+                            <p className="text-xl font-bold text-blue-900">{(candidate.currentMatchRate * 100).toFixed(0)}%</p>
+                          </div>
+                          <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                            <p className="text-xs text-blue-700 mb-1">能力类型</p>
+                            <p className="text-sm font-bold text-blue-900">{competencyMatchLabels[candidate.matchCategory]}</p>
                           </div>
                         </div>
 
@@ -963,9 +974,10 @@ export function Matching() {
                     <tr className="text-gray-500">
                       <th className="py-2 pr-4 font-medium">候选人</th>
                       <th className="py-2 pr-4 font-medium">部门</th>
-                      <th className="py-2 pr-4 font-medium">综合得分</th>
-                      <th className="py-2 pr-4 font-medium">能力匹配</th>
-                      <th className="py-2 pr-4 font-medium">时间匹配</th>
+                      <th className="py-2 pr-4 font-medium">时间符合度</th>
+                      <th className="py-2 pr-4 font-medium">能力类型</th>
+                      <th className="py-2 pr-4 font-medium">目标匹配</th>
+                      <th className="py-2 pr-4 font-medium">现状精准匹配</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -973,9 +985,10 @@ export function Matching() {
                       <tr key={row.name} className="border-t border-gray-100">
                         <td className="py-2 pr-4 text-gray-900 font-medium">{row.name}</td>
                         <td className="py-2 pr-4 text-gray-600">{row.dept}</td>
-                        <td className="py-2 pr-4 text-blue-900 font-semibold">{row.finalScore}%</td>
-                        <td className="py-2 pr-4">{row.skillScore}%</td>
-                        <td className="py-2 pr-4">{row.timeScore}%</td>
+                        <td className="py-2 pr-4 text-green-700 font-semibold">{row.timeScore}%</td>
+                        <td className="py-2 pr-4">{row.matchCategory}</td>
+                        <td className="py-2 pr-4">{row.targetMatchRate}%</td>
+                        <td className="py-2 pr-4">{row.currentMatchRate}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1023,8 +1036,8 @@ export function Matching() {
                                 </span>
                               )}
                             </div>
-                            <span className="text-sm font-bold text-blue-900">
-                              {item.si.toFixed(2)}
+                            <span className="text-xs font-bold text-blue-900">
+                              {competencyMatchLabels[item.fitType]}
                             </span>
                           </div>
                           <div className="grid grid-cols-4 gap-2 text-xs text-gray-600">
@@ -1033,16 +1046,15 @@ export function Matching() {
                             <div>Ti: {item.Ti}</div>
                             <div>w: {item.w}</div>
                           </div>
-                          <div className="mt-2 text-xs text-gray-500">
-                            base: {item.base.toFixed(2)} · bonus: {item.bonus.toFixed(2)}
-                          </div>
                         </div>
                       );
                     })}
                   </div>
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                     <p className="text-sm text-gray-600">Total Weight: {selectedCandidate.explain.sumW}</p>
-                    <p className="text-sm font-bold text-gray-900">Final Skill Score: {(selectedCandidate.explain.skillScore * 100).toFixed(0)}%</p>
+                    <p className="text-sm font-bold text-gray-900">目标匹配率：{(selectedCandidate.explain.targetMatchRate * 100).toFixed(0)}%</p>
+                    <p className="text-sm font-bold text-gray-900">现状精准匹配率：{(selectedCandidate.explain.currentMatchRate * 100).toFixed(0)}%</p>
+                    <p className="text-sm text-gray-600">能力超配值：{selectedCandidate.explain.overqualification.toFixed(2)}</p>
                   </div>
                 </div>
 
@@ -1050,12 +1062,12 @@ export function Matching() {
                   <h4 className="font-bold text-gray-900 mb-3">时间可用性 Time Availability</h4>
                   <div className="p-4 border border-gray-200 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-600">已占用时间段</span>
-                      <span className="font-bold text-gray-900">{selectedCandidate.explain.time.occupiedSlots}</span>
+                      <span className="text-sm text-gray-600">已占用工时</span>
+                      <span className="font-bold text-gray-900">{selectedCandidate.explain.time.occupiedHours}h</span>
                     </div>
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm text-gray-600">空闲时间段</span>
-                      <span className="font-bold text-green-600">{selectedCandidate.explain.time.freeSlots}</span>
+                      <span className="text-sm text-gray-600">可用/任务工时</span>
+                      <span className="font-bold text-green-600">{selectedCandidate.explain.time.freeHours}h / {selectedCandidate.explain.time.totalHours}h</span>
                     </div>
                     <div className="h-4 bg-gray-200 rounded-full overflow-hidden">
                       <div
@@ -1066,8 +1078,21 @@ export function Matching() {
                       ></div>
                     </div>
                     <p className="text-sm text-gray-600 mt-2">
-                      Time Score: {(selectedCandidate.explain.time.timeScore * 100).toFixed(0)}%
+                      时间符合度：{(selectedCandidate.explain.time.timeScore * 100).toFixed(0)}%
                     </p>
+                    {selectedCandidate.explain.time.conflicts.length > 0 && (
+                      <div className="mt-3 border-t border-gray-100 pt-3">
+                        <p className="text-xs font-semibold text-amber-700 mb-2">冲突时间</p>
+                        <div className="space-y-1 text-xs text-gray-600">
+                          {selectedCandidate.explain.time.conflicts.map((conflict, index) => (
+                            <p key={`${conflict.date}-${conflict.slot}-${index}`}>
+                              {conflict.date} {slotLabels[conflict.slot]}
+                              {conflict.taskName ? ` · ${conflict.taskName}` : ''}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

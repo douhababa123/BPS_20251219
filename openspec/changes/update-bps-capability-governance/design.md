@@ -51,9 +51,9 @@ At viewport widths of at least 1280px, display six equal-width KPI cards in the 
 
 The progress API accepts `year`, `month`, and optional `module_id`, returning KPI values and the monthly series together with filter echoes, baseline ID and cutoff. Reuse the final monthly GAP and close-rate calculation for current KPI values. Apply identical formatting to KPI and chart tooltip values, discard stale filter responses, and show synchronized loading/error states. A zero initial GAP yields unavailable close-rate KPI and line points, never false zero percent values.
 
-### Apply matching gates before ranking
+### Rank matching candidates by time before competency fit
 
-Full requested-slot availability, assessment presence, `current >= required`, and existing role gates are mandatory. Only eligible candidates are ranked using the existing weighted skill model.
+Employee/account status, assessment presence, a valid competency-fit category and existing role gates remain mandatory. Time is not blended with competency and a partial schedule conflict no longer removes an otherwise eligible candidate. Calculate availability over the requested weekday AM/PM slots and sort lexicographically by descending time fit, descending weighted target-exact rate, descending weighted current-exact rate, ascending weighted overqualification, suggested-user tie-break and normalized employee name. This preserves a useful fallback when everyone has a conflict while ensuring that no competency advantage can outrank better availability.
 
 ## Risks / Trade-offs
 

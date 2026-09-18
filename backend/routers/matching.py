@@ -5,7 +5,7 @@ Task Matching Router - 智能任务分配系统
 
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from uuid import UUID
 import logging
 import sys
@@ -44,23 +44,144 @@ def count_work_slots(start_date: datetime, end_date: datetime) -> int:
     return count
 
 
-def meets_required_levels(candidate_assessments: List[Dict], required_items: List[Dict]) -> bool:
-    """Missing assessments and levels below the request are hard failures."""
+def calculate_competency_fit(candidate_assessments: List[Dict], required_items: List[Dict]) -> Dict[str, Any]:
+    """Calculate eligibility and the time-tie competency priorities."""
 
-    levels_by_skill = {
-        int(item['skill_id']): int(item['current_level'])
+    assessments_by_skill = {
+        int(item['skill_id']): item
         for item in candidate_assessments
     }
-    return bool(required_items) and all(
-        int(req['skill_id']) in levels_by_skill
-        and levels_by_skill[int(req['skill_id'])] >= int(req['required_level'])
-        for req in required_items
+    total_weight = 0
+    target_exact_weight = 0
+    current_exact_weight = 0
+    weighted_overqualification = 0
+    eligible = bool(required_items)
+    items = []
+
+    for req in required_items:
+        skill_id = int(req['skill_id'])
+        required_level = int(req['required_level'])
+        weight = 2 if req.get('is_key') else 1
+        assessment = assessments_by_skill.get(skill_id)
+        total_weight += weight
+
+        if not assessment:
+            eligible = False
+            continue
+
+        current_level = int(assessment['current_level'])
+        target_level = int(assessment['target_level'])
+        target_exact = target_level == required_level
+        current_exact = current_level == required_level
+        if not target_exact and current_level < required_level:
+            eligible = False
+
+        if target_exact:
+            target_exact_weight += weight
+        if current_exact:
+            current_exact_weight += weight
+        weighted_overqualification += max(current_level - required_level, 0) * weight
+        items.append({
+            'itemId': skill_id,
+            'Ci': current_level,
+            'Ri': required_level,
+            'Ti': target_level,
+            'isKey': bool(req.get('is_key')),
+            'w': weight,
+            'fitType': (
+                'target_match' if target_exact
+                else 'current_match' if current_exact
+                else 'overqualified'
+            ),
+        })
+
+    target_match_rate = round(target_exact_weight / total_weight, 2) if total_weight else 0
+    current_match_rate = round(current_exact_weight / total_weight, 2) if total_weight else 0
+    overqualification = round(weighted_overqualification / total_weight, 2) if total_weight else 0
+    category = (
+        'target_match' if target_exact_weight
+        else 'current_match' if current_exact_weight
+        else 'overqualified'
     )
+    return {
+        'eligible': eligible,
+        'target_match_rate': target_match_rate,
+        'current_match_rate': current_match_rate,
+        'overqualification': overqualification,
+        'category': category,
+        'items': items,
+        'sum_w': total_weight,
+    }
+
+
+def meets_required_levels(candidate_assessments: List[Dict], required_items: List[Dict]) -> bool:
+    """A target-exact or current-at/above fit is required for every requested skill."""
+
+    return calculate_competency_fit(candidate_assessments, required_items)['eligible']
+
+
+def _as_date(value: Any) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return datetime.fromisoformat(str(value)).date()
+
+
+def calculate_time_availability(start_date: Any, end_date: Any, task_rows: List[Any]) -> Dict[str, Any]:
+    """Calculate requested weekday availability using 3.5h AM and 4.5h PM slots."""
+
+    request_start = _as_date(start_date)
+    request_end = _as_date(end_date)
+    requested_slots = set()
+    current = request_start
+    while current <= request_end:
+        if current.weekday() < 5:
+            requested_slots.add((current.isoformat(), 'AM'))
+            requested_slots.add((current.isoformat(), 'PM'))
+        current += timedelta(days=1)
+
+    occupied = {}
+    for task_start, task_end, time_slot, task_name in task_rows:
+        current = max(_as_date(task_start), request_start)
+        last_date = min(_as_date(task_end), request_end)
+        normalized_slot = str(time_slot or 'FULL_DAY').upper()
+        slots = (normalized_slot,) if normalized_slot in ('AM', 'PM') else ('AM', 'PM')
+        while current <= last_date:
+            if current.weekday() < 5:
+                for slot in slots:
+                    key = (current.isoformat(), slot)
+                    if key in requested_slots:
+                        occupied.setdefault(key, task_name or '')
+            current += timedelta(days=1)
+
+    slot_hours = {'AM': 3.5, 'PM': 4.5}
+    total_hours = sum(slot_hours[slot] for _, slot in requested_slots)
+    occupied_hours = sum(slot_hours[slot] for _, slot in occupied)
+    free_hours = max(total_hours - occupied_hours, 0)
+    time_score = free_hours / total_hours if total_hours else 0
+    conflicts = [
+        {'date': day, 'slot': slot, 'taskName': occupied[(day, slot)]}
+        for day, slot in sorted(occupied)
+    ]
+    return {
+        'total_slots': len(requested_slots),
+        'occupied_slots': len(occupied),
+        'free_slots': len(requested_slots) - len(occupied),
+        'total_hours': round(total_hours, 1),
+        'occupied_hours': round(occupied_hours, 1),
+        'free_hours': round(free_hours, 1),
+        'time_score': round(time_score, 4),
+        'conflicts': conflicts,
+    }
 
 
 def matching_candidate_sort_key(candidate: Dict[str, Any]):
     return (
-        -candidate['finalScore'],
+        -candidate['timeScore'],
+        -candidate['targetMatchRate'],
+        -candidate['currentMatchRate'],
+        candidate['overqualification'],
         0 if 'suggested' in candidate['badges'] else 1,
         candidate['name'].casefold(),
     )
@@ -73,86 +194,12 @@ def is_schedule_exempt_employee(employee_code: str) -> bool:
 def candidate_passes_hard_gates(
     candidate_assessments: List[Dict],
     required_items: List[Dict],
-    conflict_count: int,
     role_gate: str,
-    schedule_exempt: bool = False,
 ) -> bool:
     return (
-        (schedule_exempt or conflict_count == 0)
-        and meets_required_levels(candidate_assessments, required_items)
+        meets_required_levels(candidate_assessments, required_items)
         and role_gate == 'OK'
     )
-
-
-def calculate_skill_score(candidate_assessments: List[Dict], required_items: List[Dict]) -> Dict[str, Any]:
-    """
-    计算候选人的技能匹配评分
-    
-    参数:
-        candidate_assessments: 候选人的能力评估列表
-        required_items: 任务要求的能力列表
-    
-    返回:
-        {
-            'skill_score': float,  # 技能评分 (0-1+)
-            'items': [...],        # 详细计算过程
-            'sum_w': int           # 总权重
-        }
-    """
-    items = []
-    sum_w = 0
-    
-    for req in required_items:
-        item_id = req['skill_id']
-        skill_name = req.get('skill_name')
-        required_level = req['required_level']
-        is_key = req['is_key']
-        
-        # 查找候选人对该技能的评估
-        if skill_name:
-            assessment = next(
-                (a for a in candidate_assessments if a.get('skill_name') == skill_name),
-                None
-            )
-        else:
-            assessment = next(
-                (a for a in candidate_assessments if a['skill_id'] == item_id),
-                None
-            )
-        
-        Ci = assessment['current_level'] if assessment else 0
-        Ti = assessment['target_level'] if assessment else 0
-        Ri = required_level
-        
-        # 计算单项得分
-        base = min(Ci / Ri, 1.0) if Ri > 0 else 0
-        bonus = 0.1 if Ti > Ci else 0
-        w = 2 if is_key else 1
-        si = (base + bonus) * w
-        
-        items.append({
-            'itemId': item_id,
-            'Ci': Ci,
-            'Ri': Ri,
-            'Ti': Ti,
-            'isKey': is_key,
-            'base': round(base, 2),
-            'bonus': bonus,
-            'w': w,
-            'si': round(si, 2)
-        })
-        
-        sum_w += w
-    
-    # 计算加权平均
-    total_score = sum(item['si'] for item in items)
-    skill_score = total_score / sum_w if sum_w > 0 else 0
-    
-    return {
-        'skill_score': round(skill_score, 2),
-        'items': items,
-        'sum_w': sum_w
-    }
 
 
 def check_role_gate(
@@ -200,48 +247,16 @@ def check_role_gate(
     return 'LEAD_LOW' if role == 'Lead' else 'EXPERT_LOW'
 
 
-def generate_match_reason(skill_score: float, time_score: float, qualified: bool, role_gate: str) -> str:
-    """
-    生成匹配原因说明
-    """
-    reasons = []
-    
-    # 计算综合得分
-    final_score = skill_score * 0.5 + time_score * 0.5
-    
-    # 技能评估（匹配程度）
-    if skill_score >= 1.0:
-        reasons.append("✅ 能力完全匹配")
-    elif skill_score >= 0.8:
-        reasons.append("✅ 能力基本满足")
-    elif skill_score >= 0.6:
-        reasons.append("⚠️ 能力略有不足")
-    else:
-        reasons.append("❌ 能力不满足")
-    
-    # 时间可用性
-    if time_score >= 0.8:
-        reasons.append("✅ 时间充裕")
-    elif time_score >= 0.5:
-        reasons.append("✅ 时间可用")
-    elif time_score >= 0.3:
-        reasons.append("⚠️ 时间紧张")
-    else:
-        reasons.append("❌ 时间冲突")
-    
-    # 角色门槛
-    if role_gate == 'OK':
-        reasons.append("✅ 角色达标")
-    else:
-        reasons.append(f"⚠️ 角色不足")
-    
-    # 总结（按规范：得分>=1为合适人选）
-    if qualified:
-        reasons.append(f"🎯 合适人选 ({final_score:.2f})")
-    else:
-        reasons.append(f"📋 推荐候选 ({final_score:.2f})")
-    
-    return " | ".join(reasons)
+def generate_match_reason(category: str, time_score: float) -> str:
+    """Generate a concise explanation for the time-first ranking."""
+
+    category_labels = {
+        'target_match': '目标能力匹配',
+        'current_match': '当前能力精准匹配',
+        'overqualified': '当前能力高于要求',
+    }
+    availability = '时间完全匹配' if time_score == 1 else f'时间符合度 {round(time_score * 100)}%'
+    return f"{availability}；{category_labels.get(category, '能力匹配')}"
 
 
 # ============================================================================
@@ -493,50 +508,33 @@ def preview_matching(
                     'target_level': row[3]
                 })
             
-            if not meets_required_levels(assessments, required_items):
-                continue
-            
-            # 3. 计算时间可用性（从任务表查询已占用时段）
-            # 查询该员工在任务时间段内的已分配任务
+            competency_fit = calculate_competency_fit(assessments, required_items)
             schedule_exempt = is_schedule_exempt_employee(emp['employeeCode'])
-            conflict_count = 0
+            task_rows = []
             if not schedule_exempt:
                 cursor.execute("""
-                    SELECT COUNT(*)
+                    SELECT start_date, end_date, COALESCE(time_slot, 'FULL_DAY'), task_name
                     FROM dbo.tasks
                     WHERE assigned_employee_id = ?
                       AND start_date <= ?
                       AND end_date >= ?
                       AND status NOT IN ('cancelled', 'completed')
                 """, employee_id, request.get('endDate'), request.get('startDate'))
-
-                conflict_result = cursor.fetchone()
-                conflict_count = int(conflict_result[0] or 0) if conflict_result else 0
+                task_rows = cursor.fetchall()
 
             role_gate = check_role_gate(role, assessments, required_items, role_thresholds)
             if not candidate_passes_hard_gates(
                 assessments,
                 required_items,
-                conflict_count,
                 role_gate,
-                schedule_exempt=schedule_exempt,
             ):
                 continue
 
-            # All hard gates passed; calculate the score used only for ranking.
-            skill_result = calculate_skill_score(assessments, required_items)
-            occupied_slots = 0
-            free_slots = total_slots
-            time_score = 1.0
-            
-            # 4. 计算综合评分（按规范：0.5匹配程度 + 0.5可用时间率）
-            skill_weight = 0.5
-            time_weight = 0.5
-            
-            # 匹配得分 = 0.5 * 匹配程度 + 0.5 * 可用时间率
-            final_score = skill_result['skill_score'] * skill_weight + time_score * time_weight
-            
-            qualified = True
+            availability = calculate_time_availability(start_date, end_date, task_rows)
+            if schedule_exempt:
+                availability = calculate_time_availability(start_date, end_date, [])
+            time_score = availability['time_score']
+            fully_available = time_score == 1.0
             
             # 6. 标签
             badges = []
@@ -548,33 +546,33 @@ def preview_matching(
                 'name': emp['name'],
                 'dept': emp['dept'],
                 'homeLocation': emp['homeLocation'],
-                'skillScore': round(skill_result['skill_score'], 2),
                 'timeScore': round(time_score, 2),
-                'finalScore': round(final_score, 2),
-                'qualified': qualified,
+                'targetMatchRate': competency_fit['target_match_rate'],
+                'currentMatchRate': competency_fit['current_match_rate'],
+                'overqualification': competency_fit['overqualification'],
+                'matchCategory': competency_fit['category'],
+                'qualified': True,
+                'fullyAvailable': fully_available,
                 'roleGate': role_gate,
                 'badges': badges,
                 'explain': {
-                    'items': skill_result['items'],
-                    'sumW': skill_result['sum_w'],
-                    'skillScore': round(skill_result['skill_score'], 2),
+                    'items': competency_fit['items'],
+                    'sumW': competency_fit['sum_w'],
+                    'targetMatchRate': competency_fit['target_match_rate'],
+                    'currentMatchRate': competency_fit['current_match_rate'],
+                    'overqualification': competency_fit['overqualification'],
                     'time': {
-                        'totalSlots': total_slots,
-                        'occupiedSlots': occupied_slots,
-                        'freeSlots': free_slots,
+                        'totalSlots': availability['total_slots'],
+                        'occupiedSlots': availability['occupied_slots'],
+                        'freeSlots': availability['free_slots'],
+                        'totalHours': availability['total_hours'],
+                        'occupiedHours': availability['occupied_hours'],
+                        'freeHours': availability['free_hours'],
                         'timeScore': round(time_score, 2),
-                        'availability': f"{round(time_score * 100)}%"
+                        'availability': f"{round(time_score * 100)}%",
+                        'conflicts': availability['conflicts'],
                     },
-                    'weights': {
-                        'skill': 0.5,
-                        'time': 0.5
-                    },
-                    'reason': generate_match_reason(
-                        skill_result['skill_score'], 
-                        time_score, 
-                        qualified, 
-                        role_gate
-                    )
+                    'reason': generate_match_reason(competency_fit['category'], time_score),
                 }
             })
         
