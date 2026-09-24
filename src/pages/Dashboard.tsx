@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, BarChart3, CalendarDays, Filter, Settings, UserRound } from 'lucide-react';
 import {
@@ -9,6 +9,7 @@ import {
   CHART_AXIS_TICK,
   CHART_COLORS,
 } from '../components/charts/chartTheme';
+import { GapDetailDrawer } from '../components/dashboard/GapDetailDrawer';
 import { useNewAuth } from '../contexts/NewAuthContext';
 import {
   formatCloseRate, formatGap, formatLevel, getCompetencyModules,
@@ -94,6 +95,8 @@ export function Dashboard() {
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedModule, setSelectedModule] = useState<number | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
+  const [detailMonth, setDetailMonth] = useState<number | null>(null);
+  const closeDetail = useCallback(() => setDetailMonth(null), []);
 
   const yearsQuery = useQuery({ queryKey: ['competency-progress-years'], queryFn: getCompetencyProgressYears });
   const modulesQuery = useQuery({ queryKey: ['competency-progress-modules'], queryFn: getCompetencyModules });
@@ -155,6 +158,7 @@ export function Dashboard() {
               setSelectedYear(year);
               setSelectedMonth(selectedMonthForYear(year));
               setSelectedEmployee(null);
+              closeDetail();
             }} className="min-w-16 bg-transparent text-sm font-medium focus:outline-none">
               {years.map(year => <option key={year} value={year}>{year}</option>)}
             </select>
@@ -162,14 +166,14 @@ export function Dashboard() {
           <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
             <Filter className="h-4 w-4 text-blue-900" />
             <span className="text-sm text-gray-600">月份</span>
-            <select aria-label="统计月份" value={selectedMonth} onChange={event => setSelectedMonth(Number(event.target.value))} className="min-w-16 bg-transparent text-sm font-medium focus:outline-none">
+            <select aria-label="统计月份" value={selectedMonth} onChange={event => { setSelectedMonth(Number(event.target.value)); closeDetail(); }} className="min-w-16 bg-transparent text-sm font-medium focus:outline-none">
               {months.map(month => <option key={month} value={month}>{`${month}`.padStart(2, '0')} 月</option>)}
             </select>
           </label>
           <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
             <BarChart3 className="h-4 w-4 text-blue-900" />
             <span className="text-sm text-gray-600">模块</span>
-            <select aria-label="能力模块" value={selectedModule ?? ''} onChange={event => setSelectedModule(event.target.value ? Number(event.target.value) : null)} className="min-w-36 bg-transparent text-sm font-medium focus:outline-none">
+            <select aria-label="能力模块" value={selectedModule ?? ''} onChange={event => { setSelectedModule(event.target.value ? Number(event.target.value) : null); closeDetail(); }} className="min-w-36 bg-transparent text-sm font-medium focus:outline-none">
               <option value="">全部模块</option>
               {(modulesQuery.data || []).map(module => <option key={module.module_id} value={module.module_id}>{module.module_name}</option>)}
             </select>
@@ -177,7 +181,7 @@ export function Dashboard() {
           <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
             <UserRound className="h-4 w-4 text-blue-900" />
             <span className="text-sm text-gray-600">人员</span>
-            <select aria-label="统计人员" value={selectedEmployee ?? ''} onChange={event => setSelectedEmployee(event.target.value || null)} disabled={employeesQuery.isLoading || employeesQuery.isError} className="min-w-32 bg-transparent text-sm font-medium focus:outline-none disabled:text-gray-400">
+            <select aria-label="统计人员" value={selectedEmployee ?? ''} onChange={event => { setSelectedEmployee(event.target.value || null); closeDetail(); }} disabled={employeesQuery.isLoading || employeesQuery.isError} className="min-w-32 bg-transparent text-sm font-medium focus:outline-none disabled:text-gray-400">
               <option value="">全部人员</option>
               {(employeesQuery.data || []).map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
             </select>
@@ -246,7 +250,7 @@ export function Dashboard() {
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">GAP 关闭趋势</h3>
-                  <p className="mt-1 text-sm text-gray-500">月末 GAP 总分与 YTD GAP 关闭率</p>
+                  <p className="mt-1 text-sm text-gray-500">月末 GAP 总分与 YTD GAP 关闭率 · 点击柱子查看技能构成</p>
                 </div>
                 <ProgressLegend />
               </div>
@@ -298,12 +302,22 @@ export function Dashboard() {
                       radius={[5, 5, 0, 0]}
                       maxBarSize={72}
                       isAnimationActive={false}
+                      onClick={(_, index, event) => { (event.target as SVGElement).focus(); setDetailMonth(progress.monthly[index].month); }}
                     >
                       {progress.monthly.map((point, index) => (
                         <Cell
                           key={point.label}
                           fill={index === progress.monthly.length - 1 ? '#0B4F6C' : CHART_COLORS.gapPrimary}
                           fillOpacity={index === progress.monthly.length - 1 ? 1 : 0.78}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`查看 ${point.label} 技能 GAP 构成明细`}
+                          onKeyDown={event => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              setDetailMonth(point.month);
+                            }
+                          }}
                         />
                       ))}
                       <LabelList dataKey="gap" position="top" fill="#475569" fontSize={11} formatter={value => formatGap(Number(value))} />
@@ -329,6 +343,9 @@ export function Dashboard() {
             </div>
           )}
         </>
+      )}
+      {progress?.status === 'ready' && detailMonth != null && progress.monthly.find(point => point.month === detailMonth) && (
+        <GapDetailDrawer progress={progress} point={progress.monthly.find(point => point.month === detailMonth)!} onClose={closeDetail} />
       )}
     </div>
   );

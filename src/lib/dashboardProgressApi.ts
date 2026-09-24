@@ -30,6 +30,20 @@ export interface CompetencyProgressResponse {
     closeRate: number | null;
   };
   monthly: CompetencyProgressPoint[];
+  details?: CompetencyProgressDetail[];
+}
+
+export interface CompetencyProgressDetail {
+  employeeId: string;
+  employeeName: string;
+  moduleId: number;
+  moduleName: string;
+  skillId: number;
+  skillName: string;
+  initialCurrent: number;
+  currentLevel: number;
+  annualTarget: number;
+  gap: number;
 }
 
 export interface CompetencyModuleOption {
@@ -45,6 +59,13 @@ export interface CompetencyProgressEmployeeOption {
 export async function getCompetencyProgress(year: number, month: number, moduleId: number | null, employeeId: string | null): Promise<CompetencyProgressResponse> {
   const response = await apiClient.get('/dashboard/competency-progress', {
     params: { year, month, module_id: moduleId ?? undefined, employee_id: employeeId ?? undefined },
+  });
+  return response.data as CompetencyProgressResponse;
+}
+
+export async function getCompetencyProgressDetails(year: number, month: number, moduleId: number | null, employeeId: string | null): Promise<CompetencyProgressResponse> {
+  const response = await apiClient.get('/dashboard/competency-progress', {
+    params: { year, month, module_id: moduleId ?? undefined, employee_id: employeeId ?? undefined, include_details: true },
   });
   return response.data as CompetencyProgressResponse;
 }

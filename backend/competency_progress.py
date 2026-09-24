@@ -23,6 +23,7 @@ def build_competency_progress(
     cells: Iterable[Dict[str, Any]],
     history: Iterable[Dict[str, Any]],
     now: datetime,
+    include_details: bool = False,
 ) -> Dict[str, Any]:
     cells_list = list(cells)
     values = {
@@ -64,7 +65,7 @@ def build_competency_progress(
         })
 
     final = monthly[-1]
-    return {
+    result = {
         "year": year,
         "month": selected_month,
         "moduleId": module_id,
@@ -82,3 +83,25 @@ def build_competency_progress(
         },
         "monthly": monthly,
     }
+    if include_details:
+        details = [
+            {
+                "employeeId": str(cell["employee_id"]),
+                "employeeName": cell["employee_name"],
+                "moduleId": int(cell["module_id"]),
+                "moduleName": cell["module_name"],
+                "skillId": int(cell["skill_id"]),
+                "skillName": cell["skill_name"],
+                "initialCurrent": int(cell["initial_current"]),
+                "currentLevel": values[(str(cell["employee_id"]).lower(), int(cell["skill_id"]))],
+                "annualTarget": int(cell["annual_target"]),
+            }
+            for cell in cells_list
+        ]
+        for detail in details:
+            detail["gap"] = max(detail["annualTarget"] - detail["currentLevel"], 0)
+        result["details"] = sorted(
+            details,
+            key=lambda detail: (-detail["gap"], detail["employeeName"], detail["moduleName"], detail["skillName"], detail["skillId"]),
+        )
+    return result

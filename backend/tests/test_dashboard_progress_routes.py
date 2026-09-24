@@ -163,3 +163,26 @@ def test_employee_module_intersection_without_cells_is_empty_scope(monkeypatch):
     assert result["cellCount"] == 0
     assert result["kpis"] is None
     assert result["monthly"] == []
+
+
+def test_detail_mode_returns_named_cells_and_reconciles_with_monthly_gap(monkeypatch):
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [(1,), ("baseline-1", "EXCEL_IMPORT", None, None), (0,)]
+    cursor.fetchall.side_effect = [
+        [("e1", 1, 1, 3, "Chen Jianjun", 4, "TPM", "Top idea")],
+        [("h1", "e1", 1, 2, datetime(2026, 3, 1))],
+    ]
+    monkeypatch.setattr(dashboard_progress, "_shanghai_now", lambda: datetime(2026, 9, 11))
+
+    result = dashboard_progress.get_competency_progress(
+        year=2026, month=6, module_id=4, employee_id="e1", include_details=True,
+        cursor=cursor, current_user={"user_id": "user-1"},
+    )
+
+    assert result["details"] == [{
+        "employeeId": "e1", "employeeName": "Chen Jianjun", "moduleId": 4,
+        "moduleName": "TPM", "skillId": 1, "skillName": "Top idea",
+        "initialCurrent": 1, "currentLevel": 2, "annualTarget": 3, "gap": 1,
+    }]
+    assert sum(item["gap"] for item in result["details"]) == result["monthly"][-1]["gap"]
+    assert "e.name" in cursor.execute.call_args_list[-2].args[0]

@@ -71,6 +71,7 @@ def get_competency_progress(
     month: int = Query(..., ge=1, le=12),
     module_id: Optional[int] = Query(None, ge=1),
     employee_id: Optional[UUID] = None,
+    include_details: bool = False,
     cursor=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -167,8 +168,10 @@ def get_competency_progress(
         f"""
         SELECT i.employee_id, i.skill_id,
                i.initial_current_level, i.annual_target_level
+               {', e.name, s.module_id, s.module_name, s.skill_name' if include_details else ''}
         FROM dbo.competency_annual_baseline_items i
         INNER JOIN dbo.skills s ON s.id = i.skill_id
+        {'INNER JOIN dbo.employees e ON e.id = i.employee_id' if include_details else ''}
         WHERE i.baseline_id = ?{module_filter}{employee_filter}
         ORDER BY i.employee_id, i.skill_id
         """,
@@ -180,6 +183,12 @@ def get_competency_progress(
             "skill_id": int(row[1]),
             "initial_current": int(row[2]),
             "annual_target": int(row[3]),
+            **({
+                "employee_name": row[4],
+                "module_id": int(row[5]),
+                "module_name": row[6],
+                "skill_name": row[7],
+            } if include_details else {}),
         }
         for row in cursor.fetchall()
     ]
@@ -240,6 +249,7 @@ def get_competency_progress(
         cells=cells,
         history=history,
         now=now,
+        include_details=include_details,
     )
     result.update({
         "employeeId": employee_id,

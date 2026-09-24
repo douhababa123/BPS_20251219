@@ -12,8 +12,12 @@ vi.mock('recharts', () => ({
   ComposedChart: ({ children, data }: { children: React.ReactNode; data: unknown }) => (
     <div data-testid="chart-data" data-points={JSON.stringify(data)}>{children}</div>
   ),
-  Bar: () => <div data-testid="gap-bar" />,
-  Cell: () => null,
+  Bar: ({ children, onClick }: { children: React.ReactNode; onClick: (data: unknown, index: number, event: React.MouseEvent<HTMLDivElement>) => void }) => (
+    <div data-testid="gap-bar" onClick={event => onClick({}, 0, event)}>{children}</div>
+  ),
+  Cell: ({ onKeyDown, 'aria-label': label }: { onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>; 'aria-label'?: string }) => (
+    <button type="button" aria-label={label} onKeyDown={onKeyDown} />
+  ),
   LabelList: () => null,
   Line: () => <div data-testid="rate-line" />,
   CartesianGrid: () => null,
@@ -30,6 +34,7 @@ vi.mock('../../lib/dashboardProgressApi', async importOriginal => {
     getCompetencyModules: vi.fn(),
     getCompetencyProgressEmployees: vi.fn(),
     getCompetencyProgress: vi.fn(),
+    getCompetencyProgressDetails: vi.fn(),
   };
 });
 
@@ -62,6 +67,7 @@ describe('Dashboard annual competency KPIs', () => {
     vi.mocked(progressApi.getCompetencyModules).mockResolvedValue([{ module_id: 1, module_name: 'BPS elements' }]);
     vi.mocked(progressApi.getCompetencyProgressEmployees).mockResolvedValue([{ id: 'e1', name: 'Chen Jianjun' }]);
     vi.mocked(progressApi.getCompetencyProgress).mockImplementation(async (year, month, moduleId, employeeId) => response(year, month, moduleId, employeeId));
+    vi.mocked(progressApi.getCompetencyProgressDetails).mockImplementation(async (year, month, moduleId, employeeId) => response(year, month, moduleId, employeeId));
   });
 
   it('renders six ordered wide-screen cards and keeps June KPI values synchronized', async () => {
@@ -190,5 +196,58 @@ describe('Dashboard annual competency KPIs', () => {
     fireEvent.change(screen.getByLabelText('统计人员'), { target: { value: 'e1' } });
     expect(await screen.findByText('年度能力数据加载失败，请稍后重试。')).toBeInTheDocument();
     expect(screen.queryByTestId('dashboard-gap-chart')).not.toBeInTheDocument();
+  });
+
+  it('opens the clicked month skill GAP drawer and reconciles its total', async () => {
+    vi.mocked(progressApi.getCompetencyProgress).mockImplementation(async (year, month, moduleId, employeeId) => {
+      const result = response(year, month, moduleId, employeeId);
+      result.monthly = result.monthly.map(point => ({ ...point, gap: 2 }));
+      return result;
+    });
+    vi.mocked(progressApi.getCompetencyProgressDetails).mockImplementation(async (year, month, moduleId, employeeId) => {
+      const result = response(year, month, moduleId, employeeId);
+      result.kpis = { ...result.kpis!, currentGap: 2 };
+      result.details = [{ employeeId: 'e1', employeeName: 'Chen Jianjun', moduleId: 1,
+        moduleName: 'BPS elements', skillId: 1, skillName: 'BPS Basic',
+        initialCurrent: 1, currentLevel: 2, annualTarget: 4, gap: 2 }];
+      return result;
+    });
+    renderDashboard();
+    await screen.findByRole('option', { name: 'Chen Jianjun' });
+    fireEvent.change(await screen.findByLabelText('能力模块'), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText('统计人员'), { target: { value: 'e1' } });
+    await waitFor(() => expect(screen.getByTestId('dashboard-gap-chart')).toHaveAccessibleName(/Chen Jianjun/));
+    fireEvent.click(screen.getByTestId('gap-bar'));
+
+    expect(await screen.findByRole('dialog', { name: '202601 技能 GAP 构成明细' })).toBeInTheDocument();
+    await waitFor(() => expect(progressApi.getCompetencyProgressDetails).toHaveBeenCalledWith(2026, 1, 1, 'e1'));
+    expect(await screen.findByText('BPS Basic')).toBeInTheDocument();
+    expect(screen.getByText(/GAP 合计/)).toHaveTextContent('2');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('refuses to show details whose sum differs from the clicked bar', async () => {
+    vi.mocked(progressApi.getCompetencyProgressDetails).mockImplementation(async (year, month, moduleId, employeeId) => {
+      const result = response(year, month, moduleId, employeeId);
+      result.kpis = { ...result.kpis!, currentGap: 200 };
+      result.details = [{ employeeId: 'e1', employeeName: 'Chen Jianjun', moduleId: 1,
+        moduleName: 'BPS elements', skillId: 1, skillName: 'BPS Basic',
+        initialCurrent: 1, currentLevel: 2, annualTarget: 4, gap: 2 }];
+      return result;
+    });
+    renderDashboard();
+    fireEvent.click(await screen.findByTestId('gap-bar'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('数据已变化或与柱状图不一致');
+    expect(screen.queryByText('BPS Basic')).not.toBeInTheDocument();
+  });
+
+  it('lets keyboard users open and close a monthly detail drawer', async () => {
+    renderDashboard();
+    const monthButton = await screen.findByRole('button', { name: '查看 202601 技能 GAP 构成明细' });
+    fireEvent.keyDown(monthButton, { key: 'Enter' });
+    expect(await screen.findByRole('dialog', { name: '202601 技能 GAP 构成明细' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '关闭明细抽屉' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

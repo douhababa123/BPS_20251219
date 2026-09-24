@@ -115,3 +115,48 @@ def test_module_filtered_scope_keeps_kpis_equal_to_its_final_chart_point():
     assert result["moduleId"] == 4
     assert result["kpis"]["currentGap"] == result["monthly"][-1]["gap"] == 4
     assert result["kpis"]["closeRate"] == result["monthly"][-1]["closeRate"] == pytest.approx(100 / 3)
+
+
+def test_monthly_details_use_same_history_replay_and_sum_to_bar():
+    cells = [
+        {"employee_id": "e1", "employee_name": "Chen Jianjun", "skill_id": 1,
+         "skill_name": "BPS Basic", "module_id": 2, "module_name": "BPS elements",
+         "initial_current": 0, "annual_target": 4},
+        {"employee_id": "e2", "employee_name": "Xue Ting", "skill_id": 1,
+         "skill_name": "BPS Basic", "module_id": 2, "module_name": "BPS elements",
+         "initial_current": 2, "annual_target": 4},
+    ]
+    history = [
+        {"id": "h1", "employee_id": "e1", "skill_id": 1, "current_level": 1,
+         "changed_at": datetime(2026, 6, 1)},
+        {"id": "h2", "employee_id": "e1", "skill_id": 1, "current_level": 3,
+         "changed_at": datetime(2026, 7, 1)},
+    ]
+    june = build_competency_progress(
+        year=2026, selected_month=6, baseline_id="b1", module_id=2,
+        cells=cells, history=history, now=datetime(2026, 9, 11), include_details=True,
+    )
+    assert [item["currentLevel"] for item in june["details"]] == [1, 2]
+    assert [item["gap"] for item in june["details"]] == [3, 2]
+    assert sum(item["gap"] for item in june["details"]) == june["monthly"][-1]["gap"] == 5
+    assert june["details"][0]["employeeName"] == "Chen Jianjun"
+    july = build_competency_progress(
+        year=2026, selected_month=7, baseline_id="b1", module_id=2,
+        cells=cells, history=history, now=datetime(2026, 9, 11), include_details=True,
+    )
+    assert sum(item["gap"] for item in july["details"]) == july["monthly"][-1]["gap"] == 3
+
+
+def test_current_month_details_use_partial_cutoff():
+    result = build_competency_progress(
+        year=2026, selected_month=9, baseline_id="b1", module_id=None,
+        cells=[{"employee_id": "e1", "employee_name": "A", "skill_id": 1,
+                "skill_name": "Skill", "module_id": 1, "module_name": "Module",
+                "initial_current": 0, "annual_target": 4}],
+        history=[{"id": "h1", "employee_id": "e1", "skill_id": 1,
+                  "current_level": 2, "changed_at": datetime(2026, 9, 12)}],
+        now=datetime(2026, 9, 11, 12), include_details=True,
+    )
+    assert result["isPartial"] is True
+    assert result["details"][0]["currentLevel"] == 0
+    assert result["details"][0]["gap"] == result["monthly"][-1]["gap"] == 4
