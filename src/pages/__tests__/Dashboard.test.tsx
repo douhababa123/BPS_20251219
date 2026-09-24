@@ -12,14 +12,14 @@ vi.mock('recharts', () => ({
   ComposedChart: ({ children, data }: { children: React.ReactNode; data: unknown }) => (
     <div data-testid="chart-data" data-points={JSON.stringify(data)}>{children}</div>
   ),
-  Bar: ({ children, onClick }: { children: React.ReactNode; onClick: (data: unknown, index: number, event: React.MouseEvent<HTMLDivElement>) => void }) => (
-    <div data-testid="gap-bar" onClick={event => onClick({}, 0, event)}>{children}</div>
+  Bar: ({ children, fill, onClick }: { children: React.ReactNode; fill: string; onClick: (data: unknown, index: number, event: React.MouseEvent<HTMLDivElement>) => void }) => (
+    <div data-testid="gap-bar" data-fill={fill} onClick={event => onClick({}, 0, event)}>{children}</div>
   ),
   Cell: ({ onKeyDown, 'aria-label': label }: { onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>; 'aria-label'?: string }) => (
     <button type="button" aria-label={label} onKeyDown={onKeyDown} />
   ),
   LabelList: () => null,
-  Line: () => <div data-testid="rate-line" />,
+  Line: ({ stroke }: { stroke: string }) => <div data-testid="rate-line" data-stroke={stroke} />,
   CartesianGrid: () => null,
   Legend: () => null,
   Tooltip: () => null,
@@ -88,6 +88,13 @@ describe('Dashboard annual competency KPIs', () => {
     expect(chartPoints.at(-1)).toMatchObject({ label: '202606', gap: 160, closeRate: 20 });
     expect(screen.getByTestId('dashboard-gap-chart')).toHaveAccessibleName(/2026 年截至 06 月全部模块、全部人员/);
     expect(vi.mocked(progressApi.getCompetencyProgress)).toHaveBeenCalledWith(2026, 6, null, null);
+  });
+
+  it('uses a distinct orange for the close-rate line while keeping the GAP bars blue', async () => {
+    renderDashboard();
+    expect(await screen.findByTestId('rate-line')).toHaveAttribute('data-stroke', '#C2410C');
+    expect(screen.getByTestId('gap-bar')).toHaveAttribute('data-fill', '#166985');
+    expect(screen.getByTestId('rate-line').getAttribute('data-stroke')).not.toBe(screen.getByTestId('gap-bar').getAttribute('data-fill'));
   });
 
   it('defaults a selected historical year to December and applies module to the same request', async () => {

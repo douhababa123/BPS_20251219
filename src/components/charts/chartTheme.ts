@@ -4,7 +4,7 @@ export const CHART_COLORS = {
   gap: '#DC2626',
   gapPrimary: '#166985',
   gapSecondary: '#0EA5E9',
-  closeRate: '#0F766E',
+  closeRate: '#C2410C',
   muted: '#94A3B8',
   grid: '#E2E8F0',
   axis: '#64748B',
