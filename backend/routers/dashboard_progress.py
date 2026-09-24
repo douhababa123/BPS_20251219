@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -33,21 +34,55 @@ def get_progress_years(
     return {"years": years}
 
 
+@router.get("/employees")
+def get_progress_employees(
+    year: int = Query(..., ge=2000, le=2100),
+    cursor=Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    del current_user
+    cursor.execute(
+        """
+        SELECT TOP 1 id FROM dbo.competency_annual_baselines
+        WHERE baseline_year = ? AND is_active = 1
+        ORDER BY selected_at DESC
+        """,
+        year,
+    )
+    baseline = cursor.fetchone()
+    if not baseline:
+        return []
+    cursor.execute(
+        """
+        SELECT DISTINCT e.id, e.name
+        FROM dbo.competency_annual_baseline_items i
+        INNER JOIN dbo.employees e ON e.id = i.employee_id
+        WHERE i.baseline_id = ?
+        ORDER BY e.name, e.id
+        """,
+        str(baseline[0]),
+    )
+    return [{"id": str(row[0]), "name": row[1]} for row in cursor.fetchall()]
+
+
 @router.get("")
 def get_competency_progress(
     year: int = Query(..., ge=2000, le=2100),
     month: int = Query(..., ge=1, le=12),
     module_id: Optional[int] = Query(None, ge=1),
+    employee_id: Optional[UUID] = None,
     cursor=Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     del current_user
+    employee_id = str(employee_id) if employee_id is not None else None
     now = _shanghai_now()
     if year > now.year:
         return {
             "year": year,
             "month": month,
             "moduleId": module_id,
+            "employeeId": employee_id,
             "baselineId": None,
             "cutoff": None,
             "isPartial": False,
@@ -83,6 +118,7 @@ def get_competency_progress(
             "year": year,
             "month": month,
             "moduleId": module_id,
+            "employeeId": employee_id,
             "baselineId": None,
             "cutoff": None,
             "isPartial": year == now.year and month == now.month,
@@ -110,6 +146,7 @@ def get_competency_progress(
             "year": year,
             "month": month,
             "moduleId": module_id,
+            "employeeId": employee_id,
             "baselineId": baseline_id,
             "cutoff": None,
             "isPartial": year == now.year and month == now.month,
@@ -120,16 +157,19 @@ def get_competency_progress(
             "dataQualityWarnings": [f"年度基线存在 {invalid_reference_count} 个无效员工或技能引用"],
         }
     module_filter = " AND s.module_id = ?" if module_id is not None else ""
+    employee_filter = " AND i.employee_id = ?" if employee_id is not None else ""
     params = [baseline_id]
     if module_id is not None:
         params.append(module_id)
+    if employee_id is not None:
+        params.append(employee_id)
     cursor.execute(
         f"""
         SELECT i.employee_id, i.skill_id,
                i.initial_current_level, i.annual_target_level
         FROM dbo.competency_annual_baseline_items i
         INNER JOIN dbo.skills s ON s.id = i.skill_id
-        WHERE i.baseline_id = ?{module_filter}
+        WHERE i.baseline_id = ?{module_filter}{employee_filter}
         ORDER BY i.employee_id, i.skill_id
         """,
         params,
@@ -148,6 +188,7 @@ def get_competency_progress(
             "year": year,
             "month": month,
             "moduleId": module_id,
+            "employeeId": employee_id,
             "baselineId": baseline_id,
             "cutoff": None,
             "isPartial": year == now.year and month == now.month,
@@ -174,10 +215,12 @@ def get_competency_progress(
            AND i.skill_id = h.skill_id
         INNER JOIN dbo.skills s ON s.id = i.skill_id
         WHERE h.changed_at >= DATEFROMPARTS(?, 1, 1)
-          AND h.changed_at <= ?{module_filter}
+          AND h.changed_at <= ?{module_filter}{employee_filter}
         ORDER BY h.changed_at, h.id
         """,
-        [baseline_id, year, query_end] + ([module_id] if module_id is not None else []),
+        [baseline_id, year, query_end]
+        + ([module_id] if module_id is not None else [])
+        + ([employee_id] if employee_id is not None else []),
     )
     history = [
         {
@@ -199,6 +242,7 @@ def get_competency_progress(
         now=now,
     )
     result.update({
+        "employeeId": employee_id,
         "status": "ready",
         "dataQualityWarnings": [],
         "baseline": {

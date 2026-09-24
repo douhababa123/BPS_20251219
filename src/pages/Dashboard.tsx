@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, BarChart3, CalendarDays, Filter, Settings } from 'lucide-react';
+import { AlertCircle, BarChart3, CalendarDays, Filter, Settings, UserRound } from 'lucide-react';
 import {
   Bar, CartesianGrid, Cell, ComposedChart, LabelList, Line,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -12,7 +12,8 @@ import {
 import { useNewAuth } from '../contexts/NewAuthContext';
 import {
   formatCloseRate, formatGap, formatLevel, getCompetencyModules,
-  getCompetencyProgress, getCompetencyProgressYears, selectedMonthForYear, shanghaiYearMonth,
+  getCompetencyProgress, getCompetencyProgressEmployees, getCompetencyProgressYears,
+  selectedMonthForYear, shanghaiYearMonth,
 } from '../lib/dashboardProgressApi';
 
 const shanghaiToday = shanghaiYearMonth();
@@ -92,12 +93,17 @@ export function Dashboard() {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [selectedModule, setSelectedModule] = useState<number | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
 
   const yearsQuery = useQuery({ queryKey: ['competency-progress-years'], queryFn: getCompetencyProgressYears });
   const modulesQuery = useQuery({ queryKey: ['competency-progress-modules'], queryFn: getCompetencyModules });
+  const employeesQuery = useQuery({
+    queryKey: ['competency-progress-employees', selectedYear],
+    queryFn: () => getCompetencyProgressEmployees(selectedYear),
+  });
   const progressQuery = useQuery({
-    queryKey: ['competency-progress', selectedYear, selectedMonth, selectedModule],
-    queryFn: () => getCompetencyProgress(selectedYear, selectedMonth, selectedModule),
+    queryKey: ['competency-progress', selectedYear, selectedMonth, selectedModule, selectedEmployee],
+    queryFn: () => getCompetencyProgress(selectedYear, selectedMonth, selectedModule, selectedEmployee),
     retry: 1,
   });
 
@@ -114,12 +120,16 @@ export function Dashboard() {
     ? progressQuery.data.year === selectedYear
       && progressQuery.data.month === selectedMonth
       && (progressQuery.data.moduleId ?? null) === selectedModule
+      && (progressQuery.data.employeeId ?? '').toLowerCase() === (selectedEmployee ?? '').toLowerCase()
     : true;
   const progress = responseMatchesSelection ? progressQuery.data : undefined;
   const progressError = progressQuery.isError || !responseMatchesSelection;
   const moduleName = selectedModule == null
     ? '全部模块'
     : modulesQuery.data?.find(item => item.module_id === selectedModule)?.module_name || `模块 ${selectedModule}`;
+  const employeeName = selectedEmployee == null
+    ? '全部人员'
+    : employeesQuery.data?.find(item => item.id === selectedEmployee)?.name || '所选人员';
   const monthText = `${selectedMonth}`.padStart(2, '0');
   const cutoffText = progress?.cutoff
     ? new Date(progress.cutoff).toLocaleString('zh-CN', { hour12: false })
@@ -136,7 +146,7 @@ export function Dashboard() {
           <h2 className="text-2xl font-semibold text-gray-900">能力发展总览</h2>
           <p className="mt-1 text-sm text-gray-500">年度 Level、GAP 总分与 GAP 关闭率</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
             <CalendarDays className="h-4 w-4 text-blue-900" />
             <span className="text-sm text-gray-600">年度</span>
@@ -144,6 +154,7 @@ export function Dashboard() {
               const year = Number(event.target.value);
               setSelectedYear(year);
               setSelectedMonth(selectedMonthForYear(year));
+              setSelectedEmployee(null);
             }} className="min-w-16 bg-transparent text-sm font-medium focus:outline-none">
               {years.map(year => <option key={year} value={year}>{year}</option>)}
             </select>
@@ -163,11 +174,21 @@ export function Dashboard() {
               {(modulesQuery.data || []).map(module => <option key={module.module_id} value={module.module_id}>{module.module_name}</option>)}
             </select>
           </label>
+          <label className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 shadow-sm">
+            <UserRound className="h-4 w-4 text-blue-900" />
+            <span className="text-sm text-gray-600">人员</span>
+            <select aria-label="统计人员" value={selectedEmployee ?? ''} onChange={event => setSelectedEmployee(event.target.value || null)} disabled={employeesQuery.isLoading || employeesQuery.isError} className="min-w-32 bg-transparent text-sm font-medium focus:outline-none disabled:text-gray-400">
+              <option value="">全部人员</option>
+              {(employeesQuery.data || []).map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+            </select>
+          </label>
         </div>
       </div>
 
+      {employeesQuery.isError && <p role="alert" className="text-sm text-red-700">人员列表加载失败，请刷新页面重试。</p>}
+
       <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-        统计范围：{selectedYear} 年 {monthText} 月｜{moduleName}｜
+        统计范围：{selectedYear} 年 {monthText} 月｜{moduleName}｜{employeeName}｜
         {progress?.status === 'not_started'
           ? '尚未开始'
           : progress?.isPartial
@@ -195,7 +216,7 @@ export function Dashboard() {
         </div>
       )}
       {!progressQuery.isLoading && !progressError && progress?.status === 'empty_scope' && (
-        <div className="rounded-2xl border bg-white p-8 text-center text-gray-600">该模块无基线数据。</div>
+        <div className="rounded-2xl border bg-white p-8 text-center text-gray-600">当前筛选范围无基线数据。</div>
       )}
       {!progressQuery.isLoading && !progressError && progress?.status === 'not_started' && (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-8 text-center text-blue-900">
@@ -235,7 +256,7 @@ export function Dashboard() {
                 </p>
               )}
               <figure
-                aria-label={`${selectedYear} 年截至 ${monthText} 月${moduleName}的月末 GAP 总分和累计 GAP 关闭率趋势`}
+                aria-label={`${selectedYear} 年截至 ${monthText} 月${moduleName}、${employeeName}的月末 GAP 总分和累计 GAP 关闭率趋势`}
                 data-testid="dashboard-gap-chart"
               >
                 <ResponsiveContainer width="100%" height={360}>

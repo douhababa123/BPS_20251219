@@ -242,6 +242,13 @@
 - 改变月份只改变当前/YTD 三项指标及趋势截止月；同一年度和模块下的年初 Level、目标 Level、年初 GAP 保持不变。
 - 页面显示“统计范围：2026 年 06 月｜全部模块｜截至 2026-06-30”等范围说明；当月显示实际查询截止时间。
 
+### 6.1.2 个人筛选（后续补充）
+
+- 在年度、月份、模块之外增加“人员”筛选，默认为“全部人员”。选项来自所选年度的生效基线；曾参与该基线但后来停用的员工仍可用于历史查询。
+- 选单人时，六项 KPI、1 月至所选月份的全部趋势点和统计单元数统一使用该员工在所选模块内的基线单元；“全部人员”保持原团队统计口径。年初目标继续固定为基线目标，不随年中修改改变。
+- 切换年度重置为“全部人员”。员工与模块交集为空时明确显示无基线数据，不把缺失单元按 0 计入。
+- 统计范围和趋势图的可访问名称同步显示所选人员；请求及响应均携带人员 ID，避免快速切换时显示旧人员数据。
+
 ### 6.2 六项 KPI
 
 设年度基线单元集合为 `B`。对每个基线单元 `i`：
@@ -365,7 +372,8 @@ Tyler Tan（员工编号 `SCh_Tyler_Tan`）和 Tong Zhifeng（员工编号 `1500
 - `GET /api/competency-annual-baselines/template`：管理员下载年初 Excel 模板。
 - `POST /api/competency-annual-baselines/import-preview`：管理员上传所选年度 Excel，只解析、校验并返回预览，不写入业务表。
 - `POST /api/competency-annual-baselines`：管理员明确确认后从已预览的同一文件内容或允许的历史版本建立年度基线；校验年度、生效版本并发标识和替换确认。
-- `GET /api/dashboard/competency-progress?year=YYYY&month=MM&module_id=N`：一次返回六项 KPI、1 月至所选月的月度序列、筛选回显、基线 ID、统计截止时间、统计单元数和数据质量告警。全部模块时省略 `module_id`；月份校验为 1–12 且不得查询尚未到来的进度。
+- `GET /api/dashboard/competency-progress?year=YYYY&month=MM&module_id=N&employee_id=UUID`：一次返回六项 KPI、1 月至所选月的月度序列、筛选回显、基线 ID、统计截止时间、统计单元数和数据质量告警。全部模块或全部人员时分别省略 `module_id`、`employee_id`；月份校验为 1–12 且不得查询尚未到来的进度。
+- `GET /api/dashboard/competency-progress/employees?year=YYYY`：返回该年度生效基线涉及的人员选项；无生效基线时返回空列表。
 
 最终路由名称可按现有 FastAPI 风格微调，但必须保持权限、事务和统计口径。
 

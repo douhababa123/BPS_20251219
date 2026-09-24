@@ -58,6 +58,25 @@ The system SHALL apply the selected year, statistical month and either all modul
 - **AND** future months cannot be selected and future years, if listed, show a not-started state without progress values
 - **AND** the ongoing month is labeled as through the current cutoff, not a completed month-end result
 
+### Requirement: Baseline employee filter
+
+The system SHALL offer all people and individual employees from the selected year's active baseline. The selected employee SHALL constrain the same baseline employee-skill cells and saved history for all six KPIs, every monthly trend point and the displayed baseline-cell count. It SHALL preserve the fixed annual targets and existing calculation rules.
+
+#### Scenario: Select one employee
+- **WHEN** a user selects an employee from the annual baseline
+- **THEN** all six KPIs and every trend point include only that employee's baseline cells
+- **AND** the scope label and baseline-cell count identify that employee's scope
+
+#### Scenario: Combine employee and module filters
+- **WHEN** a user selects an employee and a competency module
+- **THEN** results include only that employee's cells within that module
+- **AND** an empty intersection displays no baseline data rather than zero-valued KPIs
+
+#### Scenario: Select all people or switch year
+- **WHEN** a user selects all people
+- **THEN** existing team-wide calculations remain unchanged
+- **AND** switching the year resets employee selection to all people until that year's baseline employees are available
+
 ### Requirement: Ordered KPI layout and dynamic titles
 
 The system SHALL display six equal-width KPI cards on one row at viewport widths of at least 1280px in the order year-start Level, target Level, current Level, year-start GAP, current GAP and close rate, with ordered wrapping at smaller widths. Titles SHALL reflect the selected year and two-digit statistical month.

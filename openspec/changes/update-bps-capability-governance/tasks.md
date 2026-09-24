@@ -37,6 +37,7 @@
 - [x] 5.3 Add linked year/month/module filters, current/past-year defaults, disabled future months, ongoing-month cutoff labels, coverage and missing-baseline states.
 - [x] 5.4 Add formula-level backend and frontend tests including 200 initial GAP / 160 June GAP / 20% close rate, matching KPI and chart values, module filters, zero GAP and unchanged baseline metrics across months.
 - [x] 5.5 Test historical cutoffs exclude later edits, unchanged months carry forward, responsive card order, synchronized loading/errors and rejection of stale filter responses.
+- [x] 5.6 Add a baseline-employee selector and apply the same selected employee to all six KPIs, monthly trend and scope count; test all-people and individual results, module intersection and filter changes.
 
 ## 6. Schedule Others
 

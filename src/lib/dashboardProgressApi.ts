@@ -13,6 +13,7 @@ export interface CompetencyProgressResponse {
   year: number;
   month: number;
   moduleId: number | null;
+  employeeId: string | null;
   baselineId: string | null;
   cutoff: string | null;
   isPartial: boolean;
@@ -36,11 +37,21 @@ export interface CompetencyModuleOption {
   module_name: string;
 }
 
-export async function getCompetencyProgress(year: number, month: number, moduleId: number | null): Promise<CompetencyProgressResponse> {
+export interface CompetencyProgressEmployeeOption {
+  id: string;
+  name: string;
+}
+
+export async function getCompetencyProgress(year: number, month: number, moduleId: number | null, employeeId: string | null): Promise<CompetencyProgressResponse> {
   const response = await apiClient.get('/dashboard/competency-progress', {
-    params: { year, month, module_id: moduleId ?? undefined },
+    params: { year, month, module_id: moduleId ?? undefined, employee_id: employeeId ?? undefined },
   });
   return response.data as CompetencyProgressResponse;
+}
+
+export async function getCompetencyProgressEmployees(year: number): Promise<CompetencyProgressEmployeeOption[]> {
+  const response = await apiClient.get('/dashboard/competency-progress/employees', { params: { year } });
+  return response.data as CompetencyProgressEmployeeOption[];
 }
 
 export async function getCompetencyProgressYears(): Promise<number[]> {
