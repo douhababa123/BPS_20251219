@@ -1,5 +1,5 @@
 export type TaskType = 'WS' | 'SW' | 'P' | 'T' | 'C' | 'M' | 'L' | 'SD';
-export type Location = 'FLCNa' | 'FLCCh' | 'FCGNa' | 'FCLCh' | 'FDCCh' | 'GPU-SU' | 'EA' | 'HA';
+export type Location = 'FLCNa' | 'FLCCh' | 'FCGNa' | 'FCLCh' | 'FDCCh' | 'FEDNa' | 'GPU-SU' | 'EA' | 'HA';
 export type Topic = 'TPM' | 'Lean flow' | 'S-CIP & PGL' | 'Lean admin' | 'Failure prev.' | 'Other';
 export type Role = 'Lead' | 'Expert' | 'Member' | 'Coach';
 export type Half = 'AM' | 'PM';

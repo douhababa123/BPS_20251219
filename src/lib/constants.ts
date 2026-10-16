@@ -20,6 +20,7 @@ export const LOCATIONS = [
   { code: 'FCGNa', name: 'FCGNa' },
   { code: 'FCLCh', name: 'FCLCh' },
   { code: 'FDCCh', name: 'FDCCh' },
+  { code: 'FEDNa', name: 'FEDNa' },
   { code: 'GPU-SU', name: 'GPU-SU' },
   { code: 'EA', name: 'EA' },
   { code: 'HA', name: 'HA' },
