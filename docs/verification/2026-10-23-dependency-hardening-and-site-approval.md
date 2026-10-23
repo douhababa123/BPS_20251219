@@ -65,7 +65,15 @@ Audit results on 2026-10-23:
   excluded to avoid creating test data in the shared business database.
 - Existing lint debt and build chunk-size/mixed-import warnings are not treated
   as resolved. No new lint bypass was added.
-- Clean release verification and deployment results will be appended after execution.
+- Clean release worktree at commit `1597017622cd92d9af232bf6ba0e5aedad3ed5d6`:
+  npm ci, TypeScript, 27 frontend test files / 208 tests, Vite production build,
+  151 isolated backend tests, and strict OpenSpec validation all pass.
+- Clean release ESLint reports 294 errors and 12 warnings; the newly added Excel
+  regression file has zero errors/warnings. Lint remains nonblocking as in the
+  existing workflow; this is not a clean-lint release.
+- Deployment run: https://github.com/douhababa123/BPS_20251219/actions/runs/39890151969
+  completed successfully at 2026-10-23 10:36 Asia/Shanghai. Both cloud CI and
+  self-hosted Jetson deployment succeeded, including the new production audit gate.
 
 ## Database protection
 
@@ -89,3 +97,22 @@ backup_size=20,025,344 bytes. Restore verification is not claimed; the existing
 application account lacks the previously documented RESTORE VERIFYONLY permission.
 Migration 010 only removes target>=current constraints; migration 011 adds an
 approval version with default 0. Original assessment values and history are retained.
+
+## Post-deployment verification
+
+- Jetson checkout: `1597017622cd92d9af232bf6ba0e5aedad3ed5d6`.
+- `http://10.70.80.183:3000/`: HTTP 200; new frontend bundle
+  `index-DubbnHmS.js`, stylesheet `index-VBHlh71m.css`.
+- `/api/health`: healthy, database connected; backend container healthy and
+  frontend container running.
+- `/api/openapi.json`: deployed Task schema includes `approval_version`.
+- Served frontend bundle includes `approval_version` and `can_approve`.
+- Migration 011 column exists (INT / length 4); both target>=current constraints
+  are gone; current/target 0–4 check constraints remain enabled.
+- All five table counts and original-column checksums above are unchanged after
+  deployment, including the 680 tasks. No test accounts/tasks/assessments created.
+- Real-directory read-only check resolves all 15 configured engineers to their
+  Site approver: SNa -> Wang Ning; SCh -> Tyler Tan.
+- No authenticated browser role-by-role acceptance/reassignment flow was executed
+  against production. Those behaviors have isolated automated regression coverage;
+  live interaction testing that changes business tasks is not claimed.
