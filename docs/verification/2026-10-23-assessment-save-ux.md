@@ -48,4 +48,30 @@ createBrowserRouter/RouterProvider；保留现有 Routes、URL 与页面映射�
 浏览器刷新/关闭提示使用浏览器原生机制，提示文字和是否显示由浏览器控制；不保证浏览器崩溃、进程强制结束时恢复草稿。
 
 本次沿用现有批量版本与服务端权限机制，没有改动 API 路径、保存请求内容、数据库表、员工分数或历史记录。
-测试证明前端交互与保护逻辑，不代表已在 Jetson 上验证真实账户重新登录。本次仅本地实现与提交，尚未部署。
+测试证明前端交互与保护逻辑，不代表已在 Jetson 上验证真实账户重新登录。后续部署结果如下。
+
+## Jetson 发布复核（2026-10-23）
+
+- 用户批准部署后，通过原有 DEV push 工作流发布，不修改流水线、不包含其他未提交的图表改动。
+- 发布提交：`3c2dff0533989d0c3c16474cc5571cf36f044dea`。
+- 发布前在独立干净 worktree 复核：219 项前端测试、类型检查、生产构建均通过；生产依赖审计 0 项漏洞。
+- [GitHub Actions 39895296574](https://github.com/douhababa123/BPS_20251219/actions/runs/39895296574) 成功，完成时间 2026-10-23 11:32:42（Asia/Shanghai）。云端质量检查与 Jetson 部署 job 均成功。
+- 既有 ESLint 错误按原工作流 `continue-on-error` 处理；此前已接受的 Tailwind 构建依赖风险未改变，不声称全量 lint/全量依赖审计无问题。
+- Jetson `/mnt/nvme/BPS` 的 HEAD 与发布提交一致；backend healthy，frontend running。
+- 首页、`/login` 和新资源 `/assets/index-D1J3RYlp.js` 均 HTTP 200。以 UTF-8 解码实际服务资源，确认含“加入待保存修改”“保存全部修改”和未保存离开提示。
+- 经前端代理的 `/api/health` 返回 healthy / database connected；部署后检查的后端日志片段未出现启动异常。
+
+部署前后只读核对（数量及 `CHECKSUM_AGG(BINARY_CHECKSUM(*))` 均一致）：
+
+| 表 | 行数 | 校验值 |
+| --- | ---: | ---: |
+| competency_assessments | 464 | 1666997958 |
+| competency_assessment_history | 534 | 1297710477 |
+| competency_assessment_versions | 7 | -1066710807 |
+
+没有使用真实员工分数做测试写入，没有执行真实账号的保存后退出/重新登录验收；这部分不能由部署健康检查替代。
+
+### 回退方式
+
+本次没有新增数据库迁移。若发现此次 UI 回归，可对 `3c2dff0` 创建普通 revert 提交，推送 DEV，沿用同一 Actions 流程重新部署；不重置共享分支、不还原业务数据库。
+上一已验证运行版本为 `1597017`（中间的 `1788646` 仅文档）；回退后仍须复核健康检查和前端资源。本次未触发回退。
