@@ -97,11 +97,14 @@ export interface CompetencyChangeRecord {
   changedByEmail: string | null;
 }
 
-export async function saveAssessmentBatch(cells: AssessmentBatchSaveInput[]): Promise<{
+export interface AssessmentBatchSaveResult {
   versionId: string;
   savedCount: number;
   savedAt: string;
-}> {
+  refreshWarning?: string;
+}
+
+export async function saveAssessmentBatch(cells: AssessmentBatchSaveInput[]): Promise<AssessmentBatchSaveResult> {
   const response = await apiClient.post('/competency-assessments/batch-save', { cells });
   return response.data;
 }

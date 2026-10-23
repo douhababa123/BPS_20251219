@@ -9,6 +9,8 @@ interface AssessmentEditDialogProps {
   initial?: AssessmentSaveInput;
   onCancel: () => void;
   onSave: (input: AssessmentSaveInput) => Promise<void>;
+  draftMode?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 type LevelValue = number | '';
@@ -20,6 +22,8 @@ export default function AssessmentEditDialog({
   initial,
   onCancel,
   onSave,
+  draftMode = false,
+  onDirtyChange,
 }: AssessmentEditDialogProps) {
   const [current, setCurrent] = useState<LevelValue>(initial?.current_level ?? '');
   const [target, setTarget] = useState<LevelValue>(initial?.target_level ?? '');
@@ -31,6 +35,13 @@ export default function AssessmentEditDialog({
   useEffect(() => {
     currentRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    onDirtyChange?.(current !== (initial?.current_level ?? '')
+      || target !== (initial?.target_level ?? '') || notes !== (initial?.notes ?? ''));
+  }, [current, target, notes, initial?.current_level, initial?.target_level, initial?.notes, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const handleCurrentChange = (value: string) => {
     const next = value === '' ? '' : Number(value);
@@ -89,7 +100,9 @@ export default function AssessmentEditDialog({
             <h2 id="assessment-dialog-title" className="text-lg font-semibold text-gray-900">
               编辑能力评估
             </h2>
-            <p className="mt-1 text-sm text-gray-500">修改先加入页面草稿，点击统一保存后才写入版本历史</p>
+            <p className="mt-1 text-sm text-gray-500">{draftMode
+              ? '此处仅加入待保存修改，尚未写入数据库。请随后点击“保存全部修改”。'
+              : '点击保存后提交本次修改。'}</p>
           </div>
 
           <div className="space-y-4 px-6 py-5">
@@ -174,7 +187,7 @@ export default function AssessmentEditDialog({
               disabled={!canSave}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
-              {isSaving ? '保存中…' : '保存'}
+              {isSaving ? (draftMode ? '加入中…' : '保存中…') : (draftMode ? '加入待保存修改' : '保存')}
             </button>
           </div>
         </form>

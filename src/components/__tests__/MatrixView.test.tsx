@@ -90,7 +90,7 @@ describe('MatrixView fullscreen mode', () => {
 describe('MatrixView competency editing', () => {
   it('stages a module-authorized edit and sends it only on unified save', async () => {
     const user = userEvent.setup();
-    const onSaveAssessments = vi.fn().mockResolvedValue(undefined);
+    const onSaveAssessments = vi.fn().mockResolvedValue({ versionId: 'version-1', savedCount: 1, savedAt: '2026-10-23' });
     render(
       <MatrixView
         rows={rows}
@@ -104,11 +104,11 @@ describe('MatrixView competency editing', () => {
     await user.click(screen.getByRole('button', { name: /Gu Xuan.*WAS.*编辑能力评估/ }));
     await user.selectOptions(screen.getByLabelText('能力现状'), '2');
     await user.selectOptions(screen.getByLabelText('能力目标'), '4');
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '保存' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '加入待保存修改' }));
 
     expect(onSaveAssessments).not.toHaveBeenCalled();
     expect(screen.getByText('1 项未保存修改')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '保存' }));
+    await user.click(screen.getByRole('button', { name: '保存全部修改' }));
     expect(onSaveAssessments).toHaveBeenCalledWith([{
       employee_id: 'employee-1', skill_id: 1, current_level: 2, target_level: 4,
       notes: undefined, expected_updated_at: null,
@@ -130,7 +130,7 @@ describe('MatrixView competency editing', () => {
 
     await user.click(screen.getByRole('button', { name: /Gu Xuan.*WAS.*编辑能力评估/ }));
     await user.selectOptions(screen.getByLabelText('能力现状'), '2');
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '保存' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '加入待保存修改' }));
     expect(screen.getByText('1 项未保存修改')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '放弃修改' }));
@@ -170,8 +170,8 @@ describe('MatrixView competency editing', () => {
 
     await user.click(screen.getByRole('button', { name: /编辑能力评估/ }));
     await user.selectOptions(screen.getByLabelText('能力现状'), '2');
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '保存' }));
-    await user.click(screen.getByRole('button', { name: '保存' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '加入待保存修改' }));
+    await user.click(screen.getByRole('button', { name: '保存全部修改' }));
 
     expect(await screen.findByText('能力数据已被其他人修改')).toBeInTheDocument();
     expect(screen.getByText('1 项未保存修改')).toBeInTheDocument();

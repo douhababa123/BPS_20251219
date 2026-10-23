@@ -1,5 +1,6 @@
 import { ChevronDown, User, LogOut, Shield } from 'lucide-react';
 import { useNewAuth } from '../contexts/NewAuthContext';
+import { useAssessmentDraft } from '../contexts/AssessmentDraftContext';
 import { NotificationBell } from './NotificationPanel';
 import { useState, useRef, useEffect } from 'react';
 
@@ -10,6 +11,7 @@ interface HeaderProps {
 
 export function Header({ title, subtitle }: HeaderProps) {
   const { user, logout, isAdmin } = useNewAuth();
+  const { confirmLeave } = useAssessmentDraft();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +75,7 @@ export function Header({ title, subtitle }: HeaderProps) {
 
               <button
                 onClick={() => {
+                  if (!confirmLeave()) return;
                   logout();
                   setIsOpen(false);
                 }}

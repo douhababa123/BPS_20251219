@@ -16,6 +16,7 @@ import {
 } from '../lib/competencyApi';
 import type { CompetencyChangeRecord } from '../lib/competencyApi';
 import MatrixView from '../components/MatrixView';
+import { useAssessmentDraft } from '../contexts/AssessmentDraftContext';
 import CompetencyChangeLogDialog from '../components/CompetencyChangeLogDialog';
 import { cn } from '../lib/utils';
 import type {
@@ -56,7 +57,11 @@ interface EmployeeSummary {
 }
 
 export function CompetencyAssessment() {
+  const { confirmLeave } = useAssessmentDraft();
   const [viewMode, setViewMode] = useState<'matrix' | 'card' | 'table'>('matrix');
+  const changeView = (next: typeof viewMode) => {
+    if (next !== viewMode && confirmLeave()) setViewMode(next);
+  };
   const [matrixData, setMatrixData] = useState<{
     rows: MatrixRow[];
     columns: MatrixColumn[];
@@ -186,8 +191,13 @@ export function CompetencyAssessment() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSaveAssessments = async (cells: AssessmentBatchSaveInput[]) => {
-    await saveAssessmentBatch(cells);
-    await loadData(undefined, true);
+    const result = await saveAssessmentBatch(cells);
+    try {
+      await loadData(undefined, true);
+      return result;
+    } catch {
+      return { ...result, refreshWarning: '数据已保存，但页面重新加载失败。请点击页面“刷新”后继续编辑，请勿重复提交。' };
+    }
   };
 
   const openChangeLog = async () => {
@@ -321,7 +331,7 @@ export function CompetencyAssessment() {
               <h2 className="text-xl font-semibold text-gray-900">加载失败</h2>
               <p className="text-gray-600">{error}</p>
               <button
-                onClick={() => loadData()}
+                onClick={() => { if (confirmLeave()) void loadData(); }}
                 className="mt-4 flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -381,7 +391,7 @@ export function CompetencyAssessment() {
                 </button>
               )}
               <button
-                onClick={() => loadData()}
+                onClick={() => { if (confirmLeave()) void loadData(); }}
                 disabled={isLoading}
                 className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
@@ -419,7 +429,7 @@ export function CompetencyAssessment() {
               {/* 视图切换 */}
               <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
-                  onClick={() => setViewMode('matrix')}
+                  onClick={() => changeView('matrix')}
                   className={cn(
                     'flex items-center gap-2 px-3 py-1 rounded text-sm font-medium transition-colors',
                     viewMode === 'matrix' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
@@ -430,7 +440,7 @@ export function CompetencyAssessment() {
                   总览
                 </button>
                 <button
-                  onClick={() => setViewMode('card')}
+                  onClick={() => changeView('card')}
                   className={cn(
                     'flex items-center gap-2 px-3 py-1 rounded text-sm font-medium transition-colors',
                     viewMode === 'card' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
@@ -441,7 +451,7 @@ export function CompetencyAssessment() {
                   卡片
                 </button>
                 <button
-                  onClick={() => setViewMode('table')}
+                  onClick={() => changeView('table')}
                   className={cn(
                     'flex items-center gap-2 px-3 py-1 rounded text-sm font-medium transition-colors',
                     viewMode === 'table' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'

@@ -10,6 +10,8 @@ import type {
 } from '../lib/database.types';
 import { apiClient } from '../lib/api-client';
 import AssessmentEditDialog from './AssessmentEditDialog';
+import type { AssessmentBatchSaveResult } from '../lib/competencyApi';
+import { useAssessmentDraft } from '../contexts/AssessmentDraftContext';
 
 interface MatrixViewProps {
   rows: MatrixRow[];
@@ -17,7 +19,7 @@ interface MatrixViewProps {
   stats: AssessmentStats;
   isLoading?: boolean;
   editableModuleIds?: number[] | null;
-  onSaveAssessments?: (cells: AssessmentBatchSaveInput[]) => Promise<void>;
+  onSaveAssessments?: (cells: AssessmentBatchSaveInput[]) => Promise<AssessmentBatchSaveResult>;
   onConflictReload?: () => Promise<void>;
   onSaveAssessment?: (
     employeeId: string,
@@ -119,23 +121,39 @@ export default function MatrixView({
   const [drafts, setDrafts] = useState<Record<string, AssessmentBatchSaveInput>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<AssessmentBatchSaveResult | null>(null);
+  const [confirmedCells, setConfirmedCells] = useState<Record<string, AssessmentBatchSaveInput>>({});
+  const savingRef = useRef(false);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const { setDraftState } = useAssessmentDraft();
+  const hasDrafts = Object.keys(drafts).length > 0;
+
+  useEffect(() => {
+    setDraftState({ dirty: hasDrafts || editorDirty, saving: isSaving });
+  }, [hasDrafts, editorDirty, isSaving, setDraftState]);
+  useEffect(() => () => setDraftState({ dirty: false, saving: false }), [setDraftState]);
 
   const draftKey = (employeeId: string, skillId: number) => `${employeeId}:${skillId}`;
   const saveDrafts = async () => {
-    if (!onSaveAssessments || Object.keys(drafts).length === 0) return;
+    if (!onSaveAssessments || Object.keys(drafts).length === 0 || savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
     setSaveError(null);
+    setSaveResult(null);
     try {
-      await onSaveAssessments(Object.values(drafts));
+      const result = await onSaveAssessments(Object.values(drafts));
+      setSaveResult(result);
+      setConfirmedCells(result.refreshWarning ? drafts : {});
       setDrafts({});
     } catch (error) {
       const candidate = error as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       setSaveError(candidate.response?.data?.detail || candidate.message || '保存失败');
       if (candidate.response?.status === 409 && onConflictReload) {
-        await onConflictReload();
+        try { await onConflictReload(); } catch { setSaveError('保存冲突，且重新加载失败。修改仍未保存，请稍后重试。'); }
       }
     } finally {
       setIsSaving(false);
+      savingRef.current = false;
     }
   };
 
@@ -290,15 +308,23 @@ export default function MatrixView({
     >
       {/* 统计卡片 */}
       {onSaveAssessments && Object.keys(drafts).length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <div role="region" aria-label="待保存修改" className="sticky top-0 z-50 flex flex-wrap shrink-0 items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-sm">
           <div>
             <span className="text-sm font-medium text-amber-900">{Object.keys(drafts).length} 项未保存修改</span>
-            {saveError && <p className="mt-1 text-xs text-red-700">{saveError}</p>}
+            <p className="text-sm text-amber-900">尚未写入数据库，请点击“保存全部修改”。</p>
+            {saveError && <p role="alert" className="mt-1 text-sm text-red-700">{saveError}</p>}
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={() => { setDrafts({}); setSaveError(null); }} disabled={isSaving} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 disabled:opacity-50">放弃修改</button>
-            <button type="button" onClick={saveDrafts} disabled={isSaving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{isSaving ? '保存中…' : '保存'}</button>
+            <button type="button" onClick={saveDrafts} disabled={isSaving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{isSaving ? '保存中…' : '保存全部修改'}</button>
           </div>
+        </div>
+      )}
+      {saveResult && (
+        <div role="status" className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          <p>保存成功：{saveResult.savedCount} 项修改已写入数据库。</p>
+          <p className="break-all">版本：{saveResult.versionId}</p>
+          {saveResult.refreshWarning && <p className="mt-1 text-amber-900">{saveResult.refreshWarning}</p>}
         </div>
       )}
       {!isFullscreen && (
@@ -524,7 +550,7 @@ export default function MatrixView({
                   </td>
                   {filteredColumns.map(col => {
                     const persistedSkill = row.skills[col.skillId];
-                    const draft = drafts[draftKey(row.employeeId, col.skillId)];
+                    const draft = drafts[draftKey(row.employeeId, col.skillId)] || confirmedCells[draftKey(row.employeeId, col.skillId)];
                     const skill = draft ? {
                       skillId: col.skillId,
                       currentLevel: draft.current_level,
@@ -546,7 +572,7 @@ export default function MatrixView({
                     const permission = editableModuleIds === undefined
                       ? row.canEdit
                       : editableModuleIds === null || editableModuleIds.includes(col.moduleId);
-                    const editable = permission && Boolean(onSaveAssessments || onSaveAssessment);
+                    const editable = permission && Boolean(onSaveAssessments || onSaveAssessment) && !isSaving && !saveResult?.refreshWarning;
                     const content = skill ? (
                       <>
                         <div className={`text-sm font-medium ${textColor}`}>
@@ -613,6 +639,8 @@ export default function MatrixView({
       )}
       {editingCell && (onSaveAssessments || onSaveAssessment) && (
         <AssessmentEditDialog
+          draftMode={Boolean(onSaveAssessments)}
+          onDirtyChange={setEditorDirty}
           employeeName={editingCell.row.employeeName}
           skillName={editingCell.column.skillName}
           initial={(drafts[draftKey(editingCell.row.employeeId, editingCell.column.skillId)] || editingCell.row.skills[editingCell.column.skillId])
@@ -624,6 +652,8 @@ export default function MatrixView({
           onCancel={closeEditor}
           onSave={async input => {
             if (onSaveAssessments) {
+              setSaveResult(null);
+              setSaveError(null);
               const persisted = editingCell.row.skills[editingCell.column.skillId];
               setDrafts(previous => ({
                 ...previous,

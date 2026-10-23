@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { PersonaProvider } from './contexts/PersonaContext';
 import { useNewAuth } from './contexts/NewAuthContext';
+import { useAssessmentDraft } from './contexts/AssessmentDraftContext';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { OTPLogin } from './components/OTPLogin';
@@ -64,6 +65,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AppContent() {
   const { isAdmin } = useNewAuth();
+  const { confirmLeave } = useAssessmentDraft();
   const requestedPage = new URLSearchParams(window.location.search).get('page') as keyof typeof pages | null;
   const initialPage = requestedPage && requestedPage in pages && (!adminOnlyPages.has(requestedPage) || isAdmin)
     ? requestedPage
@@ -73,6 +75,7 @@ function AppContent() {
 
   const handleNavigate = (page: string) => {
     if (adminOnlyPages.has(page as keyof typeof pages) && !isAdmin) return;
+    if (page === currentPage || !confirmLeave()) return;
     setCurrentPage(page as keyof typeof pages);
   };
 
