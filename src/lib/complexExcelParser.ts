@@ -343,27 +343,19 @@ export async function parseComplexExcel(file: File): Promise<ParseResult> {
         const targetValue = row[targetCol];
 
         // 跳过空值
-        if (!currentValue || !targetValue) continue;
+        if (currentValue == null || targetValue == null ||
+            String(currentValue).trim() === '' || String(targetValue).trim() === '') continue;
 
-        const current = parseFloat(String(currentValue));
-        const target = parseFloat(String(targetValue));
+        const current = Number(currentValue);
+        const target = Number(targetValue);
 
         // 验证得分
-        if (isNaN(current) || isNaN(target)) continue;
-        if (current < 1 || current > 5 || target < 1 || target > 5) {
+        if (!Number.isInteger(current) || !Number.isInteger(target) ||
+            current < 0 || current > 4 || target < 0 || target > 4) {
           errors.push({
             row: rowIndex + 1,
             field: skill.name,
-            message: `得分必须在1-5之间`,
-            actualValue: `${current}/${target}`,
-          });
-          continue;
-        }
-        if (target < current) {
-          errors.push({
-            row: rowIndex + 1,
-            field: skill.name,
-            message: `目标得分不能低于现状得分`,
+            message: `得分必须为0-4之间的整数`,
             actualValue: `${current}/${target}`,
           });
           continue;

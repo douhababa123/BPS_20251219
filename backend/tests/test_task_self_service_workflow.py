@@ -62,6 +62,10 @@ def test_normal_user_assignment_to_another_employee_requires_approval(monkeypatc
     own_employee_id = uuid4()
     other_employee_id = uuid4()
     inserted_id = uuid4()
+    route = {"approval_site": "SNa", "approver_user_id": str(uuid4()), "approver_name": "Wang Ning"}
+    monkeypatch.setattr(tasks, "load_approval_directory", lambda _: {str(other_employee_id): route})
+    notify = MagicMock()
+    monkeypatch.setattr(tasks, "notify_approver", notify)
     cursor = MagicMock()
     cursor.fetchone.side_effect = [(own_employee_id,), (inserted_id,)]
 
@@ -92,6 +96,7 @@ def test_normal_user_assignment_to_another_employee_requires_approval(monkeypatc
     )
 
     assert created.status == "pending_approval"
+    assert notify.call_args.args[1] == route
 
 
 def test_requester_can_modify_self_entered_planned_schedule():

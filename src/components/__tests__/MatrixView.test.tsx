@@ -233,7 +233,7 @@ describe('MatrixView competency editing', () => {
     await screen.findByRole('button', { name: 'BPS elements' });
   });
 
-  it('uses green only for equality and red for every positive gap', async () => {
+  it('uses green for achieved or exceeded targets and red for every positive gap', async () => {
     const colorRows = [
       {
         ...rows[0],
@@ -253,18 +253,25 @@ describe('MatrixView competency editing', () => {
         employeeName: 'Large',
         skills: { 1: { skillId: 1, currentLevel: 1, targetLevel: 4, gap: 3 } },
       },
+      {
+        ...rows[0],
+        employeeId: 'e3',
+        employeeName: 'Exceeded',
+        skills: { 1: { skillId: 1, currentLevel: 4, targetLevel: 2, gap: 0 } },
+      },
     ];
 
     render(
       <MatrixView
         rows={colorRows}
         columns={columns}
-        stats={{ ...stats, totalEmployees: 3, totalAssessments: 3 }}
+        stats={{ ...stats, totalEmployees: 4, totalAssessments: 4 }}
         onSaveAssessment={vi.fn().mockResolvedValue(undefined)}
       />,
     );
 
     expect(screen.getByText('0/0').closest('td')).toHaveClass('bg-green-50');
+    expect(screen.getByText('4/2').closest('td')).toHaveClass('bg-green-50');
     expect(screen.getByText('GAP 1').closest('td')).toHaveClass('bg-red-50');
     expect(screen.getByText('GAP 3').closest('td')).toHaveClass('bg-red-50');
     expect(screen.queryByText('GAP 0')).not.toBeInTheDocument();

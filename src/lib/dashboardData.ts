@@ -281,7 +281,7 @@ function getGap(assessment: AssessmentLike): number {
   if (assessment.gap !== null && assessment.gap !== undefined) {
     return Number(assessment.gap) || 0;
   }
-  return Number(assessment.target_level || 0) - Number(assessment.current_level || 0);
+  return Math.max(Number(assessment.target_level || 0) - Number(assessment.current_level || 0), 0);
 }
 
 function normalizeCompetencyLevel(value?: number | null): number {

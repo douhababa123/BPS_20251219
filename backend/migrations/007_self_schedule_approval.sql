@@ -5,6 +5,14 @@
 
 SET NOCOUNT ON;
 
+-- Once versioned Site approval is installed, a self-assigned pending task can
+-- represent a deliberate reassignment and must not be auto-approved on deploy.
+IF COL_LENGTH('dbo.tasks', 'approval_version') IS NOT NULL
+BEGIN
+    PRINT 'Site approval installed: legacy self-schedule correction skipped.';
+    RETURN;
+END;
+
 UPDATE t
 SET
     t.status = 'planned',

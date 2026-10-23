@@ -54,6 +54,7 @@ def _task(**overrides):
         "requester_id": uuid4(),
         "assigned_employee_id": uuid4(),
         "status": "confirmed",
+        "approval_version": 0,
     }
     values.update(overrides)
     task = SimpleNamespace(**values)
@@ -85,6 +86,7 @@ def test_assignee_can_update_only_execution_status(monkeypatch):
         status="completed",
     )
     cursor = MagicMock()
+    cursor.rowcount = 1
 
     monkeypatch.setattr(tasks, "get_task", MagicMock(side_effect=[existing, updated]))
     monkeypatch.setattr(tasks, "_current_employee_id", lambda *_args: str(employee_id))
@@ -102,7 +104,7 @@ def test_assignee_can_update_only_execution_status(monkeypatch):
         if "UPDATE dbo.tasks" in call.args[0]
     )
     assert "status = ?" in update_call.args[0]
-    assert update_call.args[1:] == ("completed", str(task_id))
+    assert update_call.args[1:] == ("completed", str(task_id), 0)
     assert result.status == "completed"
     cursor.commit.assert_called_once()
 

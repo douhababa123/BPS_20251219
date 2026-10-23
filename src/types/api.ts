@@ -260,7 +260,7 @@ export interface CompetencyAssessment {
   employee_id: string;
   skill_id: number;
   current_level: number; // 0-5
-  target_level: number; // 0-5, must be >= current_level
+  target_level: number; // 0-4, independent of current_level
   assessment_date?: string;
   assessor_notes?: string;
   gap?: number;

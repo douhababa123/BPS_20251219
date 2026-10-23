@@ -76,6 +76,15 @@ describe('competencyApi', () => {
     expect(averageAssessmentValues([])).toBe(0);
   });
 
+  it('preserves overachievement levels without offsetting another skill deficit', async () => {
+    const matrix = await getMatrixData([
+      assessment('e1', 4, 2),
+      assessment('e2', 1, 3),
+    ] as never);
+    expect(matrix.rows[0].skills[1]).toMatchObject({ currentLevel: 4, targetLevel: 2, gap: 0 });
+    expect(matrix.stats.totalGapScore).toBe(2);
+  });
+
   it('sends changed cells in one explicit batch request', async () => {
     vi.mocked(apiClient.post).mockResolvedValue({ data: { versionId: 'v1', savedCount: 1 } });
 

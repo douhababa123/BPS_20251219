@@ -5,7 +5,10 @@ from typing import Optional, Dict
 from datetime import date
 from database import db
 from auth import verify_admin
-from audit import log_audit, log_audit_batch
+from audit import log_audit
+from models import TaskUpdate as GovernedTaskUpdate
+from .tasks import update_task as update_governed_task, _current_employee_id, _status_for_assignment
+from task_approval import load_approval_directory, require_approval_route, notify_approver
 import logging
 import uuid
 
@@ -54,20 +57,25 @@ def create_task(data: TaskCreate, current_user: Dict = Depends(verify_admin)):
         task_id = str(uuid.uuid4())
         
         with db.get_cursor() as cursor:
+            own_employee_id = _current_employee_id(cursor, current_user)
+            status = _status_for_assignment(current_user, data.status, data.assigned_employee_id, own_employee_id)
+            route = require_approval_route(load_approval_directory(cursor), data.assigned_employee_id) if status == 'pending_approval' and data.assigned_employee_id else None
             cursor.execute("""
                 INSERT INTO dbo.tasks (
                     id, task_name, task_type, task_location, start_date, end_date,
                     assigned_employee_id, days_count, hours_per_day, total_hours,
                     source, status, is_cross_factory, request_factory, required_skills,
-                    notes, time_slot, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), GETDATE())
+                    notes, time_slot, requester_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), GETDATE())
             """, (
                 task_id, data.task_name, data.task_type, data.task_location, 
                 data.start_date, data.end_date, data.assigned_employee_id,
                 data.days_count, data.hours_per_day, data.total_hours,
-                data.source, data.status, data.is_cross_factory, data.request_factory,
-                data.required_skills, data.notes, data.time_slot
+                data.source, status, data.is_cross_factory, data.request_factory,
+                data.required_skills, data.notes, data.time_slot, current_user['user_id']
             ))
+            if route:
+                notify_approver(cursor, route, task_id, data.task_name)
         
         log_audit('tasks', task_id, 'INSERT', current_user['user_id'], current_user['name'], 
                  current_user['email'], new_value=data.model_dump().__str__())
@@ -76,7 +84,7 @@ def create_task(data: TaskCreate, current_user: Dict = Depends(verify_admin)):
         return {
             'id': task_id, 'task_name': data.task_name, 'task_type': data.task_type,
             'task_location': data.task_location, 'start_date': str(data.start_date),
-            'end_date': str(data.end_date), 'status': data.status
+            'end_date': str(data.end_date), 'status': status
         }
     except HTTPException:
         raise
@@ -145,62 +153,14 @@ def get_task(task_id: str, current_user: Dict = Depends(verify_admin)):
 
 @router.put("/{task_id}")
 def update_task(task_id: str, data: TaskUpdate, current_user: Dict = Depends(verify_admin)):
-    try:
-        with db.get_cursor() as cursor:
-            cursor.execute("""
-                SELECT task_name, task_type, task_location, start_date, end_date, status
-                FROM dbo.tasks WHERE id = ?
-            """, (task_id,))
-            old_row = cursor.fetchone()
-            
-            if not old_row:
-                raise HTTPException(404, "任务不存在")
-            
-            old_data = {
-                'task_name': old_row[0], 'task_type': old_row[1], 'task_location': old_row[2],
-                'start_date': old_row[3], 'end_date': old_row[4], 'status': old_row[5]
-            }
-        
-        update_fields, params, logs = [], [], []
-        for field, new_value in data.model_dump(exclude_none=True).items():
-            if field in old_data and old_data[field] != new_value:
-                update_fields.append(f"{field} = ?")
-                params.append(new_value)
-                logs.append({
-                    'table_name': 'tasks', 'record_id': task_id, 'operation_type': 'UPDATE',
-                    'field_name': field, 'old_value': str(old_data[field]), 'new_value': str(new_value),
-                    'operator_id': current_user['user_id'], 'operator_name': current_user['name'],
-                    'operator_email': current_user['email']
-                })
-        
-        if not update_fields:
-            return {'message': '没有需要更新的字段'}
-        
-        update_fields.append("updated_at = GETDATE()")
-        params.append(task_id)
-        
-        with db.get_cursor() as cursor:
-            cursor.execute(f"UPDATE dbo.tasks SET {', '.join(update_fields)} WHERE id = ?", params)
-        
-        if logs:
-            log_audit_batch(logs)
-        
-        with db.get_cursor() as cursor:
-            cursor.execute("""
-                SELECT id, task_name, task_type, task_location, start_date, end_date, status
-                FROM dbo.tasks WHERE id = ?
-            """, (task_id,))
-            row = cursor.fetchone()
-            
-            return {
-                'id': str(row[0]), 'task_name': row[1], 'task_type': row[2],
-                'task_location': row[3], 'start_date': str(row[4]), 'end_date': str(row[5]),
-                'status': row[6]
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, str(e))
+    # Use the same approval/version checks as schedule edits; this endpoint must
+    # not bypass Site approval by directly writing status or assigned_employee_id.
+    values = {key: value for key, value in data.model_dump(exclude_none=True).items()
+              if key in GovernedTaskUpdate.model_fields and key != "required_skills"}
+    with db.get_cursor() as cursor:
+        result = update_governed_task(uuid.UUID(task_id), GovernedTaskUpdate(**values),
+                                     cursor=cursor, current_user=current_user)
+        return result.model_dump(mode="json")
 
 @router.delete("/{task_id}")
 def delete_task(task_id: str, current_user: Dict = Depends(verify_admin)):

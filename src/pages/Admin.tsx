@@ -26,7 +26,7 @@ import {
   deleteDepartment, deleteEmployee, deleteSkill,
 } from '@/services/adminService';
 import { taskWorkflowService } from '../services/task-workflow.service';
-import axios from 'axios';
+import { apiClient } from '../lib/api-client';
 
 type TabType = 'departments' | 'employees' | 'skills' | 'history' | 'approvals' | 'accounts' | 'baselines';
 
@@ -248,32 +248,31 @@ export function Admin() {
   });
 
   // 待审批任务查询
-  const token = localStorage.getItem('access_token');
   const { data: pendingTasks = [], refetch: refetchPending } = useQuery({
     queryKey: ['pending-approval-tasks'],
     queryFn: async () => {
-      const res = await axios.get('http://localhost:8000/api/tasks', {
+      const res = await apiClient.get('/tasks', {
         params: { status: 'pending_approval' },
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      return res.data as any[];
+      return (res.data as any[]).filter(task => task.can_approve);
     },
     enabled: activeTab === 'approvals',
   });
 
   // 审批/拒绝 state
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
+  const [rejectingVersion, setRejectingVersion] = useState<number>(0);
   const [rejectReason, setRejectReason] = useState('');
 
   const approveMutation = useMutation({
-    mutationFn: (taskId: string) => taskWorkflowService.approve(taskId),
+    mutationFn: (task: any) => taskWorkflowService.approve(task.id, task.approval_version),
     onSuccess: () => { refetchPending(); queryClient.invalidateQueries({ queryKey: ['tasks'] }); },
     onError: (e: any) => alert(`审批失败: ${e.message}`),
   });
 
   const rejectMutation = useMutation({
     mutationFn: ({ taskId, reason }: { taskId: string; reason: string }) =>
-      taskWorkflowService.reject(taskId, reason),
+      taskWorkflowService.reject(taskId, reason, rejectingVersion),
     onSuccess: () => {
       setRejectingTaskId(null);
       setRejectReason('');
@@ -473,7 +472,7 @@ export function Admin() {
                       </div>
                       <div className="flex gap-2 shrink-0">
                         <button
-                          onClick={() => approveMutation.mutate(task.id)}
+                          onClick={() => approveMutation.mutate(task)}
                           disabled={approveMutation.isPending}
                           className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-500 disabled:opacity-50 transition-colors"
                         >
@@ -481,7 +480,7 @@ export function Admin() {
                           同意
                         </button>
                         <button
-                          onClick={() => { setRejectingTaskId(task.id); setRejectReason(''); }}
+                          onClick={() => { setRejectingTaskId(task.id); setRejectingVersion(task.approval_version); setRejectReason(''); }}
                           disabled={rejectMutation.isPending}
                           className="flex items-center gap-1 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition-colors"
                         >

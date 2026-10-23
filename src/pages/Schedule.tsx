@@ -238,9 +238,8 @@ export function Schedule() {
 
   // Admin 待审批任务
   const pendingApprovalTasks = useMemo(() => {
-    if (!isAdmin) return [];
-    return normalizedTasks.filter((t: any) => t.status === 'pending_approval');
-  }, [normalizedTasks, isAdmin]);
+    return normalizedTasks.filter((t: any) => t.status === 'pending_approval' && t.can_approve);
+  }, [normalizedTasks]);
 
   const canModifyTask = (task: any) => {
     return canFullyEditSchedule(task, user, isAdmin);
@@ -250,18 +249,18 @@ export function Schedule() {
     canUpdateAssignedTaskExecutionStatus(task, user, isAdmin);
 
   // Admin 审批 / 拒绝 mutation
-  const [adminRejectModal, setAdminRejectModal] = useState<{ taskId: string; taskName: string } | null>(null);
+  const [adminRejectModal, setAdminRejectModal] = useState<{ taskId: string; taskName: string; version: number } | null>(null);
   const [adminRejectReason, setAdminRejectReason] = useState('');
 
   const approveMutation = useMutation({
-    mutationFn: (taskId: string) => taskWorkflowService.approve(taskId),
+    mutationFn: (task: any) => taskWorkflowService.approve(task.id, task.approval_version),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] }),
     onError: (e: any) => alert(`审批失败: ${e.message}`),
   });
 
   const adminRejectMutation = useMutation({
     mutationFn: ({ taskId, reason }: { taskId: string; reason: string }) =>
-      taskWorkflowService.reject(taskId, reason),
+      taskWorkflowService.reject(taskId, reason, adminRejectModal!.version),
     onSuccess: () => {
       setAdminRejectModal(null);
       setAdminRejectReason('');
@@ -560,7 +559,7 @@ export function Schedule() {
         </div>
 
         {/* Admin 待审批任务区 */}
-        {isAdmin && pendingApprovalTasks.length > 0 && (
+        {pendingApprovalTasks.length > 0 && (
           <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-2">
             <h3 className="text-sm font-bold text-orange-800 mb-3">
               ⏳ 有 {pendingApprovalTasks.length} 个任务申请待您审批：
@@ -574,14 +573,14 @@ export function Schedule() {
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button
-                      onClick={() => approveMutation.mutate(task.id)}
+                      onClick={() => approveMutation.mutate(task)}
                       disabled={approveMutation.isPending}
                       className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-500 disabled:opacity-50 transition-colors"
                     >
                       ✅ 审批通过
                     </button>
                     <button
-                      onClick={() => { setAdminRejectModal({ taskId: task.id, taskName: task.task_name }); setAdminRejectReason(''); }}
+                      onClick={() => { setAdminRejectModal({ taskId: task.id, taskName: task.task_name, version: task.approval_version }); setAdminRejectReason(''); }}
                       disabled={adminRejectMutation.isPending}
                       className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-500 disabled:opacity-50 transition-colors"
                     >
@@ -595,7 +594,7 @@ export function Schedule() {
         )}
 
         {/* Admin 待审批任务区 */}
-        {isAdmin && pendingApprovalTasks.length > 0 && (
+        {pendingApprovalTasks.length > 0 && (
           <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 mb-2">
             <h3 className="text-sm font-bold text-orange-800 mb-3">
               ⏳ 有 {pendingApprovalTasks.length} 个任务申请待您审批：
@@ -609,14 +608,14 @@ export function Schedule() {
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button
-                      onClick={() => approveMutation.mutate(task.id)}
+                      onClick={() => approveMutation.mutate(task)}
                       disabled={approveMutation.isPending}
                       className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-500 disabled:opacity-50 transition-colors"
                     >
                       ✅ 审批通过
                     </button>
                     <button
-                      onClick={() => { setAdminRejectModal({ taskId: task.id, taskName: task.task_name }); setAdminRejectReason(''); }}
+                      onClick={() => { setAdminRejectModal({ taskId: task.id, taskName: task.task_name, version: task.approval_version }); setAdminRejectReason(''); }}
                       disabled={adminRejectMutation.isPending}
                       className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-500 disabled:opacity-50 transition-colors"
                     >
@@ -630,7 +629,7 @@ export function Schedule() {
         )}
 
         {/* 工程师待确认任务区 (工程师看到 planned 任务) */}
-        {!isAdmin && myPlannedTasks.length > 0 && (
+        {myPlannedTasks.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-2">
             <h3 className="text-sm font-bold text-amber-800 mb-3">
               ⏳ 您有 {myPlannedTasks.length} 个待确认任务，请尽快处理：

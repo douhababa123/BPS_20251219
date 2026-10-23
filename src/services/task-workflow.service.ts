@@ -19,29 +19,15 @@ export const taskWorkflowService = {
     return res.data;
   },
 
-  /** 强制指派（仅 admin，直接 planned） */
-  async forceAssign(data: {
-    taskName: string;
-    employeeId: string;
-    taskType: string;
-    location: string;
-    startDate: string;
-    endDate: string;
-    notes?: string;
-  }) {
-    const res = await apiClient.post('/matching/force-assign', data);
+  /** 当前 Site 审批人审批所看到的任务版本 */
+  async approve(taskId: string, expectedVersion: number) {
+    const res = await apiClient.post(`/tasks/${taskId}/approve`, { expected_version: expectedVersion });
     return res.data;
   },
 
-  /** admin 审批通过 */
-  async approve(taskId: string) {
-    const res = await apiClient.post(`/tasks/${taskId}/approve`, {});
-    return res.data;
-  },
-
-  /** admin 拒绝 */
-  async reject(taskId: string, rejectionReason: string) {
-    const res = await apiClient.post(`/tasks/${taskId}/reject`, { rejection_reason: rejectionReason });
+  /** 当前 Site 审批人拒绝 */
+  async reject(taskId: string, rejectionReason: string, expectedVersion: number) {
+    const res = await apiClient.post(`/tasks/${taskId}/reject`, { rejection_reason: rejectionReason, expected_version: expectedVersion });
     return res.data;
   },
 

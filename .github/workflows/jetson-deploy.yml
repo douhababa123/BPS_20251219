@@ -35,6 +35,9 @@ jobs:
       
       - name: 安装前端依赖
         run: npm ci
+
+      - name: Audit production npm dependencies
+        run: npm audit --omit=dev
       
       - name: TypeScript 类型检查
         run: npm run typecheck
@@ -172,6 +175,12 @@ jobs:
           echo "🔧 应用能力修改审计数据库结构..."
           docker compose run --rm --no-deps backend \
             python run_migration.py migrations/009_competency_change_audit.sql
+
+          docker compose run --rm --no-deps backend \
+            python run_migration.py migrations/010_allow_competency_overachievement.sql
+
+          docker compose run --rm --no-deps backend \
+            python run_migration.py migrations/011_task_site_approval.sql
 
           # 启动新容器
           echo "🚀 启动新容器..."

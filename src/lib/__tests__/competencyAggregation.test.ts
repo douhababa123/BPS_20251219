@@ -115,6 +115,15 @@ const mockAssessments: AssessmentFull[] = [
   },
 ];
 
+it('does not let overachievement cancel another skill GAP in team or personal summaries', () => {
+  const data = [
+    { ...mockAssessments[0], current_level: 4, target_level: 2, gap: -2 },
+    { ...mockAssessments[1], current_level: 1, target_level: 3, gap: 2 },
+  ];
+  expect(calculateTeamModuleStats(data, mockSkills)[0].totalGap).toBe(2);
+  expect(calculatePersonalModuleStats('emp-1', data, mockSkills)[0].totalGap).toBe(2);
+});
+
 // ──────────────────────────────────────────────────────────
 // MODULE_MAPPING 常量
 // ──────────────────────────────────────────────────────────

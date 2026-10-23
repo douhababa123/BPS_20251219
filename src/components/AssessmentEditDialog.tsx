@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { AssessmentSaveInput } from '../lib/database.types';
 
@@ -32,22 +32,10 @@ export default function AssessmentEditDialog({
     currentRef.current?.focus();
   }, []);
 
-  const targetOptions = useMemo(
-    () => current === ''
-      ? []
-      : LEVELS.filter(level => level >= current),
-    [current],
-  );
-
   const handleCurrentChange = (value: string) => {
     const next = value === '' ? '' : Number(value);
     setCurrent(next);
-    if (next !== '' && target !== '' && target < next) {
-      setTarget('');
-      setError('请重新选择不低于现状的能力目标');
-    } else {
-      setError(null);
-    }
+    setError(null);
   };
 
   const handleTargetChange = (value: string) => {
@@ -57,7 +45,8 @@ export default function AssessmentEditDialog({
 
   const canSave = typeof current === 'number'
     && typeof target === 'number'
-    && target >= current
+    && current >= 0
+    && target >= 0
     && current <= 4
     && target <= 4
     && !isSaving;
@@ -143,7 +132,7 @@ export default function AssessmentEditDialog({
                   className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100"
                 >
                   <option value="">请选择</option>
-                  {targetOptions.map(level => (
+                  {LEVELS.map(level => (
                     <option key={level} value={level}>{level}</option>
                   ))}
                 </select>

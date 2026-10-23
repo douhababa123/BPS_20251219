@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import MessageResponse
 from database import get_db
 from .auth import get_current_user
+from task_approval import load_approval_directory, require_approval_route, approval_metadata, notify_approver
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -598,7 +599,7 @@ def assign_task(
 ):
     """
     提交任务申请（任何已登录用户）
-    创建 status=pending_approval 的任务，并通知所有 admin 审批
+    创建 status=pending_approval 的任务，并通知工程师所属 Site 的审批人
 
     请求体:
     {
@@ -614,6 +615,7 @@ def assign_task(
     """
     try:
         requester_id = current_user['user_id']
+        route = require_approval_route(load_approval_directory(cursor), assignment.get('employeeId'))
 
         # 1. 创建 pending_approval 任务
         cursor.execute("""
@@ -638,18 +640,9 @@ def assign_task(
         task_row = cursor.fetchone()
         task_id = str(task_row[0]) if task_row else None
 
-        # 2. 通知所有 admin 审批
-        from .notifications import create_notification, get_all_admin_ids
+        # 2. 只通知当前 Site 的指定审批人
         task_name = assignment.get('taskName', '未命名任务')
-        admin_ids = get_all_admin_ids(cursor)
-        for admin_id in admin_ids:
-            create_notification(
-                cursor, admin_id,
-                'task_submitted',
-                f'新任务申请待审批：{task_name}',
-                f'有新的任务申请需要您审批，任务名称：{task_name}，时间：{assignment.get("startDate")} ~ {assignment.get("endDate")}',
-                task_id
-            )
+        notify_approver(cursor, route, task_id, task_name)
 
         cursor.commit()
         logger.info(f"✅ 任务申请提交: {task_name} -> 待审批，任务ID: {task_id}")
@@ -661,6 +654,9 @@ def assign_task(
             'message': '任务申请已提交，等待 Site PS 审批'
         }
 
+    except HTTPException:
+        cursor.rollback()
+        raise
     except Exception as e:
         cursor.rollback()
         logger.error(f"❌ 任务申请提交失败: {e}", exc_info=True)
@@ -673,76 +669,10 @@ def force_assign_task(
     current_user: dict = Depends(get_current_user),
     cursor=Depends(get_db)
 ):
-    """
-    强制指派（仅 admin 可用）
-    跳过 pending_approval，直接创建 status=planned 任务，并通知被指派工程师
-
-    请求体同 /assign
-    """
-    # 权限检查
+    """旧管理员入口兼容：所有指派均通过相同 Site 审批流程。"""
     if current_user.get('role') != 'admin':
-        raise HTTPException(status_code=403, detail="仅 Site PS (admin) 可使用强制指派")
-
-    try:
-        requester_id = current_user['user_id']
-
-        # 1. 直接创建 planned 任务（跳过审批）
-        cursor.execute("""
-            INSERT INTO dbo.tasks (
-                task_name, task_type, task_location,
-                assigned_employee_id, start_date, end_date,
-                notes, status, requester_id, created_at, updated_at
-            ) OUTPUT INSERTED.id
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'planned', ?, GETDATE(), GETDATE())
-        """,
-            assignment.get('taskName'),
-            assignment.get('taskType'),
-            assignment.get('location'),
-            assignment.get('employeeId'),
-            assignment.get('startDate'),
-            assignment.get('endDate'),
-            (assignment.get('notes', '') + ' [来源:智能匹配系统/强制指派]').strip(),
-            requester_id
-        )
-
-        task_row = cursor.fetchone()
-        task_id = str(task_row[0]) if task_row else None
-
-        # 2. 通知被指派工程师
-        employee_id = assignment.get('employeeId')
-        task_name = assignment.get('taskName', '未命名任务')
-        if employee_id:
-            # 查找员工对应的 user（通过 employees 表）
-            cursor.execute("""
-                SELECT u.id FROM dbo.users u
-                INNER JOIN dbo.employees e ON e.email = u.email
-                WHERE e.id = ?
-            """, employee_id)
-            user_row = cursor.fetchone()
-            if user_row:
-                from .notifications import create_notification
-                create_notification(
-                    cursor, str(user_row[0]),
-                    'task_approved',
-                    f'您有新任务待确认：{task_name}',
-                    f'Site PS 已为您分配任务：{task_name}，时间：{assignment.get("startDate")} ~ {assignment.get("endDate")}，请前往日程页确认接受。',
-                    task_id
-                )
-
-        cursor.commit()
-        logger.info(f"✅ 强制指派完成: {task_name} -> {employee_id}，任务ID: {task_id}")
-
-        return {
-            'success': True,
-            'taskId': task_id,
-            'status': 'planned',
-            'message': '强制指派成功，任务已写入日程，等待工程师确认'
-        }
-
-    except Exception as e:
-        cursor.rollback()
-        logger.error(f"❌ 强制指派失败: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=403, detail="仅管理员可使用此兼容入口")
+    return assign_task(assignment, current_user=current_user, cursor=cursor)
 
 
 @router.get("/history")
@@ -768,7 +698,7 @@ def get_matching_history(
                 t.assigned_employee_id, e.name as employee_name,
                 t.start_date, t.end_date,
                 t.created_at, t.updated_at, t.status, t.rejection_reason,
-                u.name as requester_name
+                u.name as requester_name, t.approval_version
             FROM dbo.tasks t
             LEFT JOIN dbo.employees e ON t.assigned_employee_id = e.id
             LEFT JOIN dbo.users u ON t.requester_id = u.id
@@ -782,7 +712,7 @@ def get_matching_history(
                 t.assigned_employee_id, e.name as employee_name,
                 t.start_date, t.end_date,
                 t.created_at, t.updated_at, t.status, t.rejection_reason,
-                u.name as requester_name
+                u.name as requester_name, t.approval_version
             FROM dbo.tasks t
             LEFT JOIN dbo.employees e ON t.assigned_employee_id = e.id
             LEFT JOIN dbo.users u ON t.requester_id = u.id
@@ -791,8 +721,10 @@ def get_matching_history(
             ORDER BY t.created_at DESC
         """, limit, requester_id)
 
+    task_rows = cursor.fetchall()
+    directory = load_approval_directory(cursor)
     history = []
-    for row in cursor.fetchall():
+    for row in task_rows:
         history.append({
             'id': str(row[0]),
             'taskName': row[1],
@@ -807,6 +739,8 @@ def get_matching_history(
             'status': row[10] or 'pending_approval',
             'rejectionReason': row[11],
             'requesterName': row[12],
+            'approval_version': row[13],
+            **approval_metadata(directory, row[4], current_user, row[10]),
         })
     
     logger.info(f"📊 查询到 {len(history)} 条匹配历史记录")

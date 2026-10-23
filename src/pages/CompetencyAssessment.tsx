@@ -90,7 +90,7 @@ export function CompetencyAssessment() {
       // 只加载一次评估数据，避免重复调用
       console.log('  🔄 加载评估数据...');
       const [assessmentData, matrix] = await Promise.all([
-        getAllAssessments(),
+        getAllAssessments(true),
         getAssessmentMatrix(),
       ]);
       console.log(`  ✅ 获取 ${assessmentData.length} 条评估数据`);

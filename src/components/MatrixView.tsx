@@ -529,7 +529,7 @@ export default function MatrixView({
                       skillId: col.skillId,
                       currentLevel: draft.current_level,
                       targetLevel: draft.target_level,
-                      gap: draft.target_level - draft.current_level,
+                      gap: Math.max(draft.target_level - draft.current_level, 0),
                       updatedAt: persistedSkill?.updatedAt,
                     } : persistedSkill;
                     const positiveGap = Boolean(skill && skill.gap > 0);
@@ -598,7 +598,7 @@ export default function MatrixView({
         <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
-            <span className="text-gray-600">目标 = 现状（已达标）</span>
+            <span className="text-gray-600">现状 ≥ 目标（已达标）</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-red-50 border border-red-200 rounded"></div>

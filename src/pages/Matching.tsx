@@ -289,49 +289,6 @@ export function Matching() {
     },
   });
 
-  const forceAssignMutation = useMutation({
-    mutationFn: (data: { candidate: MatchingCandidate; taskInfo: any }) => {
-      return taskWorkflowService.forceAssign({
-        taskName: data.taskInfo.name,
-        employeeId: String(data.candidate.userId),
-        taskType: data.taskInfo.type,
-        location: data.taskInfo.location,
-        startDate: data.taskInfo.startDate,
-        endDate: data.taskInfo.endDate,
-        notes: `强制指派（智能匹配系统；时间符合度: ${(data.candidate.timeScore * 100).toFixed(0)}%；${competencyMatchLabels[data.candidate.matchCategory]}）`
-      });
-    },
-    onSuccess: (response, variables) => {
-      setLastSubmittedStatus('planned');
-      setSubmissionFeedback({
-        taskId: response.taskId,
-        taskName: variables.taskInfo.name,
-        employeeName: variables.candidate.name,
-        status: 'planned',
-        updatedAt: new Date().toISOString(),
-      });
-      pushTaskIntoHistory({
-        taskId: response.taskId,
-        taskName: variables.taskInfo.name,
-        taskType: variables.taskInfo.type,
-        location: variables.taskInfo.location,
-        employeeId: String(variables.candidate.userId),
-        employeeName: variables.candidate.name,
-        startDate: variables.taskInfo.startDate,
-        endDate: variables.taskInfo.endDate,
-        status: 'planned',
-        updatedAt: new Date().toISOString(),
-      });
-      setConfirmingId(null);
-      queryClient.invalidateQueries({ queryKey: ['matching-history'] });
-      setActiveTab('kanban');
-      focusSubmittedFeedback();
-    },
-  });
-
-  // 兼容旧引用（工作流状态计算用）
-  const assignMutation = { isPending: submitMutation.isPending || forceAssignMutation.isPending };
-
   useEffect(() => {
     if (!items) return;
     setRequiredItems(prev => prev.filter(req => {
@@ -421,21 +378,17 @@ export function Matching() {
 
   const workflowSteps = useMemo(() => {
     const hasPreview = candidates.length > 0;
-    // 审批步骤：强制指派直接完成；普通提交后等待审批中
-    const approveStatus = forceAssignMutation.isSuccess
-      ? 'done' as const
-      : submitMutation.isSuccess
-        ? 'processing' as const  // 待 admin 审批中
-        : assignMutation.isPending ? 'processing' as const : 'pending' as const;
-    // 日程同步：只有强制指派才算真正写入；普通提交审批通过后由 admin 操作
-    const syncStatus = forceAssignMutation.isSuccess ? 'done' as const : 'pending' as const;
+    // 所有提交均等待所属 Site 审批，不因管理员提交而提前完成。
+    const approveStatus = submitMutation.isSuccess || submitMutation.isPending
+      ? 'processing' as const : 'pending' as const;
+    const syncStatus = 'pending' as const;
     return [
       { key: 'apply', label: '任务申请', desc: '需求方提交需求', status: 'done' as const, icon: ClipboardList },
       { key: 'match', label: '智能匹配', desc: '系统打分推荐', status: previewMutation.isPending ? 'processing' as const : hasPreview ? 'done' as const : 'pending' as const, icon: GitMerge },
       { key: 'approve', label: '任务审批', desc: submitMutation.isSuccess ? '等待 Site PS 审批中...' : 'Site PS 审批', status: approveStatus, icon: CheckCircle },
       { key: 'sync', label: '日程同步', desc: submitMutation.isSuccess ? '审批通过后自动写入' : '自动写入日历', status: syncStatus, icon: CalendarCheck },
     ];
-  }, [candidates.length, previewMutation.isPending, submitMutation.isSuccess, forceAssignMutation.isSuccess, assignMutation.isPending]);
+  }, [candidates.length, previewMutation.isPending, submitMutation.isSuccess, submitMutation.isPending]);
 
   const topReport = useMemo(() => candidates.slice(0, 3).map(candidate => ({
     name: candidate.name,
@@ -906,10 +859,10 @@ export function Matching() {
                                   // 提交申请始终走审批流程（pending_approval）
                                   submitMutation.mutate({ candidate, taskInfo: currentTaskInfo });
                                 }}
-                                disabled={submitMutation.isPending || forceAssignMutation.isPending}
+                                disabled={submitMutation.isPending}
                                 className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors text-sm font-medium disabled:opacity-50"
                               >
-                                {(submitMutation.isPending || forceAssignMutation.isPending) ? '处理中...' : '确认提交'}
+                                {(submitMutation.isPending) ? '处理中...' : '确认提交'}
                               </button>
                               <button
                                 onClick={() => setConfirmingId(null)}
@@ -923,28 +876,11 @@ export function Matching() {
                               {/* 提交申请按钮（所有人） */}
                               <button
                                 onClick={() => setConfirmingId(candidate.userId)}
-                                disabled={submitMutation.isPending || forceAssignMutation.isPending}
+                                disabled={submitMutation.isPending}
                                 className="flex-1 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-800 transition-colors text-sm font-medium disabled:opacity-50"
                               >
                                 提交申请
                               </button>
-                              {/* admin 对不合格候选人额外显示强制指派 */}
-                              {isAdmin && !candidate.qualified && (
-                                <button
-                                  onClick={() => {
-                                    if (!currentTaskInfo) {
-                                      alert('请先点击预览匹配');
-                                      return;
-                                    }
-                                    forceAssignMutation.mutate({ candidate, taskInfo: currentTaskInfo });
-                                  }}
-                                  disabled={submitMutation.isPending || forceAssignMutation.isPending}
-                                  className="flex-1 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-500 transition-colors text-sm font-medium disabled:opacity-50"
-                                  title="跳过审批，直接写入日程"
-                                >
-                                  强制指派
-                                </button>
-                              )}
                             </div>
                           )}
                         </div>
@@ -1143,8 +1079,6 @@ function TaskKanban({
   statusFeedback: StatusFeedback | null;
 }) {
   const queryClient = useQueryClient();
-  const { user } = useNewAuth();
-  const isAdmin = user?.role === 'admin';
 
   // 调试：打印传入的 tasks
   useEffect(() => {
@@ -1154,7 +1088,7 @@ function TaskKanban({
 
   type KanbanTab = 'matching' | 'pending' | 'assigned' | 'rejected';
   const [selectedTab, setSelectedTab] = useState<KanbanTab>('pending');
-  const [rejectModal, setRejectModal] = useState<{ id: string; name: string } | null>(null);
+  const [rejectModal, setRejectModal] = useState<{ id: string; name: string; version: number } | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
   // 将数据库真实 status 映射到看板分组
@@ -1193,14 +1127,14 @@ function TaskKanban({
   }, [tasks]);
 
   const approveMutation = useMutation({
-    mutationFn: (taskId: string) => taskWorkflowService.approve(taskId),
+    mutationFn: (task: any) => taskWorkflowService.approve(task.id, task.approval_version),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['matching-history'] }),
     onError: (e: any) => alert(`审批失败: ${e.message}`),
   });
 
   const adminRejectMutation = useMutation({
     mutationFn: ({ taskId, reason }: { taskId: string; reason: string }) =>
-      taskWorkflowService.reject(taskId, reason),
+      taskWorkflowService.reject(taskId, reason, rejectModal!.version),
     onSuccess: () => {
       setRejectModal(null);
       setRejectReason('');
@@ -1309,7 +1243,7 @@ function TaskKanban({
               {currentTasks.length} 个任务
             </span>
           </div>
-          {selectedTab === 'pending' && isAdmin && (
+          {selectedTab === 'pending' && currentTasks.some(task => task.can_approve) && (
             <p className="text-xs text-amber-700">点击"审批通过"或"拒绝"完成审批</p>
           )}
         </div>
@@ -1382,20 +1316,25 @@ function TaskKanban({
                       <p className="mt-2 text-xs text-blue-700 bg-blue-50 rounded px-2 py-1">
                         {nextStepLabel[task.status] || '下一步：请关注后续状态变化'}
                       </p>
+                      {task.status === 'pending_approval' && (
+                        <p className="mt-1 text-xs text-gray-600">
+                          审批人：{task.approver_name || '待配置'} {task.approval_site ? `（${task.approval_site}）` : ''}
+                        </p>
+                      )}
                     </div>
 
                     {/* 操作按钮 */}
-                    {selectedTab === 'pending' && isAdmin && (
+                    {selectedTab === 'pending' && task.can_approve && (
                       <div className="flex flex-col gap-2 shrink-0">
                         <button
-                          onClick={() => approveMutation.mutate(task.id)}
+                          onClick={() => approveMutation.mutate(task)}
                           disabled={approveMutation.isPending}
                           className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-500 disabled:opacity-50 transition-colors whitespace-nowrap"
                         >
                           ✅ 审批通过
                         </button>
                         <button
-                          onClick={() => { setRejectModal({ id: task.id, name: task.taskName }); setRejectReason(''); }}
+                          onClick={() => { setRejectModal({ id: task.id, name: task.taskName, version: task.approval_version }); setRejectReason(''); }}
                           disabled={adminRejectMutation.isPending}
                           className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-500 disabled:opacity-50 transition-colors whitespace-nowrap"
                         >

@@ -21,17 +21,15 @@ CHECKS = {
     "invalid_current": """
         SELECT COUNT(*)
         FROM dbo.competency_assessments
-        WHERE current_level NOT BETWEEN 0 AND 5
-           OR target_level NOT BETWEEN 0 AND 5
-           OR target_level < current_level
+        WHERE current_level NOT BETWEEN 0 AND 4
+           OR target_level NOT BETWEEN 0 AND 4
     """,
     "invalid_web_history": """
         SELECT COUNT(*)
         FROM dbo.competency_assessment_history
-        WHERE current_level NOT BETWEEN 0 AND 5
-           OR target_level NOT BETWEEN 0 AND 5
+        WHERE current_level NOT BETWEEN 0 AND 4
+           OR target_level NOT BETWEEN 0 AND 4
            OR assessment_quarter NOT BETWEEN 1 AND 4
-           OR (change_source = 'WEB_EDIT' AND target_level < current_level)
     """,
 }
 

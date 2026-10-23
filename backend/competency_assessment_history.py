@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, List, Sequence
 
 from fastapi import HTTPException
+from competency_rules import ASSESSMENT_ROSTER_EXCLUDED_EMAILS, business_gap
 
 
 def current_timestamp() -> datetime:
@@ -357,7 +358,8 @@ def build_gap_trend(cursor, year: int, module_id=None, skill_id=None) -> List[Di
             FROM dbo.employees e
             CROSS JOIN dbo.skills s
             OUTER APPLY (
-                SELECT TOP 1 h.target_level - h.current_level AS gap
+                SELECT TOP 1 CASE WHEN h.target_level > h.current_level
+                    THEN h.target_level - h.current_level ELSE 0 END AS gap
                 FROM dbo.competency_assessment_history h
                 WHERE h.employee_id = e.id
                   AND h.skill_id = s.id
@@ -396,6 +398,8 @@ def build_matrix_payload(
     rows: List[Dict[str, Any]] = []
 
     for employee in employees:
+        if len(employee) > 4 and normalize_email(employee[4]) in ASSESSMENT_ROSTER_EXCLUDED_EMAILS:
+            continue
         employee_id = str(employee[0])
         employee_skills = {}
         for skill in skills:
@@ -405,7 +409,7 @@ def build_matrix_payload(
                     "skillId": skill[0],
                     "currentLevel": cell[2],
                     "targetLevel": cell[3],
-                    "gap": cell[4],
+                    "gap": business_gap(cell[2], cell[3]),
                     "updatedAt": cell[5].isoformat() if len(cell) > 5 and cell[5] else None,
                 }
         rows.append(
@@ -429,8 +433,10 @@ def build_matrix_payload(
         }
         for skill in skills
     ]
-    values = list(cells.values())
-    total_gap = sum(row[4] for row in values)
+    visible_ids = {row["employeeId"].lower() for row in rows}
+    visible_skills = {skill[0] for skill in skills}
+    values = [row for row in cells.values() if str(row[0]).lower() in visible_ids and row[1] in visible_skills]
+    total_gap = sum(business_gap(row[2], row[3]) for row in values)
     count = len(values)
     return {
         "rows": rows,

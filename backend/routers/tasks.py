@@ -12,7 +12,8 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import Task, TaskCreate, TaskUpdate, TaskExecutionStatusUpdate, MessageResponse
+from models import Task, TaskCreate, TaskUpdate, TaskExecutionStatusUpdate, TaskApprovalAction, MessageResponse
+from task_approval import load_approval_directory, require_approval_route, approval_metadata, authorize_approval, notify_approver
 from database import get_db
 from .auth import get_current_user
 from audit import log_audit
@@ -67,8 +68,6 @@ def _status_for_assignment(
     assigned_employee_id: Any,
     current_employee_id: Optional[str],
 ) -> str:
-    if _is_admin(current_user):
-        return requested_status or 'planned'
     if _same_id(assigned_employee_id, current_employee_id):
         return _self_schedule_status(requested_status)
     return 'pending_approval'
@@ -185,7 +184,7 @@ def get_tasks(
                  CASE WHEN time_slot IN ('AM','PM') THEN 4 ELSE 8 END
                ) AS total_hours,
                status, notes, time_slot, created_at, updated_at,
-               rejection_reason, requester_id, rejected_by, competence
+               rejection_reason, requester_id, rejected_by, competence, approval_version
         FROM dbo.tasks
         WHERE 1=1
     """
@@ -210,8 +209,10 @@ def get_tasks(
     
     cursor.execute(query, params)
     
+    task_rows = cursor.fetchall()
+    directory = load_approval_directory(cursor)
     tasks = []
-    for row in cursor.fetchall():
+    for row in task_rows:
         tasks.append(Task(
             id=row[0],
             task_name=row[1],
@@ -231,6 +232,8 @@ def get_tasks(
             requester_id=row[15] if len(row) > 15 else None,
             rejected_by=row[16] if len(row) > 16 else None,
             competence=row[17] if len(row) > 17 else None,
+            approval_version=row[18],
+            **approval_metadata(directory, row[4], current_user, row[9]),
         ))
 
     return tasks
@@ -252,7 +255,7 @@ def get_task(
                  CASE WHEN time_slot IN ('AM','PM') THEN 4 ELSE 8 END
                ) AS total_hours,
                status, notes, time_slot, created_at, updated_at,
-               rejection_reason, requester_id, rejected_by, competence
+               rejection_reason, requester_id, rejected_by, competence, approval_version
         FROM dbo.tasks
         WHERE id = ?
     """, str(task_id))
@@ -280,6 +283,8 @@ def get_task(
         requester_id=row[15] if len(row) > 15 else None,
         rejected_by=row[16] if len(row) > 16 else None,
         competence=row[17] if len(row) > 17 else None,
+        approval_version=row[18],
+        **approval_metadata(load_approval_directory(cursor), row[4], current_user, row[9]),
     )
 
 
@@ -304,13 +309,14 @@ def create_task(
             days_count = (end - start).days + 1
             total_hours = days_count * hours_per_day
 
-        current_employee_id = None if _is_admin(current_user) else _current_employee_id(cursor, current_user)
+        current_employee_id = _current_employee_id(cursor, current_user)
         status = _status_for_assignment(
             current_user,
             task.status,
             task.assigned_employee_id,
             current_employee_id,
         )
+        route = require_approval_route(load_approval_directory(cursor), task.assigned_employee_id) if status == 'pending_approval' and task.assigned_employee_id else None
 
         competence = "Others" if str(task.competence or "").strip().lower() == "others" else task.competence
         cursor.execute("""
@@ -337,6 +343,8 @@ def create_task(
         ))
         
         new_id = str(cursor.fetchone()[0])
+        if route:
+            notify_approver(cursor, route, new_id, task.task_name)
         cursor.commit()
 
         created_task = get_task(UUID(new_id), cursor, current_user)
@@ -349,6 +357,9 @@ def create_task(
 
         return created_task
     
+    except HTTPException:
+        cursor.rollback()
+        raise
     except Exception as e:
         cursor.rollback()
         logger.error(f"创建任务失败: {str(e)}")
@@ -370,16 +381,12 @@ def update_task(
     if not _can_modify_task(existing, permission_user):
         raise HTTPException(status_code=403, detail="只能修改自己录入的日程或尚未审批的任务分配")
 
-    effective_status = task.status
-    if not _is_admin(current_user):
-        target_employee_id = task.assigned_employee_id or existing.assigned_employee_id
-        requested_status = task.status if task.status is not None else existing.status
-        effective_status = _status_for_assignment(
-            current_user,
-            requested_status,
-            target_employee_id,
-            current_employee_id,
-        )
+    target_employee_id = task.assigned_employee_id or existing.assigned_employee_id
+    reassigned = task.assigned_employee_id is not None and not _same_id(task.assigned_employee_id, existing.assigned_employee_id)
+    effective_status = 'pending_approval' if reassigned else task.status
+    route = require_approval_route(load_approval_directory(cursor), target_employee_id) if reassigned else None
+    if not reassigned and existing.status == 'pending_approval' and task.status not in (None, 'pending_approval'):
+        raise HTTPException(403, "待审批任务必须通过指定 Site 审批入口处理")
     
     # 构建更新字段
     update_fields = []
@@ -412,6 +419,8 @@ def update_task(
     if effective_status is not None:
         update_fields.append("status = ?")
         params.append(effective_status)
+    if reassigned:
+        update_fields.extend(["rejection_reason = NULL", "rejected_by = NULL"])
     if task.notes is not None:
         update_fields.append("notes = ?")
         params.append(task.notes)
@@ -426,11 +435,16 @@ def update_task(
         return existing
     
     update_fields.append("updated_at = GETDATE()")
-    params.append(str(task_id))
+    update_fields.append("approval_version = approval_version + 1")
+    params.extend([str(task_id), existing.approval_version])
     
     try:
-        sql = f"UPDATE dbo.tasks SET {', '.join(update_fields)} WHERE id = ?"
+        sql = f"UPDATE dbo.tasks SET {', '.join(update_fields)} WHERE id = ? AND approval_version = ?"
         cursor.execute(sql, params)
+        if cursor.rowcount != 1:
+            raise HTTPException(409, "任务已被其他人修改，请刷新后重试")
+        if route:
+            notify_approver(cursor, route, task_id, task.task_name or existing.task_name)
         cursor.commit()
 
         updated_task = get_task(task_id, cursor, current_user)
@@ -444,6 +458,9 @@ def update_task(
 
         return updated_task
     
+    except HTTPException:
+        cursor.rollback()
+        raise
     except Exception as e:
         cursor.rollback()
         logger.error(f"更新任务失败: {str(e)}")
@@ -470,12 +487,15 @@ def update_task_execution_status(
         cursor.execute(
             """
             UPDATE dbo.tasks
-            SET status = ?, updated_at = GETDATE()
-            WHERE id = ?
+            SET status = ?, updated_at = GETDATE(), approval_version = approval_version + 1
+            WHERE id = ? AND approval_version = ?
             """,
             update.status,
             str(task_id),
+            existing.approval_version,
         )
+        if cursor.rowcount != 1:
+            raise HTTPException(409, "任务已变更，请刷新后重试")
         cursor.commit()
 
         updated_task = get_task(task_id, cursor, current_user)
@@ -488,6 +508,9 @@ def update_task_execution_status(
             new_value=updated_task.status,
         )
         return updated_task
+    except HTTPException:
+        cursor.rollback()
+        raise
     except Exception as error:
         cursor.rollback()
         logger.error("Failed to update task execution status: %s", error, exc_info=True)
@@ -534,8 +557,8 @@ def delete_task(
 def _get_task_or_404(cursor, task_id: str) -> dict:
     """获取任务基本信息，不存在则 404"""
     cursor.execute("""
-        SELECT id, task_name, assigned_employee_id, requester_id, status
-        FROM dbo.tasks WHERE id = ?
+        SELECT id, task_name, assigned_employee_id, requester_id, status, approval_version
+        FROM dbo.tasks WITH (UPDLOCK, HOLDLOCK) WHERE id = ?
     """, task_id)
     row = cursor.fetchone()
     if not row:
@@ -545,7 +568,8 @@ def _get_task_or_404(cursor, task_id: str) -> dict:
         'task_name': row[1],
         'assigned_employee_id': str(row[2]) if row[2] else None,
         'requester_id': str(row[3]) if row[3] else None,
-        'status': row[4]
+        'status': row[4],
+        'approval_version': row[5],
     }
 
 
@@ -563,24 +587,23 @@ def _find_user_by_employee_id(cursor, employee_id: str) -> Optional[str]:
 @router.post("/{task_id}/approve", response_model=MessageResponse)
 def approve_task(
     task_id: UUID,
+    body: TaskApprovalAction,
     current_user: dict = Depends(get_current_user),
     cursor=Depends(get_db)
 ):
     """
-    审批通过（仅 admin）
+    审批通过（当前工程师所属 Site 的指定审批人）
     pending_approval → planned，通知被指派工程师
     """
-    if current_user.get('role') != 'admin':
-        raise HTTPException(status_code=403, detail="仅 Site PS (admin) 可审批")
-
     task = _get_task_or_404(cursor, str(task_id))
+    authorize_approval(load_approval_directory(cursor), task, current_user, body.expected_version)
     if task['status'] != 'pending_approval':
         raise HTTPException(status_code=400, detail=f"任务当前状态为 {task['status']}，无法审批")
 
     try:
         cursor.execute("""
             UPDATE dbo.tasks
-            SET status = 'planned', updated_at = GETDATE()
+            SET status = 'planned', updated_at = GETDATE(), approval_version = approval_version + 1
             WHERE id = ?
         """, str(task_id))
 
@@ -608,6 +631,8 @@ def approve_task(
             )
 
         cursor.commit()
+        _safe_log_task_audit(str(task_id), 'UPDATE', current_user, field_name='status',
+                             old_value='pending_approval', new_value='planned')
         logger.info(f"✅ 任务审批通过: {task['task_name']} ({task_id})")
         return MessageResponse(message="审批通过，任务已写入日程")
 
@@ -622,22 +647,20 @@ def approve_task(
 @router.post("/{task_id}/reject", response_model=MessageResponse)
 def reject_task(
     task_id: UUID,
-    body: Dict[str, Any],
+    body: TaskApprovalAction,
     current_user: dict = Depends(get_current_user),
     cursor=Depends(get_db)
 ):
     """
-    审批拒绝（仅 admin）
+    审批拒绝（当前工程师所属 Site 的指定审批人）
     pending_approval → rejected，需填写拒绝原因，通知申请人
     """
-    if current_user.get('role') != 'admin':
-        raise HTTPException(status_code=403, detail="仅 Site PS (admin) 可拒绝审批")
-
-    rejection_reason = (body.get('rejection_reason') or '').strip()
+    rejection_reason = (body.rejection_reason or '').strip()
     if not rejection_reason:
         raise HTTPException(status_code=400, detail="拒绝时必须填写原因")
 
     task = _get_task_or_404(cursor, str(task_id))
+    authorize_approval(load_approval_directory(cursor), task, current_user, body.expected_version)
     if task['status'] != 'pending_approval':
         raise HTTPException(status_code=400, detail=f"任务当前状态为 {task['status']}，无法拒绝")
 
@@ -647,7 +670,7 @@ def reject_task(
             SET status = 'rejected',
                 rejection_reason = ?,
                 rejected_by = 'admin',
-                updated_at = GETDATE()
+                updated_at = GETDATE(), approval_version = approval_version + 1
             WHERE id = ?
         """, rejection_reason, str(task_id))
 
@@ -663,6 +686,8 @@ def reject_task(
             )
 
         cursor.commit()
+        _safe_log_task_audit(str(task_id), 'UPDATE', current_user, field_name='status',
+                             old_value='pending_approval', new_value='rejected')
         logger.info(f"✅ 任务申请拒绝: {task['task_name']} ({task_id})")
         return MessageResponse(message="已拒绝任务申请")
 

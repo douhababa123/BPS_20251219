@@ -28,9 +28,9 @@ def test_quarter_for_calendar_boundaries(month, quarter):
     assert quarter_for(value) == quarter
 
 
-def test_save_model_rejects_target_below_current():
-    with pytest.raises(ValidationError):
-        CompetencyAssessmentSave(current_level=4, target_level=3)
+def test_save_model_preserves_current_above_target():
+    value = CompetencyAssessmentSave(current_level=4, target_level=3)
+    assert (value.current_level, value.target_level) == (4, 3)
 
 
 def test_save_model_accepts_zero():

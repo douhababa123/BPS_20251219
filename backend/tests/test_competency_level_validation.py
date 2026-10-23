@@ -25,14 +25,11 @@ def test_legacy_create_payload_rejects_level_five():
         )
 
 
-def test_legacy_create_payload_rejects_target_below_current():
-    with pytest.raises(ValidationError):
-        CompetencyAssessmentCreate(
-            employee_id=uuid4(),
-            skill_id=1,
-            current_level=4,
-            target_level=3,
-        )
+def test_legacy_create_payload_accepts_target_below_current():
+    value = CompetencyAssessmentCreate(
+        employee_id=uuid4(), skill_id=1, current_level=4, target_level=3,
+    )
+    assert (value.current_level, value.target_level) == (4, 3)
 
 
 def test_admin_create_payload_rejects_level_five():
@@ -67,7 +64,7 @@ def test_legacy_partial_update_is_disabled(monkeypatch):
     cursor.execute.assert_not_called()
 
 
-def test_admin_partial_update_rejects_current_above_stored_target(monkeypatch):
+def test_admin_partial_update_preserves_current_above_stored_target(monkeypatch):
     assessment_id = str(uuid4())
     cursor = MagicMock()
     cursor.fetchone.return_value = SimpleNamespace(
@@ -89,21 +86,15 @@ def test_admin_partial_update_rejects_current_above_stored_target(monkeypatch):
         yield cursor
 
     monkeypatch.setattr(admin_competency_assessments.db, "get_cursor", fake_cursor)
-
-    with pytest.raises(HTTPException) as error:
-        admin_competency_assessments.update_assessment(
-            assessment_id=assessment_id,
-            assessment=admin_competency_assessments.CompetencyAssessmentUpdate(
-                current_level=3,
-            ),
-            current_user={"role": "admin"},
-        )
-
-    assert error.value.status_code == 422
-    assert not any(
-        "UPDATE competency_assessments" in call.args[0]
-        for call in cursor.execute.call_args_list
+    save = MagicMock(return_value=assessment_id)
+    monkeypatch.setattr(admin_competency_assessments, "save_latest_assessment", save)
+    admin_competency_assessments.update_assessment(
+        assessment_id=assessment_id,
+        assessment=admin_competency_assessments.CompetencyAssessmentUpdate(current_level=3),
+        current_user={"role": "admin"},
     )
+    payload = save.call_args.args[3]
+    assert (payload.current_level, payload.target_level) == (3, 2)
 
 
 def _admin_row(assessment_id, employee_id, current=0, target=2, notes=None):

@@ -155,7 +155,7 @@ export function calculateTeamModuleStats(
     existing.currentCount += 1;
     existing.totalTarget += assessment.target_level;
     existing.targetCount += 1;
-    existing.totalGap += assessment.gap;
+    existing.totalGap += Math.max(assessment.gap, 0);
     existing.gapCount += 1;
     existing.count += 1;
     existing.employees.add(assessment.employee_id);
@@ -247,7 +247,7 @@ export function calculateTeamSkillStats(
     existing.currentCount += 1;
     existing.totalTarget += assessment.target_level;
     existing.targetCount += 1;
-    existing.totalGap += assessment.gap;
+    existing.totalGap += Math.max(assessment.gap, 0);
     existing.gapCount += 1;
     existing.count += 1;
     existing.employees.add(assessment.employee_id);
@@ -323,10 +323,10 @@ export function calculateEmployeeModuleGapSummary(
     if (!moduleId || !employee.modules[moduleId]) return;
 
     const cell = employee.modules[moduleId];
-    cell.totalGap += assessment.gap;
+    cell.totalGap += Math.max(assessment.gap, 0);
     cell.hasData = true;
-    employee.totalGap += assessment.gap;
-    moduleTotals[moduleId] += assessment.gap;
+    employee.totalGap += Math.max(assessment.gap, 0);
+    moduleTotals[moduleId] += Math.max(assessment.gap, 0);
   });
 
   const rows = Array.from(employees.values())
@@ -363,7 +363,7 @@ export function calculateEmployeeGapDistribution(
       : skillModuleMap.get(assessment.skill_id) === selection.itemId;
     if (!matches) return;
 
-    point.totalGap += assessment.gap;
+    point.totalGap += Math.max(assessment.gap, 0);
     point.hasData = true;
   });
 
@@ -416,7 +416,7 @@ export function calculatePersonalModuleStats(
     existing.currentCount += 1;
     existing.totalTarget += assessment.target_level;
     existing.targetCount += 1;
-    existing.totalGap += assessment.gap;
+    existing.totalGap += Math.max(assessment.gap, 0);
     existing.gapCount += 1;
     existing.count += 1;
 
@@ -479,7 +479,7 @@ export function calculatePersonalSkillStats(
       moduleName: assessment.module_name,
       current: assessment.current_level,
       target: assessment.target_level,
-      gap: assessment.gap,
+      gap: Math.max(assessment.gap, 0),
     };
   });
 

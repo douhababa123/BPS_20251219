@@ -2,7 +2,7 @@
 能力评估管理 API
 """
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import date
 from uuid import UUID
@@ -25,30 +25,12 @@ class CompetencyAssessmentCreate(BaseModel):
     assessment_date: Optional[date] = None
     notes: Optional[str] = None
 
-    @model_validator(mode="after")
-    def validate_target(self):
-        if self.target_level < self.current_level:
-            raise ValueError("目标能力必须大于或等于能力现状")
-        return self
-
-
 class CompetencyAssessmentUpdate(BaseModel):
     current_level: Optional[int] = Field(None, ge=0, le=4)
     target_level: Optional[int] = Field(None, ge=0, le=4)
     assessment_year: Optional[int] = None
     assessment_date: Optional[date] = None
     notes: Optional[str] = None
-
-    @model_validator(mode="after")
-    def validate_submitted_pair(self):
-        if (
-            self.current_level is not None
-            and self.target_level is not None
-            and self.target_level < self.current_level
-        ):
-            raise ValueError("目标能力必须大于或等于能力现状")
-        return self
-
 
 class CompetencyAssessmentResponse(BaseModel):
     id: str
@@ -92,7 +74,7 @@ def create_assessment(assessment: CompetencyAssessmentCreate, current_user: dict
                 "skill_id": row.skill_id,
                 "current_level": row.current_level,
                 "target_level": row.target_level,
-                "gap": row.gap,
+                "gap": max(row.target_level - row.current_level, 0),
                 "assessment_year": row.assessment_year,
                 "assessment_date": row.assessment_date.isoformat() if row.assessment_date else None,
                 "notes": row.notes,
@@ -137,7 +119,7 @@ def list_assessments(
                 "skill_id": row.skill_id,
                 "current_level": row.current_level,
                 "target_level": row.target_level,
-                "gap": row.gap,
+                "gap": max(row.target_level - row.current_level, 0),
                 "assessment_year": row.assessment_year,
                 "assessment_date": row.assessment_date.isoformat() if row.assessment_date else None,
                 "notes": row.notes,
@@ -165,7 +147,7 @@ def get_assessment(assessment_id: str, current_user: dict = Depends(get_current_
                 "skill_id": row.skill_id,
                 "current_level": row.current_level,
                 "target_level": row.target_level,
-                "gap": row.gap,
+                "gap": max(row.target_level - row.current_level, 0),
                 "assessment_year": row.assessment_year,
                 "assessment_date": row.assessment_date.isoformat() if row.assessment_date else None,
                 "notes": row.notes,
@@ -207,11 +189,6 @@ def update_assessment(
                 if assessment.target_level is not None
                 else existing.target_level
             )
-            if next_target < next_current:
-                raise HTTPException(
-                    status_code=422,
-                    detail="目标能力必须大于或等于能力现状",
-                )
             
             if not assessment.model_fields_set:
                 raise HTTPException(status_code=400, detail="No fields to update")
@@ -237,7 +214,7 @@ def update_assessment(
                 "skill_id": row.skill_id,
                 "current_level": row.current_level,
                 "target_level": row.target_level,
-                "gap": row.gap,
+                "gap": max(row.target_level - row.current_level, 0),
                 "assessment_year": row.assessment_year,
                 "assessment_date": row.assessment_date.isoformat() if row.assessment_date else None,
                 "notes": row.notes,

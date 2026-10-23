@@ -41,11 +41,13 @@ export function averageAssessmentValues(values: number[]): number {
 /**
  * 获取所有能力评估数据（单次 SQL JOIN，后端完成关联）
  */
-export async function getAllAssessments(): Promise<AssessmentFull[]> {
+export async function getAllAssessments(assessmentRoster = false): Promise<AssessmentFull[]> {
   console.log('🔄 competencyApi: 开始加载能力评估数据...');
 
   try {
-    const res = await apiClient.get('/competency-assessments/full');
+    const res = assessmentRoster
+      ? await apiClient.get('/competency-assessments/full', { params: { assessment_roster: true } })
+      : await apiClient.get('/competency-assessments/full');
     const data: AssessmentFull[] = res.data;
 
     console.log('✅ competencyApi: 数据加载完成', {
@@ -175,7 +177,7 @@ export async function getMatrixData(assessments: AssessmentFull[]): Promise<{
         skillId: assessment.skill_id,
         currentLevel: assessment.current_level,
         targetLevel: assessment.target_level,
-        gap: assessment.gap,
+        gap: Math.max(assessment.target_level - assessment.current_level, 0),
       };
     });
     
@@ -220,7 +222,7 @@ export async function getMatrixData(assessments: AssessmentFull[]): Promise<{
   const currentValues = assessments.map(a => a.current_level);
   const targetValues = assessments.map(a => a.target_level);
   const completeAssessments = assessments;
-  const totalGap = completeAssessments.reduce((sum, a) => sum + a.gap, 0);
+  const totalGap = completeAssessments.reduce((sum, a) => sum + Math.max(a.target_level - a.current_level, 0), 0);
   
   return {
     rows,

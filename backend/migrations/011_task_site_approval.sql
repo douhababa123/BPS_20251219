@@ -1,0 +1,13 @@
+SET XACT_ABORT ON;
+BEGIN TRY
+    BEGIN TRANSACTION;
+    IF COL_LENGTH('dbo.tasks', 'approval_version') IS NULL
+        ALTER TABLE dbo.tasks ADD approval_version INT NOT NULL
+            CONSTRAINT DF_tasks_approval_version DEFAULT (0) WITH VALUES;
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    THROW;
+END CATCH;
+GO

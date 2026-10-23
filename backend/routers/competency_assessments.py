@@ -3,6 +3,7 @@
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
+from competency_rules import ASSESSMENT_ROSTER_EXCLUDED_EMAILS
 from typing import List, Optional
 from uuid import UUID
 import logging
@@ -39,6 +40,7 @@ router = APIRouter()
 @router.get("/full")
 def get_competency_assessments_full(
     department_id: Optional[int] = None,
+    assessment_roster: bool = False,
     cursor=Depends(get_db)
 ):
     """
@@ -74,6 +76,9 @@ def get_competency_assessments_full(
           AND ISNULL(s.is_active, 1) = 1
     """
     params = []
+    if assessment_roster:
+        query += " AND LOWER(ISNULL(e.email, '')) NOT IN (?, ?)"
+        params.extend(ASSESSMENT_ROSTER_EXCLUDED_EMAILS)
     if department_id is not None:
         query += " AND e.department_id = ?"
         params.append(department_id)
@@ -98,7 +103,7 @@ def get_competency_assessments_full(
             "display_order": row[10] or 0,
             "current_level": row[11],
             "target_level": row[12],
-            "gap": row[13],
+            "gap": max(row[12] - row[11], 0),
             "assessment_year": row[14],
             "assessment_date": assessment_date.isoformat() if assessment_date else None,
             "notes": row[16],
@@ -128,7 +133,7 @@ def get_competency_assessments(cursor=Depends(get_db)):
             skill_id=row[2],
             current_level=row[3],
             target_level=row[4],
-            gap=row[5],
+            gap=max(row[4] - row[3], 0),
             assessment_date=row[6],
             assessor_notes=row[7],  # 映射 notes -> assessor_notes
             last_assessment_date=row[6],  # 使用 assessment_date
@@ -159,7 +164,7 @@ def get_employee_assessments(employee_id: UUID, cursor=Depends(get_db)):
             skill_id=row[2],
             current_level=row[3],
             target_level=row[4],
-            gap=row[5],
+            gap=max(row[4] - row[3], 0),
             assessment_date=row[6],
             assessor_notes=row[7],  # 映射 notes -> assessor_notes
             last_assessment_date=row[6],  # 使用 assessment_date
@@ -350,7 +355,7 @@ def get_assessment_history(
             "previous_target_level": row[5],
             "current_level": row[6],
             "target_level": row[7],
-            "gap": row[8],
+            "gap": max(row[7] - row[6], 0),
             "assessment_year": row[9],
             "assessment_quarter": row[10],
             "notes": row[11],
@@ -481,7 +486,7 @@ def get_competency_assessment(assessment_id: UUID, cursor=Depends(get_db)):
         skill_id=row[2],
         current_level=row[3],
         target_level=row[4],
-        gap=row[5],
+        gap=max(row[4] - row[3], 0),
         assessment_year=row[6],
         assessment_date=row[7],
         assessor_notes=row[8],  # 映射 notes -> assessor_notes

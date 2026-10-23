@@ -6,7 +6,7 @@ import AssessmentEditDialog from '../AssessmentEditDialog';
 
 
 describe('AssessmentEditDialog', () => {
-  it('offers only target values at or above the selected current value', async () => {
+  it('offers all target levels independently of current level', async () => {
     const user = userEvent.setup();
     render(
       <AssessmentEditDialog
@@ -23,27 +23,29 @@ describe('AssessmentEditDialog', () => {
     const optionValues = within(target)
       .getAllByRole('option')
       .map(option => (option as HTMLOptionElement).value);
-    expect(optionValues).toEqual(['', '3', '4']);
+    expect(optionValues).toEqual(['', '0', '1', '2', '3', '4']);
     expect(screen.queryByRole('option', { name: '5' })).not.toBeInTheDocument();
   });
 
-  it('clears an invalid target when current is raised', async () => {
+  it('preserves and saves the target when current exceeds it', async () => {
     const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
     render(
       <AssessmentEditDialog
         employeeName="Xue Ting"
         skillName="WAS"
         initial={{ current_level: 2, target_level: 3, notes: '' }}
         onCancel={() => undefined}
-        onSave={vi.fn()}
+        onSave={onSave}
       />,
     );
 
     await user.selectOptions(screen.getByLabelText('能力现状'), '4');
 
-    expect(screen.getByText('请重新选择不低于现状的能力目标')).toBeInTheDocument();
-    expect(screen.getByLabelText('能力目标')).toHaveValue('');
-    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('能力目标')).toHaveValue('3');
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    expect(onSave).toHaveBeenCalledWith({ current_level: 4, target_level: 3, notes: undefined });
   });
 
   it('submits zero as valid assessed data and prevents duplicate submission', async () => {

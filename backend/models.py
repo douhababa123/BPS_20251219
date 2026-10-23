@@ -3,7 +3,7 @@
 使用 Pydantic 定义所有表的 Request/Response schemas
 """
 
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional, List, Literal
 from datetime import datetime, date
 from uuid import UUID
@@ -358,13 +358,6 @@ class CompetencyAssessmentBase(BaseModel):
     assessment_date: Optional[datetime] = None
     assessor_notes: Optional[str] = None
 
-    @model_validator(mode="after")
-    def validate_target(self):
-        if self.target_level < self.current_level:
-            raise ValueError("目标能力必须大于或等于能力现状")
-        return self
-
-
 class CompetencyAssessmentCreate(CompetencyAssessmentBase):
     pass
 
@@ -374,17 +367,6 @@ class CompetencyAssessmentUpdate(BaseModel):
     target_level: Optional[int] = Field(None, ge=0, le=4)
     assessment_date: Optional[datetime] = None
     assessor_notes: Optional[str] = None
-
-    @model_validator(mode="after")
-    def validate_submitted_pair(self):
-        if (
-            self.current_level is not None
-            and self.target_level is not None
-            and self.target_level < self.current_level
-        ):
-            raise ValueError("目标能力必须大于或等于能力现状")
-        return self
-
 
 class CompetencyAssessment(CompetencyAssessmentBase):
     id: UUID
@@ -402,13 +384,6 @@ class CompetencyAssessmentSave(BaseModel):
     current_level: int = Field(..., ge=0, le=4)
     target_level: int = Field(..., ge=0, le=4)
     notes: Optional[str] = Field(None, max_length=2000)
-
-    @model_validator(mode="after")
-    def validate_target(self):
-        if self.target_level < self.current_level:
-            raise ValueError("目标能力必须大于或等于能力现状")
-        return self
-
 
 class CompetencyAssessmentBatchCell(CompetencyAssessmentSave):
     employee_id: UUID
@@ -502,8 +477,18 @@ class Task(TaskBase):
     id: UUID
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    approval_version: int = 0
+    approval_site: Optional[str] = None
+    approver_user_id: Optional[str] = None
+    approver_name: Optional[str] = None
+    can_approve: bool = False
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TaskApprovalAction(BaseModel):
+    expected_version: int = Field(..., ge=0)
+    rejection_reason: Optional[str] = None
 
 
 # ============================================================================
