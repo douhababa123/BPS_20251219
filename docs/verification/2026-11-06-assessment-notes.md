@@ -29,7 +29,7 @@
 沿用 DEV push / GitHub Actions 的 Jetson 部署流程，前后端必须一起发布。
 首轮运行 [42160320648](https://github.com/douhababa123/BPS_20251219/actions/runs/42160320648) 的生产审计、类型检查、前端测试和构建均通过，但因 ubuntu-latest 已迁移至 Ubuntu 26.04、无法安装 Python 3.9 而失败，未进入 Jetson 部署。依据 [Actions Python 版本清单](https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json)，仅将云端测试 runner 固定为 ubuntu-24.04，保留 Python 3.9 和 Jetson 原有运行环境。
 原有全量 ESLint 非阻断配置和已接受的构建依赖风险不在本次修改范围。
-部署前线上版本为 `3c2dff0`。部署结果待后续核验补充。
+部署前线上版本为 `3c2dff0`。部署结果见下方核验记录。
 
 部署前只读校验（行数 / CHECKSUM_AGG(BINARY_CHECKSUM(*))）：
 
@@ -38,3 +38,17 @@
 - competency_assessment_versions：21 / -1322027600
 
 若需回退，对本次修复创建普通 revert 提交并通过同一流程发布，不回滚业务数据库。
+
+## Jetson 发布核验
+
+- 发布版本：`142ede662a0b4b3a4113e0ca127251b18d43d65f`，包含备注修复 `c1810b8`、依赖修复 `d1ebcfc` 和 CI runner 兼容性修复。
+- [GitHub Actions 42160630481](https://github.com/douhababa123/BPS_20251219/actions/runs/42160630481) 成功，完成时间 2026-11-06 12:13:32（Asia/Shanghai）。
+- 云端生产依赖审计 0 项漏洞，前端 225 项、后端 155 项测试通过，类型检查和构建通过。
+- 全量 ESLint 仍为 294 errors / 13 warnings，沿用既有非阻断设置；此次相关组件和测试的定向 ESLint 已通过，没有放宽规则。
+- Jetson HEAD 与发布版本一致；frontend running，backend healthy；`/api/health` 返回 healthy / database connected。
+- 首页和实际服务的 `/assets/index-Difkm_EI.js` 均 HTTP 200；该资源含修复后的备注草稿/持久值回填逻辑。
+- Jetson 已安装 follow-redirects 1.16.2、zod 4.6.7。
+- 容器内以只读方式调用实际矩阵查询函数，503 个单元全部含 notes 字段，其中 362 个非空；逐项与数据库备注比对一致。没有输出备注原文。
+- 部署后三张能力相关表的行数及校验值与上述部署前结果完全一致；未修改真实员工数据、历史记录或账号。
+- 部署后近 5 分钟后端日志未匹配到 ERROR / Traceback / Exception。
+- 没有执行生产账号的测试保存或重新登录；保存交互由本地和 CI 回归测试覆盖。此前已被清空的备注没有自动恢复。
