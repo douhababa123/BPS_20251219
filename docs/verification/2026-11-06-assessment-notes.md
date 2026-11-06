@@ -27,6 +27,7 @@
 - 依赖更新后 225 项前端测试、类型检查、生产构建通过；任务分配页实际 Zod schema + zodResolver 冒烟验证通过（合法输入接受，空名称与非法角色拒绝）。构建新增两条 Zod 上游 PURE 注释位置警告，构建器已移除对应注释，构建成功。
 
 沿用 DEV push / GitHub Actions 的 Jetson 部署流程，前后端必须一起发布。
+首轮运行 [42160320648](https://github.com/douhababa123/BPS_20251219/actions/runs/42160320648) 的生产审计、类型检查、前端测试和构建均通过，但因 ubuntu-latest 已迁移至 Ubuntu 26.04、无法安装 Python 3.9 而失败，未进入 Jetson 部署。依据 [Actions Python 版本清单](https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json)，仅将云端测试 runner 固定为 ubuntu-24.04，保留 Python 3.9 和 Jetson 原有运行环境。
 原有全量 ESLint 非阻断配置和已接受的构建依赖风险不在本次修改范围。
 部署前线上版本为 `3c2dff0`。部署结果待后续核验补充。
 
