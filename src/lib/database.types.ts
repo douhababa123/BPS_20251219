@@ -447,6 +447,7 @@ export interface MatrixRow {
     targetLevel: number
     gap: number
     updatedAt?: string | null
+    notes?: string | null
   }>
 }
 

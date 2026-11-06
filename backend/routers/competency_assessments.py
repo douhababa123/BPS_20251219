@@ -221,7 +221,8 @@ def get_assessment_matrix(
             current_level,
             target_level,
             target_level - current_level AS gap,
-            updated_at
+            updated_at,
+            notes
         FROM dbo.competency_assessments
         """
     )

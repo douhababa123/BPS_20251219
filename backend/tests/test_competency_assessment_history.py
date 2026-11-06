@@ -267,6 +267,35 @@ def test_batch_save_creates_one_version_for_all_cells(monkeypatch):
     assert history_by_employee[str(employee_two)][4:6] == (None, None)
 
 
+@pytest.mark.parametrize("notes", ["仅修改备注\n中文说明", None])
+def test_notes_only_batch_save_writes_current_and_history(monkeypatch, notes):
+    employee_id, assessment_id, version_id = uuid4(), uuid4(), uuid4()
+    now = datetime(2026, 11, 6, 10, 0)
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [
+        (1,), (str(employee_id),), (str(assessment_id), now, 1, 3),
+        (str(version_id),),
+    ]
+    monkeypatch.setattr("competency_assessment_history.current_timestamp", lambda: now)
+    result = save_assessment_batch(
+        cursor,
+        [CompetencyAssessmentBatchCell(
+            employee_id=employee_id, skill_id=7, current_level=1, target_level=3,
+            notes=notes, expected_updated_at=now,
+        )],
+        None,
+        {"user_id": str(uuid4()), "role": "admin"},
+    )
+    update = next(call.args for call in cursor.execute.call_args_list
+                  if "UPDATE dbo.competency_assessments" in call.args[0])
+    history = next(call.args for call in cursor.execute.call_args_list
+                   if "INSERT INTO dbo.competency_assessment_history" in call.args[0])
+    assert update[1:3] == (1, 3)
+    assert update[5] == notes
+    assert history[11] == notes
+    assert result["savedCount"] == 1
+
+
 def test_batch_conflict_rejects_before_any_version_or_update():
     employee_id = uuid4()
     cursor = MagicMock()

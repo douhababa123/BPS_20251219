@@ -9,13 +9,14 @@ from models import CompetencyAssessmentCreate, CompetencyAssessmentSave, Compete
 from routers import competency_assessments
 
 
-def test_matrix_route_returns_active_employees_and_all_active_skills():
+@pytest.mark.parametrize("notes", ["中文备注\n第二行", None, ""])
+def test_matrix_route_returns_active_employees_and_all_active_skills(notes):
     employee_id = uuid4()
     cursor = MagicMock()
     cursor.fetchall.side_effect = [
         [(employee_id, "E1", "Self", "D", "self@bosch.com")],
         [(7, 1, "Module", "Skill", 1), (8, 1, "Module", "Missing", 2)],
-        [(employee_id, 7, 0, 2, 2, datetime(2026, 9, 11, 9, 0))],
+        [(employee_id, 7, 0, 2, 2, datetime(2026, 9, 11, 9, 0), notes)],
         [(1, "Module")],
         [(1, "Owner")],
         [("Owner",)],
@@ -29,6 +30,12 @@ def test_matrix_route_returns_active_employees_and_all_active_skills():
     assert len(result["columns"]) == 2
     assert result["rows"][0]["canEdit"] is True
     assert result["rows"][0]["skills"][7]["currentLevel"] == 0
+    assert result["rows"][0]["skills"][7]["notes"] == notes
+    assessment_sql = next(
+        call.args[0] for call in cursor.execute.call_args_list
+        if "FROM dbo.competency_assessments" in call.args[0]
+    )
+    assert "notes" in assessment_sql
     assert 8 not in result["rows"][0]["skills"]
     assert result["permissionWarnings"] == []
 

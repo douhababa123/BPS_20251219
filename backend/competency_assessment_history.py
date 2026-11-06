@@ -411,6 +411,7 @@ def build_matrix_payload(
                     "targetLevel": cell[3],
                     "gap": business_gap(cell[2], cell[3]),
                     "updatedAt": cell[5].isoformat() if len(cell) > 5 and cell[5] else None,
+                    "notes": cell[6] if len(cell) > 6 else None,
                 }
         rows.append(
             {

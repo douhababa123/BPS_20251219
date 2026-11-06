@@ -647,6 +647,9 @@ export default function MatrixView({
             ? {
                 current_level: drafts[draftKey(editingCell.row.employeeId, editingCell.column.skillId)]?.current_level ?? editingCell.row.skills[editingCell.column.skillId]?.currentLevel,
                 target_level: drafts[draftKey(editingCell.row.employeeId, editingCell.column.skillId)]?.target_level ?? editingCell.row.skills[editingCell.column.skillId]?.targetLevel,
+                notes: drafts[draftKey(editingCell.row.employeeId, editingCell.column.skillId)]
+                  ? drafts[draftKey(editingCell.row.employeeId, editingCell.column.skillId)].notes
+                  : editingCell.row.skills[editingCell.column.skillId]?.notes ?? undefined,
               }
             : undefined}
           onCancel={closeEditor}

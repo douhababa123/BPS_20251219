@@ -38,6 +38,7 @@ vi.mock('../../lib/competencyApi', () => ({
 
 const saved = { versionId: 'saved-version-1', savedCount: 1, savedAt: '2026-10-23T11:00:00' };
 let serverTarget = 3;
+let serverNotes: string | null = null;
 const routers: ReturnType<typeof createMemoryRouter>[] = [];
 function start() {
   const router = createMemoryRouter([
@@ -71,6 +72,7 @@ describe('assessment save and unsaved navigation workflow', { timeout: 15000 }, 
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     vi.spyOn(window, 'alert').mockImplementation(() => {});
     serverTarget = 3;
+    serverNotes = null;
     vi.mocked(getAllAssessments).mockImplementation(async () => [{
       id: 'assessment-zhang', employee_id: 'zhang', employee_name: 'Zhang Fanmin', employee_code: 'SCh-Zhang',
       department_name: 'SCh', skill_id: 28, skill_name: 'Leading in a BPS Plant', module_id: 1,
@@ -79,7 +81,7 @@ describe('assessment save and unsaved navigation workflow', { timeout: 15000 }, 
     }] as Awaited<ReturnType<typeof getAllAssessments>>);
     vi.mocked(getAssessmentMatrix).mockImplementation(async () => ({
       rows: [{ employeeId: 'zhang', employeeCode: 'SCh-Zhang', employeeName: 'Zhang Fanmin', departmentName: 'SCh', canEdit: true,
-        skills: { 28: { skillId: 28, currentLevel: 3, targetLevel: serverTarget, gap: serverTarget - 3 } } }],
+        skills: { 28: { skillId: 28, currentLevel: 3, targetLevel: serverTarget, gap: serverTarget - 3, notes: serverNotes } } }],
       columns: [{ skillId: 28, moduleId: 1, moduleName: 'BPS elements', skillName: 'Leading in a BPS Plant', displayOrder: 1 }],
       stats: { totalEmployees: 1, totalSkills: 1, totalAssessments: 1, avgCurrentLevel: 3,
         avgTargetLevel: serverTarget, avgGap: serverTarget - 3, totalGapScore: serverTarget - 3 },
@@ -87,6 +89,7 @@ describe('assessment save and unsaved navigation workflow', { timeout: 15000 }, 
     }));
     vi.mocked(saveAssessmentBatch).mockImplementation(async cells => {
       serverTarget = cells[0].target_level;
+      serverNotes = cells[0].notes ?? null;
       return saved;
     });
   });
@@ -115,6 +118,25 @@ describe('assessment save and unsaved navigation workflow', { timeout: 15000 }, 
     start();
     expect(await screen.findByRole('button', { name: /Zhang Fanmin.*编辑能力评估/ })).toHaveTextContent('3/4');
     expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it('reloads notes after a notes-only save and after reopening the page', async () => {
+    const user = userEvent.setup();
+    const view = start();
+    await user.click(await screen.findByRole('button', { name: /Zhang Fanmin.*编辑能力评估/ }));
+    await user.type(screen.getByLabelText('备注'), '能力备注\n补充说明');
+    await user.click(screen.getByRole('button', { name: '加入待保存修改' }));
+    await user.click(screen.getByRole('button', { name: '保存全部修改' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('保存成功');
+    expect(saveAssessmentBatch).toHaveBeenCalledWith([expect.objectContaining({
+      current_level: 3, target_level: 3, notes: '能力备注\n补充说明',
+    })]);
+    await user.click(screen.getByRole('button', { name: /Zhang Fanmin.*编辑能力评估/ }));
+    expect(screen.getByLabelText('备注')).toHaveValue('能力备注\n补充说明');
+    view.unmount();
+    start();
+    await user.click(await screen.findByRole('button', { name: /Zhang Fanmin.*编辑能力评估/ }));
+    expect(screen.getByLabelText('备注')).toHaveValue('能力备注\n补充说明');
   });
 
   it('keeps drafts on a failed submission and permits a successful retry', async () => {
