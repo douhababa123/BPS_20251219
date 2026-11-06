@@ -18,6 +18,14 @@
 
 ## 发布
 
+### 发布前依赖修复（用户批准）
+
+- `follow-redirects` 1.16.1 → 1.16.2，修复 [GHSA-mrwp-f3q8-3g9p](https://github.com/advisories/GHSA-mrwp-f3q8-3g9p)。
+- `zod` 4.1.12 → 4.6.7，修复 [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)。
+- 只更新上述两个包及 Zod 的最低兼容版本要求，其他锁定包及平台元数据保持不变。
+- 更新后 `npm audit --omit=dev` 为 0 项漏洞。全量审计仍列出 9 项 moderate 的开发依赖项（minimatch/glob 及 ESLint/Sucrase 依赖链），不宣称全量审计无风险；本次不扩展到构建工具迁移。
+- 依赖更新后 225 项前端测试、类型检查、生产构建通过；任务分配页实际 Zod schema + zodResolver 冒烟验证通过（合法输入接受，空名称与非法角色拒绝）。构建新增两条 Zod 上游 PURE 注释位置警告，构建器已移除对应注释，构建成功。
+
 沿用 DEV push / GitHub Actions 的 Jetson 部署流程，前后端必须一起发布。
 原有全量 ESLint 非阻断配置和已接受的构建依赖风险不在本次修改范围。
 部署前线上版本为 `3c2dff0`。部署结果待后续核验补充。
